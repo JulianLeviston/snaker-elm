@@ -1,5 +1,6 @@
 # snaker-elm
-A touch and ready snake clone in elm
+A rough and ready snake clone in elm
+
 
 So far, using the `Http` library, but will probably change soon for performance reasons. It feels like the `Time` subscription is not a good fit for a game like this.
 
