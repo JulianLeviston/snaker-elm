@@ -1,6 +1,7 @@
 # snaker-elm
 A rough and ready snake clone in elm
 
+![](https://raw.githubusercontent.com/JulianLeviston/snaker-elm/master/images/snaker-elm.png)
 
 So far, using the `Http` library, but will probably change soon for performance reasons. It feels like the `Time` subscription is not a good fit for a game like this.
 
