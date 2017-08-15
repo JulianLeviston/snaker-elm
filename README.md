@@ -19,6 +19,10 @@ To start the Phoenix server:
 
 Now you can visit [`localhost:4000`](http://localhost:4000) from your browser.
 
+## Development
+
+The Elm app can be found in `/assets/elm`, and the Phoenix app is responsible for hosting and building the target Elm app using brunch.
+
 ## Future
 
 So far, using the `Html` library, but will probably change soon for performance reasons. It feels like the `Time` subscription is not a good fit for a game like this.
