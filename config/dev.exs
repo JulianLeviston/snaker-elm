@@ -49,10 +49,10 @@ config :logger, :console, format: "[$level] $message\n"
 config :phoenix, :stacktrace_depth, 20
 
 # Configure your database
-config :snaker, Snaker.Repo,
-  adapter: Ecto.Adapters.Postgres,
-  username: "postgres",
-  password: "postgres",
-  database: "snaker_dev",
-  hostname: "localhost",
-  pool_size: 10
+# config :snaker, Snaker.Repo,
+#   adapter: Ecto.Adapters.Postgres,
+#   username: "postgres",
+#   password: "postgres",
+#   database: "snaker_dev",
+#   hostname: "localhost",
+#   pool_size: 10

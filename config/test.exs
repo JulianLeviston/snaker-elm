@@ -10,10 +10,10 @@ config :snaker, SnakerWeb.Endpoint,
 config :logger, level: :warn
 
 # Configure your database
-config :snaker, Snaker.Repo,
-  adapter: Ecto.Adapters.Postgres,
-  username: "postgres",
-  password: "postgres",
-  database: "snaker_test",
-  hostname: "localhost",
-  pool: Ecto.Adapters.SQL.Sandbox
+# config :snaker, Snaker.Repo,
+#   adapter: Ecto.Adapters.Postgres,
+#   username: "postgres",
+#   password: "postgres",
+#   database: "snaker_test",
+#   hostname: "localhost",
+#   pool: Ecto.Adapters.SQL.Sandbox

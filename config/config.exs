@@ -6,8 +6,9 @@
 use Mix.Config
 
 # General application configuration
-config :snaker,
-  ecto_repos: [Snaker.Repo]
+# ecto:
+# config :snaker,
+#   ecto_repos: [Snaker.Repo]
 
 # Configures the endpoint
 config :snaker, SnakerWeb.Endpoint,
