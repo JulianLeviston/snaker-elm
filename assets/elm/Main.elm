@@ -7,6 +7,13 @@ import Keyboard
 import Dict
 import Random exposing (Generator)
 import Data.Direction exposing (Direction(..))
+import Data.Position
+    exposing
+        ( Position
+        , Dimensions
+        , gridDimensions
+        , nextPositionInDirection
+        )
 
 
 -- model
@@ -23,10 +30,6 @@ type alias Apple =
     { expiresAt : Time
     , position : Position
     }
-
-
-type alias Position =
-    { x : Int, y : Int }
 
 
 type alias Snake =
@@ -48,10 +51,10 @@ init =
             { x = x, y = y }
 
         subsequentSegment =
-            directionToDiff West initialSegment
+            nextPositionInDirection West initialSegment
 
         lastSegment =
-            directionToDiff West subsequentSegment
+            nextPositionInDirection West subsequentSegment
 
         initialDirection =
             East
@@ -124,16 +127,8 @@ randomApple : Time -> Generator Apple
 randomApple currentTime =
     Random.map2
         (\position expiresAt -> { position = position, expiresAt = expiresAt })
-        randomPosition
+        Position.randomPosition
         (Random.float currentTime (currentTime + 5000))
-
-
-randomPosition : Generator Position
-randomPosition =
-    Random.map2
-        (\x y -> { x = x, y = y })
-        (Random.int 1 gridDimensions.x)
-        (Random.int 1 gridDimensions.y)
 
 
 expireApples : Time -> List Apple -> List Apple
@@ -150,7 +145,7 @@ moveSnake ({ body, direction } as snake) =
         snakeHead :: snakeBody ->
             let
                 newHead =
-                    directionToDiff direction snakeHead
+                    nextPositionInDirection direction snakeHead
 
                 newBody =
                     newHead :: (List.take (List.length body - 1) body)
@@ -166,7 +161,7 @@ growSnake apples ({ body, direction } as snake) =
 
         snakeHead :: _ ->
             if List.member snakeHead (List.map .position apples) then
-                { snake | body = directionToDiff direction snakeHead :: body }
+                { snake | body = nextPositionInDirection direction snakeHead :: body }
             else
                 snake
 
@@ -202,35 +197,6 @@ changeSnakeDirection originalSnake newDirection =
                     newDirection
     in
         { originalSnake | direction = changedDirection }
-
-
-directionToDiff : Direction -> Position -> Position
-directionToDiff direction { x, y } =
-    wrapPosition <|
-        case direction of
-            North ->
-                { x = x, y = y + 1 }
-
-            East ->
-                { x = x + 1, y = y }
-
-            West ->
-                { x = x - 1, y = y }
-
-            South ->
-                { x = x, y = y - 1 }
-
-
-wrapPosition : Position -> Position
-wrapPosition { x, y } =
-    let
-        newX =
-            wrapVal 1 (gridDimensions.x + 0) x
-
-        newY =
-            wrapVal 1 (gridDimensions.y + 0) y
-    in
-        { x = newX, y = newY }
 
 
 wrapVal : Int -> Int -> Int -> Int
@@ -394,15 +360,6 @@ tileType positionTileTypePairs tilePosition =
 
             Just resultantTileType ->
                 resultantTileType
-
-
-type alias Dimensions =
-    { x : Int, y : Int }
-
-
-gridDimensions : Dimensions
-gridDimensions =
-    { x = 40, y = 30 }
 
 
 
