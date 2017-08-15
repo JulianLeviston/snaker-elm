@@ -6,6 +6,7 @@ import Time exposing (Time, second)
 import Keyboard
 import Dict
 import Random exposing (Generator)
+import Data.Direction exposing (Direction(..))
 
 
 -- model
@@ -32,13 +33,6 @@ type alias Snake =
     { direction : Direction
     , body : List Position
     }
-
-
-type Direction
-    = North
-    | East
-    | West
-    | South
 
 
 init : ( Model, Cmd Msg )
@@ -350,8 +344,11 @@ mkGrid { snake, apples } =
         positionTilePairs =
             List.concat [ appleTilePositions, snakeTilePositions ]
 
+        tileTypeForPosn =
+            tileType positionTilePairs
+
         tileTypeFor x y =
-            tileType positionTilePairs { x = x, y = y }
+            tileTypeForPosn { x = x, y = y }
 
         row y =
             Html.div
