@@ -4950,15 +4950,17 @@ var _JulianLeviston$snaker_elm$Data_Apple$expireApples = function (time) {
 			return _elm_lang$core$Native_Utils.cmp(_p3.expiresAt, time) > -1;
 		});
 };
+var _JulianLeviston$snaker_elm$Data_Apple$maxAppleMillis = 5000;
+var _JulianLeviston$snaker_elm$Data_Apple$minAppleMillis = 1000;
 var _JulianLeviston$snaker_elm$Data_Apple$randomApple = function (currentTime) {
 	return A3(
 		_elm_lang$core$Random$map2,
 		F2(
 			function (position, expiresAt) {
-				return {position: position, expiresAt: expiresAt};
+				return {position: position, expiresAt: expiresAt + _JulianLeviston$snaker_elm$Data_Apple$minAppleMillis};
 			}),
 		_JulianLeviston$snaker_elm$Data_Position$randomPosition,
-		A2(_elm_lang$core$Random$float, currentTime, currentTime + 5000));
+		A2(_elm_lang$core$Random$float, currentTime, currentTime + _JulianLeviston$snaker_elm$Data_Apple$maxAppleMillis));
 };
 var _JulianLeviston$snaker_elm$Data_Apple$Apple = F2(
 	function (a, b) {

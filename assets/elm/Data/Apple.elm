@@ -11,12 +11,24 @@ type alias Apple =
     }
 
 
+minAppleMillis : Time
+minAppleMillis =
+    1000
+
+
+maxAppleMillis : Time
+maxAppleMillis =
+    5000
+
+
 randomApple : Time -> Generator Apple
 randomApple currentTime =
     Random.map2
-        (\position expiresAt -> { position = position, expiresAt = expiresAt })
+        (\position expiresAt ->
+            { position = position, expiresAt = (expiresAt + minAppleMillis) }
+        )
         Position.randomPosition
-        (Random.float currentTime (currentTime + 5000))
+        (Random.float currentTime (currentTime + maxAppleMillis))
 
 
 expireApples : Time -> List Apple -> List Apple

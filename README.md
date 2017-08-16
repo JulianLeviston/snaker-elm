@@ -36,6 +36,5 @@ Things I'd like to change:
 * Experiment with SVG instead of the `Html` library.
 * Network Multiplayer (To test out writing some Elixir).
 * "Levels" (more to come): implement new ideas for features to make it really fun.
-* A more consistent timing system for the apples to appear.
 * Remove the grid and make the styling nicer.
 * A more interesting scoring system.
