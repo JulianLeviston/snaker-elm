@@ -30,7 +30,6 @@ So far, using the `Html` library, but will probably change soon for performance 
 
 Things I'd like to change:
 
-* Experiment with and pick better data structures for the grid.
 * WebSockets with Phoenix
 * Using something that uses `requestAnimationFrame` instead of `setTimeout`
 * Possibly try re-building pieces in WebGL

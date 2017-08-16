@@ -9518,6 +9518,15 @@ var _elm_lang$keyboard$Keyboard$subMap = F2(
 	});
 _elm_lang$core$Native_Platform.effectManagers['Keyboard'] = {pkg: 'elm-lang/keyboard', init: _elm_lang$keyboard$Keyboard$init, onEffects: _elm_lang$keyboard$Keyboard$onEffects, onSelfMsg: _elm_lang$keyboard$Keyboard$onSelfMsg, tag: 'sub', subMap: _elm_lang$keyboard$Keyboard$subMap};
 
+var _JulianLeviston$snaker_elm$Main$convertToKVPair = function (_p0) {
+	var _p1 = _p0;
+	var _p2 = _p1._0;
+	return {
+		ctor: '_Tuple2',
+		_0: {ctor: '_Tuple2', _0: _p2.x, _1: _p2.y},
+		_1: _p1._1
+	};
+};
 var _JulianLeviston$snaker_elm$Main$tileSideLength = 20;
 var _JulianLeviston$snaker_elm$Main$tileLengthPixels = A2(
 	_elm_lang$core$Basics_ops['++'],
@@ -9526,8 +9535,8 @@ var _JulianLeviston$snaker_elm$Main$tileLengthPixels = A2(
 var _JulianLeviston$snaker_elm$Main$mkTile = F2(
 	function (tileType, contents) {
 		var backgroundColor = function () {
-			var _p0 = tileType;
-			switch (_p0.ctor) {
+			var _p3 = tileType;
+			switch (_p3.ctor) {
 				case 'SnakeSegment':
 					return '#69E582';
 				case 'AppleTile':
@@ -9574,9 +9583,9 @@ var _JulianLeviston$snaker_elm$Main$mkTile = F2(
 			},
 			contents);
 	});
-var _JulianLeviston$snaker_elm$Main$score = function (_p1) {
-	var _p2 = _p1;
-	return _elm_lang$core$List$length(_p2.snake.body);
+var _JulianLeviston$snaker_elm$Main$score = function (_p4) {
+	var _p5 = _p4;
+	return _elm_lang$core$List$length(_p5.snake.body);
 };
 var _JulianLeviston$snaker_elm$Main$oneHundredMillis = 100 * _elm_lang$core$Time$millisecond;
 var _JulianLeviston$snaker_elm$Main$init = function () {
@@ -9600,42 +9609,42 @@ var _JulianLeviston$snaker_elm$Main$AddApple = function (a) {
 	return {ctor: 'AddApple', _0: a};
 };
 var _JulianLeviston$snaker_elm$Main$update = F2(
-	function (msg, _p3) {
-		var _p4 = _p3;
-		var _p9 = _p4.snake;
-		var _p8 = _p4;
-		var _p7 = _p4.apples;
-		var _p5 = msg;
-		switch (_p5.ctor) {
+	function (msg, _p6) {
+		var _p7 = _p6;
+		var _p12 = _p7.snake;
+		var _p11 = _p7;
+		var _p10 = _p7.apples;
+		var _p8 = msg;
+		switch (_p8.ctor) {
 			case 'Tick':
-				var _p6 = _p5._0;
+				var _p9 = _p8._0;
 				var newSnake = A2(
 					_JulianLeviston$snaker_elm$Data_Snake$growSnake,
-					_p7,
-					_JulianLeviston$snaker_elm$Data_Snake$moveSnake(_p9));
+					_p10,
+					_JulianLeviston$snaker_elm$Data_Snake$moveSnake(_p12));
 				var newApples = A2(
 					_JulianLeviston$snaker_elm$Data_Apple$expireApples,
-					_p6,
-					A2(_JulianLeviston$snaker_elm$Data_Snake$eatApples, newSnake, _p7));
+					_p9,
+					A2(_JulianLeviston$snaker_elm$Data_Snake$eatApples, newSnake, _p10));
 				return {
 					ctor: '_Tuple2',
 					_0: _elm_lang$core$Native_Utils.update(
-						_p8,
-						{time: _p6, snake: newSnake, apples: newApples}),
+						_p11,
+						{time: _p9, snake: newSnake, apples: newApples}),
 					_1: _elm_lang$core$Native_Utils.eq(
-						_p7,
+						_p10,
 						{ctor: '[]'}) ? A2(
 						_elm_lang$core$Random$generate,
 						_JulianLeviston$snaker_elm$Main$AddApple,
-						_JulianLeviston$snaker_elm$Data_Apple$randomApple(_p6)) : _elm_lang$core$Platform_Cmd$none
+						_JulianLeviston$snaker_elm$Data_Apple$randomApple(_p9)) : _elm_lang$core$Platform_Cmd$none
 				};
 			case 'ChangeDirection':
 				return {
 					ctor: '_Tuple2',
 					_0: _elm_lang$core$Native_Utils.update(
-						_p8,
+						_p11,
 						{
-							snake: A2(_JulianLeviston$snaker_elm$Data_Snake$changeSnakeDirection, _p9, _p5._0)
+							snake: A2(_JulianLeviston$snaker_elm$Data_Snake$changeSnakeDirection, _p12, _p8._0)
 						}),
 					_1: _elm_lang$core$Platform_Cmd$none
 				};
@@ -9643,22 +9652,22 @@ var _JulianLeviston$snaker_elm$Main$update = F2(
 				return {
 					ctor: '_Tuple2',
 					_0: _elm_lang$core$Native_Utils.update(
-						_p8,
+						_p11,
 						{
-							apples: {ctor: '::', _0: _p5._0, _1: _p8.apples}
+							apples: {ctor: '::', _0: _p8._0, _1: _p11.apples}
 						}),
 					_1: _elm_lang$core$Platform_Cmd$none
 				};
 			default:
-				return {ctor: '_Tuple2', _0: _p8, _1: _elm_lang$core$Platform_Cmd$none};
+				return {ctor: '_Tuple2', _0: _p11, _1: _elm_lang$core$Platform_Cmd$none};
 		}
 	});
 var _JulianLeviston$snaker_elm$Main$ChangeDirection = function (a) {
 	return {ctor: 'ChangeDirection', _0: a};
 };
 var _JulianLeviston$snaker_elm$Main$keyCodeToChangeDirectionMsg = function (keyCode) {
-	var _p10 = keyCode;
-	switch (_p10) {
+	var _p13 = keyCode;
+	switch (_p13) {
 		case 38:
 			return _JulianLeviston$snaker_elm$Main$ChangeDirection(_JulianLeviston$snaker_elm$Data_Direction$North);
 		case 37:
@@ -9689,19 +9698,8 @@ var _JulianLeviston$snaker_elm$Main$subscriptions = function (model) {
 var _JulianLeviston$snaker_elm$Main$AppleTile = {ctor: 'AppleTile'};
 var _JulianLeviston$snaker_elm$Main$SnakeSegment = {ctor: 'SnakeSegment'};
 var _JulianLeviston$snaker_elm$Main$EmptyTile = {ctor: 'EmptyTile'};
-var _JulianLeviston$snaker_elm$Main$tileType = F2(
-	function (positionTileTypePairs, tilePosition) {
-		var convertToKVPair = function (_p11) {
-			var _p12 = _p11;
-			var _p13 = _p12._0;
-			return {
-				ctor: '_Tuple2',
-				_0: {ctor: '_Tuple2', _0: _p13.x, _1: _p13.y},
-				_1: _p12._1
-			};
-		};
-		var renderables = _elm_lang$core$Dict$fromList(
-			A2(_elm_lang$core$List$map, convertToKVPair, positionTileTypePairs));
+var _JulianLeviston$snaker_elm$Main$tileTypeFromPositionTileTypePairs = F2(
+	function (renderables, tilePosition) {
 		var _p14 = A2(
 			_elm_lang$core$Dict$get,
 			{ctor: '_Tuple2', _0: tilePosition.x, _1: tilePosition.y},
@@ -9736,7 +9734,9 @@ var _JulianLeviston$snaker_elm$Main$mkGrid = function (_p15) {
 				_1: {ctor: '[]'}
 			}
 		});
-	var tileTypeForPosn = _JulianLeviston$snaker_elm$Main$tileType(positionTilePairs);
+	var renderables = _elm_lang$core$Dict$fromList(
+		A2(_elm_lang$core$List$map, _JulianLeviston$snaker_elm$Main$convertToKVPair, positionTilePairs));
+	var tileTypeForPosn = _JulianLeviston$snaker_elm$Main$tileTypeFromPositionTileTypePairs(renderables);
 	var tileTypeFor = F2(
 		function (x, y) {
 			return tileTypeForPosn(

@@ -5,7 +5,7 @@ import Html.Attributes exposing (style)
 import Time exposing (Time, second)
 import Keyboard
 import Random
-import Dict
+import Dict exposing (Dict)
 import Data.Direction exposing (Direction(..))
 import Data.Position
     exposing
@@ -204,8 +204,11 @@ mkGrid { snake, apples } =
         positionTilePairs =
             List.concat [ appleTilePositions, snakeTilePositions ]
 
+        renderables =
+            Dict.fromList (List.map convertToKVPair positionTilePairs)
+
         tileTypeForPosn =
-            tileType positionTilePairs
+            tileTypeFromPositionTileTypePairs renderables
 
         tileTypeFor x y =
             tileTypeForPosn { x = x, y = y }
@@ -239,21 +242,19 @@ type TileType
     | AppleTile
 
 
-tileType : List ( Position, TileType ) -> Position -> TileType
-tileType positionTileTypePairs tilePosition =
-    let
-        convertToKVPair ( pos, tileType ) =
-            ( ( pos.x, pos.y ), tileType )
+convertToKVPair : ( Position, TileType ) -> ( ( Int, Int ), TileType )
+convertToKVPair ( pos, tileType ) =
+    ( ( pos.x, pos.y ), tileType )
 
-        renderables =
-            Dict.fromList (List.map convertToKVPair positionTileTypePairs)
-    in
-        case Dict.get ( tilePosition.x, tilePosition.y ) renderables of
-            Nothing ->
-                EmptyTile
 
-            Just resultantTileType ->
-                resultantTileType
+tileTypeFromPositionTileTypePairs : Dict ( Int, Int ) TileType -> Position -> TileType
+tileTypeFromPositionTileTypePairs renderables tilePosition =
+    case Dict.get ( tilePosition.x, tilePosition.y ) renderables of
+        Nothing ->
+            EmptyTile
+
+        Just resultantTileType ->
+            resultantTileType
 
 
 
