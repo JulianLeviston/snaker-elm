@@ -249,12 +249,8 @@ convertToKVPair ( pos, tileType ) =
 
 tileTypeFromPositionTileTypePairs : Dict ( Int, Int ) TileType -> Position -> TileType
 tileTypeFromPositionTileTypePairs renderables tilePosition =
-    case Dict.get ( tilePosition.x, tilePosition.y ) renderables of
-        Nothing ->
-            EmptyTile
-
-        Just resultantTileType ->
-            resultantTileType
+    Dict.get ( tilePosition.x, tilePosition.y ) renderables
+        |> Maybe.withDefault EmptyTile
 
 
 

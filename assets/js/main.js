@@ -9700,30 +9700,28 @@ var _JulianLeviston$snaker_elm$Main$SnakeSegment = {ctor: 'SnakeSegment'};
 var _JulianLeviston$snaker_elm$Main$EmptyTile = {ctor: 'EmptyTile'};
 var _JulianLeviston$snaker_elm$Main$tileTypeFromPositionTileTypePairs = F2(
 	function (renderables, tilePosition) {
-		var _p14 = A2(
-			_elm_lang$core$Dict$get,
-			{ctor: '_Tuple2', _0: tilePosition.x, _1: tilePosition.y},
-			renderables);
-		if (_p14.ctor === 'Nothing') {
-			return _JulianLeviston$snaker_elm$Main$EmptyTile;
-		} else {
-			return _p14._0;
-		}
+		return A2(
+			_elm_lang$core$Maybe$withDefault,
+			_JulianLeviston$snaker_elm$Main$EmptyTile,
+			A2(
+				_elm_lang$core$Dict$get,
+				{ctor: '_Tuple2', _0: tilePosition.x, _1: tilePosition.y},
+				renderables));
 	});
-var _JulianLeviston$snaker_elm$Main$mkGrid = function (_p15) {
-	var _p16 = _p15;
+var _JulianLeviston$snaker_elm$Main$mkGrid = function (_p14) {
+	var _p15 = _p14;
 	var snakeTilePositions = A2(
 		_elm_lang$core$List$map,
 		function (snakeSegment) {
 			return {ctor: '_Tuple2', _0: snakeSegment, _1: _JulianLeviston$snaker_elm$Main$SnakeSegment};
 		},
-		_p16.snake.body);
+		_p15.snake.body);
 	var appleTilePositions = A2(
 		_elm_lang$core$List$map,
 		function (apple) {
 			return {ctor: '_Tuple2', _0: apple.position, _1: _JulianLeviston$snaker_elm$Main$AppleTile};
 		},
-		_p16.apples);
+		_p15.apples);
 	var positionTilePairs = _elm_lang$core$List$concat(
 		{
 			ctor: '::',
