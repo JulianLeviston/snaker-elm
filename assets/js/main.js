@@ -9590,6 +9590,16 @@ var _JulianLeviston$snaker_elm$Main$score = function (_p4) {
 	return _elm_lang$core$List$length(_p5.snake.body);
 };
 var _JulianLeviston$snaker_elm$Main$oneHundredMillis = 100 * _elm_lang$core$Time$millisecond;
+var _JulianLeviston$snaker_elm$Main$nextSnakeAndApples = F3(
+	function (time, snake, apples) {
+		var newSnake = _JulianLeviston$snaker_elm$Data_Snake$moveSnake(
+			A2(_JulianLeviston$snaker_elm$Data_Snake$growSnake, apples, snake));
+		var newApples = A2(
+			_JulianLeviston$snaker_elm$Data_Apple$expireApples,
+			time,
+			A2(_JulianLeviston$snaker_elm$Data_Snake$eatApples, snake, apples));
+		return {ctor: '_Tuple2', _0: newSnake, _1: newApples};
+	});
 var _JulianLeviston$snaker_elm$Main$init = function () {
 	var initialDirection = _JulianLeviston$snaker_elm$Data_Direction$East;
 	return {
@@ -9615,28 +9625,24 @@ var _JulianLeviston$snaker_elm$Main$update = F2(
 		var _p7 = _p6;
 		var _p12 = _p7.snake;
 		var _p11 = _p7;
-		var _p10 = _p7.apples;
 		var _p8 = msg;
 		switch (_p8.ctor) {
 			case 'Tick':
-				var _p9 = _p8._0;
-				var newSnake = _JulianLeviston$snaker_elm$Data_Snake$moveSnake(
-					A2(_JulianLeviston$snaker_elm$Data_Snake$growSnake, _p10, _p12));
-				var newApples = A2(
-					_JulianLeviston$snaker_elm$Data_Apple$expireApples,
-					_p9,
-					A2(_JulianLeviston$snaker_elm$Data_Snake$eatApples, _p12, _p10));
+				var _p10 = _p8._0;
+				var _p9 = A3(_JulianLeviston$snaker_elm$Main$nextSnakeAndApples, _p10, _p12, _p7.apples);
+				var newSnake = _p9._0;
+				var newApples = _p9._1;
 				return {
 					ctor: '_Tuple2',
 					_0: _elm_lang$core$Native_Utils.update(
 						_p11,
-						{time: _p9, snake: newSnake, apples: newApples}),
+						{time: _p10, snake: newSnake, apples: newApples}),
 					_1: _elm_lang$core$Native_Utils.eq(
 						newApples,
 						{ctor: '[]'}) ? A2(
 						_elm_lang$core$Random$generate,
 						_JulianLeviston$snaker_elm$Main$AddApple,
-						_JulianLeviston$snaker_elm$Data_Apple$randomApple(_p9)) : _elm_lang$core$Platform_Cmd$none
+						_JulianLeviston$snaker_elm$Data_Apple$randomApple(_p10)) : _elm_lang$core$Platform_Cmd$none
 				};
 			case 'ChangeDirection':
 				return {

@@ -66,15 +66,8 @@ update msg ({ snake, apples, time } as model) =
     case msg of
         Tick newTime ->
             let
-                newApples =
-                    apples
-                        |> eatApples snake
-                        |> expireApples newTime
-
-                newSnake =
-                    snake
-                        |> growSnake apples
-                        |> moveSnake
+                ( newSnake, newApples ) =
+                    nextSnakeAndApples newTime snake apples
             in
                 ( { model
                     | time = newTime
@@ -97,6 +90,22 @@ update msg ({ snake, apples, time } as model) =
 
         Noop ->
             ( model, Cmd.none )
+
+
+nextSnakeAndApples : Time -> Snake -> List Apple -> ( Snake, List Apple )
+nextSnakeAndApples time snake apples =
+    let
+        newApples =
+            apples
+                |> eatApples snake
+                |> expireApples time
+
+        newSnake =
+            snake
+                |> growSnake apples
+                |> moveSnake
+    in
+        ( newSnake, newApples )
 
 
 
