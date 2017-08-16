@@ -9578,6 +9578,7 @@ var _JulianLeviston$snaker_elm$Main$score = function (_p1) {
 	var _p2 = _p1;
 	return _elm_lang$core$List$length(_p2.snake.body);
 };
+var _JulianLeviston$snaker_elm$Main$oneHundredMillis = 100 * _elm_lang$core$Time$millisecond;
 var _JulianLeviston$snaker_elm$Main$init = function () {
 	var initialDirection = _JulianLeviston$snaker_elm$Data_Direction$East;
 	return {
@@ -9674,11 +9675,10 @@ var _JulianLeviston$snaker_elm$Main$Tick = function (a) {
 	return {ctor: 'Tick', _0: a};
 };
 var _JulianLeviston$snaker_elm$Main$subscriptions = function (model) {
-	var oneHundredMillis = 100 * _elm_lang$core$Time$millisecond;
 	return _elm_lang$core$Platform_Sub$batch(
 		{
 			ctor: '::',
-			_0: A2(_elm_lang$core$Time$every, oneHundredMillis, _JulianLeviston$snaker_elm$Main$Tick),
+			_0: A2(_elm_lang$core$Time$every, _JulianLeviston$snaker_elm$Main$oneHundredMillis, _JulianLeviston$snaker_elm$Main$Tick),
 			_1: {
 				ctor: '::',
 				_0: _elm_lang$keyboard$Keyboard$ups(_JulianLeviston$snaker_elm$Main$keyCodeToChangeDirectionMsg),

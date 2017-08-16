@@ -105,14 +105,14 @@ update msg ({ snake, apples, time } as model) =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    let
-        oneHundredMillis =
-            100 * Time.millisecond
-    in
-        Sub.batch
-            [ Time.every oneHundredMillis Tick
-            , Keyboard.ups keyCodeToChangeDirectionMsg
-            ]
+    Sub.batch
+        [ Time.every oneHundredMillis Tick
+        , Keyboard.ups keyCodeToChangeDirectionMsg
+        ]
+
+
+oneHundredMillis =
+    100 * Time.millisecond
 
 
 keyCodeToChangeDirectionMsg : Keyboard.KeyCode -> Msg
