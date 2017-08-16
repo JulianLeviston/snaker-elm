@@ -4,8 +4,8 @@ import Html exposing (Html, text)
 import Html.Attributes exposing (style)
 import Time exposing (Time, second)
 import Keyboard
+import Random
 import Dict
-import Random exposing (Generator)
 import Data.Direction exposing (Direction(..))
 import Data.Position
     exposing
@@ -13,6 +13,16 @@ import Data.Position
         , Dimensions
         , gridDimensions
         , nextPositionInDirection
+        )
+import Data.Apple exposing (Apple, randomApple, expireApples)
+import Data.Snake
+    exposing
+        ( Snake
+        , initialSnake
+        , moveSnake
+        , growSnake
+        , eatApples
+        , changeSnakeDirection
         )
 
 
@@ -26,48 +36,14 @@ type alias Model =
     }
 
 
-type alias Apple =
-    { expiresAt : Time
-    , position : Position
-    }
-
-
-type alias Snake =
-    { direction : Direction
-    , body : List Position
-    }
-
-
 init : ( Model, Cmd Msg )
 init =
     let
-        x =
-            gridDimensions.x // 2
-
-        y =
-            gridDimensions.y // 2
-
-        initialSegment =
-            { x = x, y = y }
-
-        subsequentSegment =
-            nextPositionInDirection West initialSegment
-
-        lastSegment =
-            nextPositionInDirection West subsequentSegment
-
         initialDirection =
             East
     in
         ( { time = 0
-          , snake =
-                { body =
-                    [ initialSegment
-                    , subsequentSegment
-                    , lastSegment
-                    ]
-                , direction = initialDirection
-                }
+          , snake = initialSnake
           , apples = []
           }
         , Cmd.none
@@ -123,102 +99,20 @@ update msg ({ snake, apples, time } as model) =
             ( model, Cmd.none )
 
 
-randomApple : Time -> Generator Apple
-randomApple currentTime =
-    Random.map2
-        (\position expiresAt -> { position = position, expiresAt = expiresAt })
-        Position.randomPosition
-        (Random.float currentTime (currentTime + 5000))
-
-
-expireApples : Time -> List Apple -> List Apple
-expireApples time =
-    List.filter (\{ expiresAt } -> expiresAt >= time)
-
-
-moveSnake : Snake -> Snake
-moveSnake ({ body, direction } as snake) =
-    case body of
-        [] ->
-            snake
-
-        snakeHead :: snakeBody ->
-            let
-                newHead =
-                    nextPositionInDirection direction snakeHead
-
-                newBody =
-                    newHead :: (List.take (List.length body - 1) body)
-            in
-                { snake | body = newBody }
-
-
-growSnake : List Apple -> Snake -> Snake
-growSnake apples ({ body, direction } as snake) =
-    case body of
-        [] ->
-            snake
-
-        snakeHead :: _ ->
-            if List.member snakeHead (List.map .position apples) then
-                { snake | body = nextPositionInDirection direction snakeHead :: body }
-            else
-                snake
-
-
-eatApples : Snake -> List Apple -> List Apple
-eatApples { body } apples =
-    case body of
-        [] ->
-            apples
-
-        snakeHead :: _ ->
-            List.filter (\{ position } -> position /= snakeHead) apples
-
-
-changeSnakeDirection : Snake -> Direction -> Snake
-changeSnakeDirection originalSnake newDirection =
-    let
-        changedDirection =
-            case ( originalSnake.direction, newDirection ) of
-                ( North, South ) ->
-                    North
-
-                ( South, North ) ->
-                    South
-
-                ( East, West ) ->
-                    East
-
-                ( West, East ) ->
-                    West
-
-                _ ->
-                    newDirection
-    in
-        { originalSnake | direction = changedDirection }
-
-
-wrapVal : Int -> Int -> Int -> Int
-wrapVal minVal maxVal val =
-    if (max val (maxVal + 1)) == val then
-        minVal
-    else if (min val (minVal - 1)) == val then
-        maxVal
-    else
-        val
-
-
 
 -- subscriptions
 
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    Sub.batch
-        [ Time.every (100 * Time.millisecond) Tick
-        , Keyboard.ups keyCodeToChangeDirectionMsg
-        ]
+    let
+        oneHundredMillis =
+            100 * Time.millisecond
+    in
+        Sub.batch
+            [ Time.every oneHundredMillis Tick
+            , Keyboard.ups keyCodeToChangeDirectionMsg
+            ]
 
 
 keyCodeToChangeDirectionMsg : Keyboard.KeyCode -> Msg
@@ -248,7 +142,7 @@ view : Model -> Html Msg
 view model =
     Html.div []
         [ mkGrid model
-        , text <| "score: " ++ toString (score model)
+        , text <| "Score: " ++ toString (score model)
         ]
 
 

@@ -8,7 +8,22 @@ module Data.Position
         , nextPositionInDirection
         )
 
+import Random exposing (Generator)
 import Data.Direction exposing (Direction(..))
+
+
+-- General Utils
+
+
+wrapVal : Int -> Int -> Int -> Int
+wrapVal minVal maxVal val =
+    if (max val (maxVal + 1)) == val then
+        minVal
+    else if (min val (minVal - 1)) == val then
+        maxVal
+    else
+        val
+
 
 
 -- Positions
@@ -20,7 +35,7 @@ type alias Position =
 
 nextPositionInDirection : Direction -> Position -> Position
 nextPositionInDirection direction { x, y } =
-    Position.wrapPosition <|
+    wrapPosition <|
         case direction of
             North ->
                 { x = x, y = y + 1 }
