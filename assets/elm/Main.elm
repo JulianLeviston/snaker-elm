@@ -66,22 +66,22 @@ update msg ({ snake, apples, time } as model) =
     case msg of
         Tick newTime ->
             let
-                newSnake =
-                    snake
-                        |> moveSnake
-                        |> growSnake apples
-
                 newApples =
                     apples
-                        |> eatApples newSnake
+                        |> eatApples snake
                         |> expireApples newTime
+
+                newSnake =
+                    snake
+                        |> growSnake apples
+                        |> moveSnake
             in
                 ( { model
                     | time = newTime
                     , snake = newSnake
                     , apples = newApples
                   }
-                , if apples == [] then
+                , if newApples == [] then
                     Random.generate AddApple (randomApple newTime)
                   else
                     Cmd.none

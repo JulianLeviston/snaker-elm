@@ -4947,20 +4947,20 @@ var _JulianLeviston$snaker_elm$Data_Apple$expireApples = function (time) {
 	return _elm_lang$core$List$filter(
 		function (_p2) {
 			var _p3 = _p2;
-			return _elm_lang$core$Native_Utils.cmp(_p3.expiresAt, time) > -1;
+			return _elm_lang$core$Native_Utils.cmp(_p3.expiresAt, time) > 0;
 		});
 };
-var _JulianLeviston$snaker_elm$Data_Apple$maxAppleMillis = 5000;
-var _JulianLeviston$snaker_elm$Data_Apple$minAppleMillis = 1000;
+var _JulianLeviston$snaker_elm$Data_Apple$maxAppleMillis = 8000;
+var _JulianLeviston$snaker_elm$Data_Apple$minAppleMillis = 3000;
 var _JulianLeviston$snaker_elm$Data_Apple$randomApple = function (currentTime) {
 	return A3(
 		_elm_lang$core$Random$map2,
 		F2(
 			function (position, expiresAt) {
-				return {position: position, expiresAt: expiresAt + _JulianLeviston$snaker_elm$Data_Apple$minAppleMillis};
+				return {position: position, expiresAt: expiresAt};
 			}),
 		_JulianLeviston$snaker_elm$Data_Position$randomPosition,
-		A2(_elm_lang$core$Random$float, currentTime, currentTime + _JulianLeviston$snaker_elm$Data_Apple$maxAppleMillis));
+		A2(_elm_lang$core$Random$float, currentTime + _JulianLeviston$snaker_elm$Data_Apple$minAppleMillis, (currentTime + _JulianLeviston$snaker_elm$Data_Apple$minAppleMillis) + _JulianLeviston$snaker_elm$Data_Apple$maxAppleMillis));
 };
 var _JulianLeviston$snaker_elm$Data_Apple$Apple = F2(
 	function (a, b) {
@@ -9620,21 +9620,19 @@ var _JulianLeviston$snaker_elm$Main$update = F2(
 		switch (_p8.ctor) {
 			case 'Tick':
 				var _p9 = _p8._0;
-				var newSnake = A2(
-					_JulianLeviston$snaker_elm$Data_Snake$growSnake,
-					_p10,
-					_JulianLeviston$snaker_elm$Data_Snake$moveSnake(_p12));
+				var newSnake = _JulianLeviston$snaker_elm$Data_Snake$moveSnake(
+					A2(_JulianLeviston$snaker_elm$Data_Snake$growSnake, _p10, _p12));
 				var newApples = A2(
 					_JulianLeviston$snaker_elm$Data_Apple$expireApples,
 					_p9,
-					A2(_JulianLeviston$snaker_elm$Data_Snake$eatApples, newSnake, _p10));
+					A2(_JulianLeviston$snaker_elm$Data_Snake$eatApples, _p12, _p10));
 				return {
 					ctor: '_Tuple2',
 					_0: _elm_lang$core$Native_Utils.update(
 						_p11,
 						{time: _p9, snake: newSnake, apples: newApples}),
 					_1: _elm_lang$core$Native_Utils.eq(
-						_p10,
+						newApples,
 						{ctor: '[]'}) ? A2(
 						_elm_lang$core$Random$generate,
 						_JulianLeviston$snaker_elm$Main$AddApple,

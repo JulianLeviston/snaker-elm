@@ -13,29 +13,33 @@ type alias Apple =
 
 minAppleMillis : Time
 minAppleMillis =
-    1000
+    3000
 
 
 maxAppleMillis : Time
 maxAppleMillis =
-    5000
+    8000
 
 
 randomApple : Time -> Generator Apple
 randomApple currentTime =
     Random.map2
         (\position expiresAt ->
-            { position = position, expiresAt = (expiresAt + minAppleMillis) }
+            { position = position, expiresAt = expiresAt }
         )
         Position.randomPosition
-        (Random.float currentTime (currentTime + maxAppleMillis))
+        (Random.float (currentTime + minAppleMillis) (currentTime + minAppleMillis + maxAppleMillis))
 
 
 expireApples : Time -> List Apple -> List Apple
 expireApples time =
-    List.filter (\{ expiresAt } -> expiresAt >= time)
+    List.filter (\{ expiresAt } -> expiresAt > time)
 
 
 eatApplesAt : Position -> List Apple -> List Apple
 eatApplesAt removeAtPosition apples =
-    List.filter (\{ position } -> position /= removeAtPosition) apples
+    List.filter
+        (\{ position } ->
+            position /= removeAtPosition
+        )
+        apples
