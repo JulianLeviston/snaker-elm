@@ -9402,6 +9402,12 @@ var _JulianLeviston$snaker_elm$Data_Apple$Apple = F2(
 	});
 
 var _JulianLeviston$snaker_elm$Data_Player$init = {playerId: 1, name: 'Snakey', colour: '69E582'};
+var _JulianLeviston$snaker_elm$Data_Player$initWithIdNameAndColour = F3(
+	function (id, name, colour) {
+		return _elm_lang$core$Native_Utils.update(
+			_JulianLeviston$snaker_elm$Data_Player$init,
+			{playerId: id, name: name, colour: colour});
+	});
 var _JulianLeviston$snaker_elm$Data_Player$Player = F3(
 	function (a, b, c) {
 		return {playerId: a, name: b, colour: c};
