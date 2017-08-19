@@ -63,7 +63,7 @@ mkTile tileType contents =
 
 
 mkGrid : Board -> Html Msg
-mkGrid { snake, apples } =
+mkGrid { snakes, apples } =
     let
         dim =
             gridDimensions
@@ -71,12 +71,15 @@ mkGrid { snake, apples } =
         appleTilePositions =
             List.map (\apple -> ( apple.position, AppleTile )) apples
 
-        snakeTilePositions =
+        snakeTilePositionsOf snake =
             let
                 colour =
                     Snake.colour snake
             in
                 List.map (\snakeSegment -> ( snakeSegment, SnakeSegment colour )) snake.body
+
+        snakeTilePositions =
+            List.concatMap snakeTilePositionsOf (Dict.values snakes)
 
         positionTilePairs =
             List.concat [ appleTilePositions, snakeTilePositions ]

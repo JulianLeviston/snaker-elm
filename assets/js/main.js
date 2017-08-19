@@ -9420,7 +9420,7 @@ var _JulianLeviston$snaker_elm$Data_Player$Player = F3(
 	});
 
 var _JulianLeviston$snaker_elm$Data_Snake$changeSnakeDirection = F2(
-	function (originalSnake, newDirection) {
+	function (newDirection, originalSnake) {
 		var changedDirection = function () {
 			var _p0 = {ctor: '_Tuple2', _0: originalSnake.direction, _1: newDirection};
 			_v0_4:
@@ -9573,7 +9573,12 @@ var _JulianLeviston$snaker_elm$Data_Board$convertToKVPair = function (_p0) {
 };
 var _JulianLeviston$snaker_elm$Data_Board$score = function (_p3) {
 	var _p4 = _p3;
-	return _elm_lang$core$List$length(_p4.snake.body);
+	var _p5 = A2(_elm_lang$core$Dict$get, _p4.currentPlayerId, _p4.snakes);
+	if (_p5.ctor === 'Nothing') {
+		return 0;
+	} else {
+		return _elm_lang$core$List$length(_p5._0.body);
+	}
 };
 var _JulianLeviston$snaker_elm$Data_Board$nextSnakeAndApples = F3(
 	function (time, snake, apples) {
@@ -9585,16 +9590,51 @@ var _JulianLeviston$snaker_elm$Data_Board$nextSnakeAndApples = F3(
 			A2(_JulianLeviston$snaker_elm$Data_Snake$eatApples, snake, apples));
 		return {ctor: '_Tuple2', _0: newSnake, _1: newApples};
 	});
+var _JulianLeviston$snaker_elm$Data_Board$updateSnakeAndApples = F2(
+	function (playerId, _p6) {
+		var _p7 = _p6;
+		var _p12 = _p7.snakes;
+		var _p11 = _p7.apples;
+		var _p8 = function () {
+			var _p9 = A2(_elm_lang$core$Dict$get, playerId, _p12);
+			if (_p9.ctor === 'Nothing') {
+				return {ctor: '_Tuple2', _0: _p12, _1: _p11};
+			} else {
+				var _p10 = A3(_JulianLeviston$snaker_elm$Data_Board$nextSnakeAndApples, _p7.time, _p9._0, _p11);
+				var newSnake = _p10._0;
+				var newApples_ = _p10._1;
+				return {
+					ctor: '_Tuple2',
+					_0: A3(_elm_lang$core$Dict$insert, playerId, newSnake, _p12),
+					_1: newApples_
+				};
+			}
+		}();
+		var newSnakes = _p8._0;
+		var newApples = _p8._1;
+		return _elm_lang$core$Native_Utils.update(
+			_p7,
+			{snakes: newSnakes, apples: newApples});
+	});
 var _JulianLeviston$snaker_elm$Data_Board$oneHundredMillis = 100 * _elm_lang$core$Time$millisecond;
 var _JulianLeviston$snaker_elm$Data_Board$tickDuration = _JulianLeviston$snaker_elm$Data_Board$oneHundredMillis;
-var _JulianLeviston$snaker_elm$Data_Board$init = {
-	time: 0,
-	snake: _JulianLeviston$snaker_elm$Data_Snake$initialSnake,
-	apples: {ctor: '[]'}
-};
-var _JulianLeviston$snaker_elm$Data_Board$Board = F3(
-	function (a, b, c) {
-		return {time: a, snake: b, apples: c};
+var _JulianLeviston$snaker_elm$Data_Board$init = function () {
+	var playerId = _JulianLeviston$snaker_elm$Data_Snake$id(_JulianLeviston$snaker_elm$Data_Snake$initialSnake);
+	return {
+		currentPlayerId: 1,
+		time: 0,
+		snakes: _elm_lang$core$Dict$fromList(
+			{
+				ctor: '::',
+				_0: {ctor: '_Tuple2', _0: playerId, _1: _JulianLeviston$snaker_elm$Data_Snake$initialSnake},
+				_1: {ctor: '[]'}
+			}),
+		apples: {ctor: '[]'}
+	};
+}();
+var _JulianLeviston$snaker_elm$Data_Board$Board = F4(
+	function (a, b, c, d) {
+		return {currentPlayerId: a, time: b, snakes: c, apples: d};
 	});
 var _JulianLeviston$snaker_elm$Data_Board$AppleTile = {ctor: 'AppleTile'};
 var _JulianLeviston$snaker_elm$Data_Board$SnakeSegment = function (a) {
@@ -9615,36 +9655,44 @@ var _JulianLeviston$snaker_elm$Data_Board$AddApple = function (a) {
 	return {ctor: 'AddApple', _0: a};
 };
 var _JulianLeviston$snaker_elm$Data_Board$update = F2(
-	function (msg, _p5) {
-		var _p6 = _p5;
-		var _p11 = _p6.snake;
-		var _p10 = _p6;
-		var _p7 = msg;
-		switch (_p7.ctor) {
+	function (msg, _p13) {
+		var _p14 = _p13;
+		var _p18 = _p14.snakes;
+		var _p17 = _p14;
+		var _p15 = msg;
+		switch (_p15.ctor) {
 			case 'Tick':
-				var _p9 = _p7._0;
-				var _p8 = A3(_JulianLeviston$snaker_elm$Data_Board$nextSnakeAndApples, _p9, _p11, _p6.apples);
-				var newSnake = _p8._0;
-				var newApples = _p8._1;
+				var _p16 = _p15._0;
+				var playerIds = _elm_lang$core$Dict$keys(_p18);
+				var newBoard = A3(
+					_elm_lang$core$List$foldl,
+					_JulianLeviston$snaker_elm$Data_Board$updateSnakeAndApples,
+					_elm_lang$core$Native_Utils.update(
+						_p17,
+						{time: _p16}),
+					playerIds);
 				return {
 					ctor: '_Tuple2',
-					_0: _elm_lang$core$Native_Utils.update(
-						_p10,
-						{time: _p9, snake: newSnake, apples: newApples}),
+					_0: newBoard,
 					_1: _elm_lang$core$Native_Utils.eq(
-						newApples,
+						newBoard.apples,
 						{ctor: '[]'}) ? A2(
 						_elm_lang$core$Random$generate,
 						_JulianLeviston$snaker_elm$Data_Board$AddApple,
-						_JulianLeviston$snaker_elm$Data_Apple$randomApple(_p9)) : _elm_lang$core$Platform_Cmd$none
+						_JulianLeviston$snaker_elm$Data_Apple$randomApple(_p16)) : _elm_lang$core$Platform_Cmd$none
 				};
 			case 'ChangeDirection':
 				return {
 					ctor: '_Tuple2',
 					_0: _elm_lang$core$Native_Utils.update(
-						_p10,
+						_p17,
 						{
-							snake: A2(_JulianLeviston$snaker_elm$Data_Snake$changeSnakeDirection, _p11, _p7._0)
+							snakes: A3(
+								_elm_lang$core$Dict$update,
+								_p14.currentPlayerId,
+								_elm_lang$core$Maybe$map(
+									_JulianLeviston$snaker_elm$Data_Snake$changeSnakeDirection(_p15._0)),
+								_p18)
 						}),
 					_1: _elm_lang$core$Platform_Cmd$none
 				};
@@ -9652,9 +9700,9 @@ var _JulianLeviston$snaker_elm$Data_Board$update = F2(
 				return {
 					ctor: '_Tuple2',
 					_0: _elm_lang$core$Native_Utils.update(
-						_p10,
+						_p17,
 						{
-							apples: {ctor: '::', _0: _p7._0, _1: _p10.apples}
+							apples: {ctor: '::', _0: _p15._0, _1: _p17.apples}
 						}),
 					_1: _elm_lang$core$Platform_Cmd$none
 				};
@@ -9727,9 +9775,8 @@ var _JulianLeviston$snaker_elm$Board_Html$mkTile = F2(
 	});
 var _JulianLeviston$snaker_elm$Board_Html$mkGrid = function (_p1) {
 	var _p2 = _p1;
-	var _p3 = _p2.snake;
-	var snakeTilePositions = function () {
-		var colour = _JulianLeviston$snaker_elm$Data_Snake$colour(_p3);
+	var snakeTilePositionsOf = function (snake) {
+		var colour = _JulianLeviston$snaker_elm$Data_Snake$colour(snake);
 		return A2(
 			_elm_lang$core$List$map,
 			function (snakeSegment) {
@@ -9739,8 +9786,12 @@ var _JulianLeviston$snaker_elm$Board_Html$mkGrid = function (_p1) {
 					_1: _JulianLeviston$snaker_elm$Data_Board$SnakeSegment(colour)
 				};
 			},
-			_p3.body);
-	}();
+			snake.body);
+	};
+	var snakeTilePositions = A2(
+		_elm_lang$core$List$concatMap,
+		snakeTilePositionsOf,
+		_elm_lang$core$Dict$values(_p2.snakes));
 	var appleTilePositions = A2(
 		_elm_lang$core$List$map,
 		function (apple) {

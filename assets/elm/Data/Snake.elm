@@ -107,8 +107,8 @@ eatApples { body } apples =
             eatApplesAt snakeHead apples
 
 
-changeSnakeDirection : Snake -> Direction -> Snake
-changeSnakeDirection originalSnake newDirection =
+changeSnakeDirection : Direction -> Snake -> Snake
+changeSnakeDirection newDirection originalSnake =
     let
         changedDirection =
             case ( originalSnake.direction, newDirection ) of

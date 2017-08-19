@@ -25,8 +25,8 @@ import Data.Position
         , nextPositionInDirection
         )
 import Data.Apple exposing (Apple, randomApple, expireApples)
-import Data.Player exposing (PlayerColour)
-import Data.Snake
+import Data.Player exposing (PlayerColour, PlayerId)
+import Data.Snake as Snake
     exposing
         ( Snake
         , initialSnake
@@ -38,8 +38,9 @@ import Data.Snake
 
 
 type alias Board =
-    { time : Time
-    , snake : Snake
+    { currentPlayerId : PlayerId
+    , time : Time
+    , snakes : Dict PlayerId Snake
     , apples : List Apple
     }
 
@@ -52,10 +53,15 @@ type TileType
 
 init : Board
 init =
-    { time = 0
-    , snake = initialSnake
-    , apples = []
-    }
+    let
+        playerId =
+            Snake.id initialSnake
+    in
+        { currentPlayerId = 1
+        , time = 0
+        , snakes = Dict.fromList [ ( playerId, initialSnake ) ]
+        , apples = []
+        }
 
 
 oneHundredMillis : Time
@@ -74,27 +80,47 @@ type Msg
     | AddApple Apple
 
 
+updateSnakeAndApples : PlayerId -> Board -> Board
+updateSnakeAndApples playerId ({ snakes, apples, time } as board) =
+    let
+        ( newSnakes, newApples ) =
+            case Dict.get playerId snakes of
+                Nothing ->
+                    ( snakes, apples )
+
+                Just snake ->
+                    let
+                        ( newSnake, newApples_ ) =
+                            nextSnakeAndApples time snake apples
+                    in
+                        ( Dict.insert playerId newSnake snakes, newApples_ )
+    in
+        { board
+            | snakes = newSnakes
+            , apples = newApples
+        }
+
+
 update : Msg -> Board -> ( Board, Cmd Msg )
-update msg ({ snake, apples, time } as model) =
+update msg ({ currentPlayerId, snakes, apples, time } as model) =
     case msg of
         Tick newTime ->
             let
-                ( newSnake, newApples ) =
-                    nextSnakeAndApples newTime snake apples
+                playerIds =
+                    Dict.keys snakes
+
+                newBoard =
+                    List.foldl updateSnakeAndApples { model | time = newTime } playerIds
             in
-                ( { model
-                    | time = newTime
-                    , snake = newSnake
-                    , apples = newApples
-                  }
-                , if newApples == [] then
+                ( newBoard
+                , if newBoard.apples == [] then
                     Random.generate AddApple (randomApple newTime)
                   else
                     Cmd.none
                 )
 
         ChangeDirection direction ->
-            ( { model | snake = changeSnakeDirection snake direction }, Cmd.none )
+            ( { model | snakes = Dict.update currentPlayerId (Maybe.map (changeSnakeDirection direction)) snakes }, Cmd.none )
 
         AddApple apple ->
             ( { model | apples = apple :: model.apples }
@@ -129,8 +155,13 @@ nextSnakeAndApples time snake apples =
 
 
 score : Board -> Int
-score { snake } =
-    List.length snake.body
+score { currentPlayerId, snakes } =
+    case Dict.get currentPlayerId snakes of
+        Nothing ->
+            0
+
+        Just snake ->
+            List.length snake.body
 
 
 convertToKVPair : ( Position, TileType ) -> ( ( Int, Int ), TileType )
