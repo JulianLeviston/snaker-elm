@@ -59,9 +59,19 @@ update msg model =
 subscriptions : Model -> Sub Msg
 subscriptions model =
     Sub.batch
-        [ Time.every Board.tickDuration (BoardMsg << Board.tickBoardMsg)
-        , Keyboard.ups keyCodeToChangeDirectionMsg
+        [ tickBoardSubscription
+        , keyboardBoardControlSubscription
         ]
+
+
+tickBoardSubscription : Sub Msg
+tickBoardSubscription =
+    Time.every Board.tickDuration (BoardMsg << Board.tickBoardMsg)
+
+
+keyboardBoardControlSubscription : Sub Msg
+keyboardBoardControlSubscription =
+    Keyboard.ups keyCodeToChangeDirectionMsg
 
 
 keyCodeToChangeDirectionMsg : Keyboard.KeyCode -> Msg

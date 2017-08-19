@@ -9819,30 +9819,32 @@ var _JulianLeviston$snaker_elm$Main$update = F2(
 			return {ctor: '_Tuple2', _0: model, _1: _elm_lang$core$Platform_Cmd$none};
 		}
 	});
+var _JulianLeviston$snaker_elm$Main$tickBoardSubscription = A2(
+	_elm_lang$core$Time$every,
+	_JulianLeviston$snaker_elm$Data_Board$tickDuration,
+	function (_p2) {
+		return _JulianLeviston$snaker_elm$Main$BoardMsg(
+			_JulianLeviston$snaker_elm$Data_Board$tickBoardMsg(_p2));
+	});
 var _JulianLeviston$snaker_elm$Main$keyCodeToChangeDirectionMsg = function (keyCode) {
 	var maybeDirection = _JulianLeviston$snaker_elm$Data_Direction$keyCodeToMaybeDirection(keyCode);
-	var _p2 = maybeDirection;
-	if (_p2.ctor === 'Nothing') {
+	var _p3 = maybeDirection;
+	if (_p3.ctor === 'Nothing') {
 		return _JulianLeviston$snaker_elm$Main$Noop;
 	} else {
 		return _JulianLeviston$snaker_elm$Main$BoardMsg(
-			_JulianLeviston$snaker_elm$Data_Board$toChangeDirectionMsg(_p2._0));
+			_JulianLeviston$snaker_elm$Data_Board$toChangeDirectionMsg(_p3._0));
 	}
 };
+var _JulianLeviston$snaker_elm$Main$keyboardBoardControlSubscription = _elm_lang$keyboard$Keyboard$ups(_JulianLeviston$snaker_elm$Main$keyCodeToChangeDirectionMsg);
 var _JulianLeviston$snaker_elm$Main$subscriptions = function (model) {
 	return _elm_lang$core$Platform_Sub$batch(
 		{
 			ctor: '::',
-			_0: A2(
-				_elm_lang$core$Time$every,
-				_JulianLeviston$snaker_elm$Data_Board$tickDuration,
-				function (_p3) {
-					return _JulianLeviston$snaker_elm$Main$BoardMsg(
-						_JulianLeviston$snaker_elm$Data_Board$tickBoardMsg(_p3));
-				}),
+			_0: _JulianLeviston$snaker_elm$Main$tickBoardSubscription,
 			_1: {
 				ctor: '::',
-				_0: _elm_lang$keyboard$Keyboard$ups(_JulianLeviston$snaker_elm$Main$keyCodeToChangeDirectionMsg),
+				_0: _JulianLeviston$snaker_elm$Main$keyboardBoardControlSubscription,
 				_1: {ctor: '[]'}
 			}
 		});
