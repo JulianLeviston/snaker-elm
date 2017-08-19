@@ -1,6 +1,7 @@
 module Data.Snake
     exposing
         ( Snake
+        , id
         , colour
         , initialSnake
         , moveSnake
@@ -12,7 +13,7 @@ module Data.Snake
 import Data.Direction exposing (Direction(..))
 import Data.Position exposing (Position, gridDimensions, nextPositionInDirection)
 import Data.Apple exposing (Apple, eatApplesAt)
-import Data.Player as Player exposing (Player, PlayerColour)
+import Data.Player as Player exposing (Player, PlayerId, PlayerColour)
 
 
 type alias Snake =
@@ -24,7 +25,12 @@ type alias Snake =
 
 colour : Snake -> PlayerColour
 colour { player } =
-    player.colour
+    Player.colour player
+
+
+id : Snake -> PlayerId
+id { player } =
+    Player.id player
 
 
 initialSnake : Snake

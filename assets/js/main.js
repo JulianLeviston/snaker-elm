@@ -9401,6 +9401,12 @@ var _JulianLeviston$snaker_elm$Data_Apple$Apple = F2(
 		return {expiresAt: a, position: b};
 	});
 
+var _JulianLeviston$snaker_elm$Data_Player$colour = function (player) {
+	return player.colour;
+};
+var _JulianLeviston$snaker_elm$Data_Player$id = function (player) {
+	return player.playerId;
+};
 var _JulianLeviston$snaker_elm$Data_Player$init = {playerId: 1, name: 'Snakey', colour: '69E582'};
 var _JulianLeviston$snaker_elm$Data_Player$initWithIdNameAndColour = F3(
 	function (id, name, colour) {
@@ -9543,9 +9549,13 @@ var _JulianLeviston$snaker_elm$Data_Snake$initialSnake = function () {
 		direction: initialDirection
 	};
 }();
-var _JulianLeviston$snaker_elm$Data_Snake$colour = function (_p15) {
+var _JulianLeviston$snaker_elm$Data_Snake$id = function (_p15) {
 	var _p16 = _p15;
-	return _p16.player.colour;
+	return _JulianLeviston$snaker_elm$Data_Player$id(_p16.player);
+};
+var _JulianLeviston$snaker_elm$Data_Snake$colour = function (_p17) {
+	var _p18 = _p17;
+	return _JulianLeviston$snaker_elm$Data_Player$colour(_p18.player);
 };
 var _JulianLeviston$snaker_elm$Data_Snake$Snake = F3(
 	function (a, b, c) {
