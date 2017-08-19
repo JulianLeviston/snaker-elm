@@ -6,7 +6,7 @@ module Data.Board
         , init
         , update
         , score
-        , tickLength
+        , tickDuration
         , tileTypeFromPositionTileTypePairs
         , convertToKVPair
         , toChangeDirectionMsg
@@ -62,8 +62,8 @@ oneHundredMillis =
     100 * Time.millisecond
 
 
-tickLength : Time
-tickLength =
+tickDuration : Time
+tickDuration =
     oneHundredMillis
 
 

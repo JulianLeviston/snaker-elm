@@ -9559,7 +9559,7 @@ var _JulianLeviston$snaker_elm$Data_Board$nextSnakeAndApples = F3(
 		return {ctor: '_Tuple2', _0: newSnake, _1: newApples};
 	});
 var _JulianLeviston$snaker_elm$Data_Board$oneHundredMillis = 100 * _elm_lang$core$Time$millisecond;
-var _JulianLeviston$snaker_elm$Data_Board$tickLength = _JulianLeviston$snaker_elm$Data_Board$oneHundredMillis;
+var _JulianLeviston$snaker_elm$Data_Board$tickDuration = _JulianLeviston$snaker_elm$Data_Board$oneHundredMillis;
 var _JulianLeviston$snaker_elm$Data_Board$init = {
 	time: 0,
 	snake: _JulianLeviston$snaker_elm$Data_Snake$initialSnake,
@@ -9835,7 +9835,7 @@ var _JulianLeviston$snaker_elm$Main$subscriptions = function (model) {
 			ctor: '::',
 			_0: A2(
 				_elm_lang$core$Time$every,
-				_JulianLeviston$snaker_elm$Data_Board$tickLength,
+				_JulianLeviston$snaker_elm$Data_Board$tickDuration,
 				function (_p3) {
 					return _JulianLeviston$snaker_elm$Main$BoardMsg(
 						_JulianLeviston$snaker_elm$Data_Board$tickBoardMsg(_p3));
