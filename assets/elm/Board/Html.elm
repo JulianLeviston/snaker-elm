@@ -4,6 +4,7 @@ import Dict
 import Html exposing (Html, text)
 import Html.Attributes exposing (style)
 import Data.Position as Position exposing (gridDimensions)
+import Data.Snake as Snake
 import Data.Board as Board
     exposing
         ( Board
@@ -38,8 +39,8 @@ mkTile tileType contents =
     let
         backgroundColor =
             case tileType of
-                SnakeSegment ->
-                    "#69E582"
+                SnakeSegment playerColour ->
+                    "#" ++ playerColour
 
                 AppleTile ->
                     "#C40000"
@@ -71,7 +72,11 @@ mkGrid { snake, apples } =
             List.map (\apple -> ( apple.position, AppleTile )) apples
 
         snakeTilePositions =
-            List.map (\snakeSegment -> ( snakeSegment, SnakeSegment )) snake.body
+            let
+                colour =
+                    Snake.colour snake
+            in
+                List.map (\snakeSegment -> ( snakeSegment, SnakeSegment colour )) snake.body
 
         positionTilePairs =
             List.concat [ appleTilePositions, snakeTilePositions ]

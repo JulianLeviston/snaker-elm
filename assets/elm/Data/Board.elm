@@ -25,6 +25,7 @@ import Data.Position
         , nextPositionInDirection
         )
 import Data.Apple exposing (Apple, randomApple, expireApples)
+import Data.Player exposing (PlayerColour)
 import Data.Snake
     exposing
         ( Snake
@@ -45,7 +46,7 @@ type alias Board =
 
 type TileType
     = EmptyTile
-    | SnakeSegment
+    | SnakeSegment PlayerColour
     | AppleTile
 
 

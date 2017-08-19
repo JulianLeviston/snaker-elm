@@ -1,14 +1,30 @@
-module Data.Snake exposing (Snake, initialSnake, moveSnake, growSnake, eatApples, changeSnakeDirection)
+module Data.Snake
+    exposing
+        ( Snake
+        , colour
+        , initialSnake
+        , moveSnake
+        , growSnake
+        , eatApples
+        , changeSnakeDirection
+        )
 
 import Data.Direction exposing (Direction(..))
 import Data.Position exposing (Position, gridDimensions, nextPositionInDirection)
 import Data.Apple exposing (Apple, eatApplesAt)
+import Data.Player as Player exposing (Player, PlayerColour)
 
 
 type alias Snake =
-    { direction : Direction
+    { player : Player
+    , direction : Direction
     , body : List Position
     }
+
+
+colour : Snake -> PlayerColour
+colour { player } =
+    player.colour
 
 
 initialSnake : Snake
@@ -35,7 +51,8 @@ initialSnake =
         lastSegment =
             nextPositionInDirection tailDirection subsequentSegment
     in
-        { body =
+        { player = Player.init
+        , body =
             [ initialSegment
             , subsequentSegment
             , lastSegment

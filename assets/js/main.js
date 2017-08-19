@@ -9401,6 +9401,12 @@ var _JulianLeviston$snaker_elm$Data_Apple$Apple = F2(
 		return {expiresAt: a, position: b};
 	});
 
+var _JulianLeviston$snaker_elm$Data_Player$init = {playerId: 1, name: 'Snakey', colour: '69E582'};
+var _JulianLeviston$snaker_elm$Data_Player$Player = F3(
+	function (a, b, c) {
+		return {playerId: a, name: b, colour: c};
+	});
+
 var _JulianLeviston$snaker_elm$Data_Snake$changeSnakeDirection = F2(
 	function (originalSnake, newDirection) {
 		var changedDirection = function () {
@@ -9514,6 +9520,7 @@ var _JulianLeviston$snaker_elm$Data_Snake$initialSnake = function () {
 	var lastSegment = A2(_JulianLeviston$snaker_elm$Data_Position$nextPositionInDirection, tailDirection, subsequentSegment);
 	var initialDirection = _JulianLeviston$snaker_elm$Data_Direction$East;
 	return {
+		player: _JulianLeviston$snaker_elm$Data_Player$init,
 		body: {
 			ctor: '::',
 			_0: initialSegment,
@@ -9530,9 +9537,13 @@ var _JulianLeviston$snaker_elm$Data_Snake$initialSnake = function () {
 		direction: initialDirection
 	};
 }();
-var _JulianLeviston$snaker_elm$Data_Snake$Snake = F2(
-	function (a, b) {
-		return {direction: a, body: b};
+var _JulianLeviston$snaker_elm$Data_Snake$colour = function (_p15) {
+	var _p16 = _p15;
+	return _p16.player.colour;
+};
+var _JulianLeviston$snaker_elm$Data_Snake$Snake = F3(
+	function (a, b, c) {
+		return {player: a, direction: b, body: c};
 	});
 
 var _JulianLeviston$snaker_elm$Data_Board$convertToKVPair = function (_p0) {
@@ -9570,7 +9581,9 @@ var _JulianLeviston$snaker_elm$Data_Board$Board = F3(
 		return {time: a, snake: b, apples: c};
 	});
 var _JulianLeviston$snaker_elm$Data_Board$AppleTile = {ctor: 'AppleTile'};
-var _JulianLeviston$snaker_elm$Data_Board$SnakeSegment = {ctor: 'SnakeSegment'};
+var _JulianLeviston$snaker_elm$Data_Board$SnakeSegment = function (a) {
+	return {ctor: 'SnakeSegment', _0: a};
+};
 var _JulianLeviston$snaker_elm$Data_Board$EmptyTile = {ctor: 'EmptyTile'};
 var _JulianLeviston$snaker_elm$Data_Board$tileTypeFromPositionTileTypePairs = F2(
 	function (renderables, tilePosition) {
@@ -9651,7 +9664,7 @@ var _JulianLeviston$snaker_elm$Board_Html$mkTile = F2(
 			var _p0 = tileType;
 			switch (_p0.ctor) {
 				case 'SnakeSegment':
-					return '#69E582';
+					return A2(_elm_lang$core$Basics_ops['++'], '#', _p0._0);
 				case 'AppleTile':
 					return '#C40000';
 				default:
@@ -9698,12 +9711,20 @@ var _JulianLeviston$snaker_elm$Board_Html$mkTile = F2(
 	});
 var _JulianLeviston$snaker_elm$Board_Html$mkGrid = function (_p1) {
 	var _p2 = _p1;
-	var snakeTilePositions = A2(
-		_elm_lang$core$List$map,
-		function (snakeSegment) {
-			return {ctor: '_Tuple2', _0: snakeSegment, _1: _JulianLeviston$snaker_elm$Data_Board$SnakeSegment};
-		},
-		_p2.snake.body);
+	var _p3 = _p2.snake;
+	var snakeTilePositions = function () {
+		var colour = _JulianLeviston$snaker_elm$Data_Snake$colour(_p3);
+		return A2(
+			_elm_lang$core$List$map,
+			function (snakeSegment) {
+				return {
+					ctor: '_Tuple2',
+					_0: snakeSegment,
+					_1: _JulianLeviston$snaker_elm$Data_Board$SnakeSegment(colour)
+				};
+			},
+			_p3.body);
+	}();
 	var appleTilePositions = A2(
 		_elm_lang$core$List$map,
 		function (apple) {
