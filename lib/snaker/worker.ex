@@ -32,13 +32,11 @@ defmodule Snaker.Worker do
     {:ok, initial_map}
   end
 
-  def handle_call({:new_player}, _from, state) do
-    player_id = next_player_id(state.players)
-    name = "#{Enum.random(@first_names)} the #{Enum.random(@adjectives)} #{Enum.random(@animals)}"
+  def handle_call({:new_player}, _from, %{players: players} = state) do
     player_data = %{
-      id: player_id,
-      colour: Enum.random(@colours),
-      name: name
+      id: next_player_id(players),
+      colour: random_colour(),
+      name: random_name()
     }
     new_state = put_in(state, [:players, player_id], player_data)
     {:reply, player_data, new_state}
@@ -49,21 +47,27 @@ defmodule Snaker.Worker do
   end
 
   def handle_cast({:delete_player, player_id}, state) do
-    {_old_state, new_state} = state
-      |> Map.get_and_update(
-          :players,
-          fn(players) ->
-            {players, Map.delete(players, player_id)}
-          end
-         )
+    new_state = update_in(state, [:players], &Map.delete(&1, player_id))
     {:noreply, new_state}
   end
 
   defp next_player_id(players) do
     max_id =
       players
-      |> Enum.map(fn({player_id, _player}) -> player_id end)
+      |> Map.keys
       |> Enum.max(fn() -> 0 end)
     max_id + 1
+  end
+
+  defp random_name do
+    [name, adjective, animal] =
+      [@first_names, @adjectives, @animals]
+      |> Enum.map(&Enum.random(&1))
+    description = "#{adjective} #{animal}"
+    "#{name} the #{description}"
+  end
+
+  defp random_colour do
+    Enum.random(@colours)
   end
 end
