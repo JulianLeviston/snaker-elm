@@ -1,8 +1,9 @@
 defmodule SnakerWeb.UserSocket do
   use Phoenix.Socket
+  alias Snaker.Worker
 
   ## Channels
-  # channel "room:*", SnakerWeb.RoomChannel
+  channel "game:*", SnakerWeb.GameChannel
 
   ## Transports
   transport :websocket, Phoenix.Transports.WebSocket
@@ -19,7 +20,9 @@ defmodule SnakerWeb.UserSocket do
   #
   # See `Phoenix.Token` documentation for examples in
   # performing token verification on connect.
-  def connect(_params, socket) do
+  def connect(_params, old_socket) do
+    new_player = Worker.new_player()
+    socket = assign(old_socket, :player, new_player)
     {:ok, socket}
   end
 

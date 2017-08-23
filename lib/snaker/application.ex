@@ -13,7 +13,7 @@ defmodule Snaker.Application do
       # Start the endpoint when the application starts
       supervisor(SnakerWeb.Endpoint, []),
       # Start your own worker by calling: Snaker.Worker.start_link(arg1, arg2, arg3)
-      # worker(Snaker.Worker, [arg1, arg2, arg3]),
+      worker(Snaker.Worker, [nil]),
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
