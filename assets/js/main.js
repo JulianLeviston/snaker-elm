@@ -9696,6 +9696,10 @@ var _JulianLeviston$snaker_elm$Data_Board$tileTypeFromPositionTileTypePairs = F2
 				{ctor: '_Tuple2', _0: tilePosition.x, _1: tilePosition.y},
 				renderables));
 	});
+var _JulianLeviston$snaker_elm$Data_Board$RemovePlayer = function (a) {
+	return {ctor: 'RemovePlayer', _0: a};
+};
+var _JulianLeviston$snaker_elm$Data_Board$toRemovePlayerMsg = _JulianLeviston$snaker_elm$Data_Board$RemovePlayer;
 var _JulianLeviston$snaker_elm$Data_Board$SetupNewPlayer = function (a) {
 	return {ctor: 'SetupNewPlayer', _0: a};
 };
@@ -9788,13 +9792,22 @@ var _JulianLeviston$snaker_elm$Data_Board$update = F2(
 						{snakes: newSnakes}),
 					_1: _elm_lang$core$Platform_Cmd$none
 				};
-			default:
+			case 'SetupNewPlayer':
 				var newSnake = A2(_JulianLeviston$snaker_elm$Data_Snake$setPlayer, _p15._0, _JulianLeviston$snaker_elm$Data_Snake$initialSnake);
 				var newSnakes = A3(
 					_elm_lang$core$Dict$insert,
 					_JulianLeviston$snaker_elm$Data_Snake$id(newSnake),
 					newSnake,
 					_p20);
+				return {
+					ctor: '_Tuple2',
+					_0: _elm_lang$core$Native_Utils.update(
+						_p19,
+						{snakes: newSnakes}),
+					_1: _elm_lang$core$Platform_Cmd$none
+				};
+			default:
+				var newSnakes = A2(_elm_lang$core$Dict$remove, _p15._0.playerId, _p20);
 				return {
 					ctor: '_Tuple2',
 					_0: _elm_lang$core$Native_Utils.update(
@@ -11222,7 +11235,7 @@ var _fbonetti$elm_phoenix_socket$Phoenix_Socket$listen = F2(
 			});
 	});
 
-var _JulianLeviston$snaker_elm$Main$newPlayerJoinedDecoder = A2(_elm_lang$core$Json_Decode$field, 'player', _JulianLeviston$snaker_elm$Data_Player$playerDecoder);
+var _JulianLeviston$snaker_elm$Main$objectWithPlayerDecoder = A2(_elm_lang$core$Json_Decode$field, 'player', _JulianLeviston$snaker_elm$Data_Player$playerDecoder);
 var _JulianLeviston$snaker_elm$Main$joinGameDecoder = A3(
 	_elm_lang$core$Json_Decode$map2,
 	F2(
@@ -11235,6 +11248,7 @@ var _JulianLeviston$snaker_elm$Main$Model = F2(
 	function (a, b) {
 		return {board: a, phxSocket: b};
 	});
+var _JulianLeviston$snaker_elm$Main$PlayerLeft = {ctor: 'PlayerLeft'};
 var _JulianLeviston$snaker_elm$Main$NewPlayerJoined = {ctor: 'NewPlayerJoined'};
 var _JulianLeviston$snaker_elm$Main$JoinGame = {ctor: 'JoinGame'};
 var _JulianLeviston$snaker_elm$Main$Noop = {ctor: 'Noop'};
@@ -11249,16 +11263,21 @@ var _JulianLeviston$snaker_elm$Main$init = function () {
 	var channel = _fbonetti$elm_phoenix_socket$Phoenix_Channel$init('game:snake');
 	var initialSocket = A4(
 		_fbonetti$elm_phoenix_socket$Phoenix_Socket$on,
-		'player:join',
+		'player:leave',
 		'game:snake',
-		_JulianLeviston$snaker_elm$Main$DispatchServerMsg(_JulianLeviston$snaker_elm$Main$NewPlayerJoined),
+		_JulianLeviston$snaker_elm$Main$DispatchServerMsg(_JulianLeviston$snaker_elm$Main$PlayerLeft),
 		A4(
 			_fbonetti$elm_phoenix_socket$Phoenix_Socket$on,
-			'join',
+			'player:join',
 			'game:snake',
-			_JulianLeviston$snaker_elm$Main$DispatchServerMsg(_JulianLeviston$snaker_elm$Main$JoinGame),
-			_fbonetti$elm_phoenix_socket$Phoenix_Socket$withDebug(
-				_fbonetti$elm_phoenix_socket$Phoenix_Socket$init('ws://Stagger:4000/socket/websocket'))));
+			_JulianLeviston$snaker_elm$Main$DispatchServerMsg(_JulianLeviston$snaker_elm$Main$NewPlayerJoined),
+			A4(
+				_fbonetti$elm_phoenix_socket$Phoenix_Socket$on,
+				'join',
+				'game:snake',
+				_JulianLeviston$snaker_elm$Main$DispatchServerMsg(_JulianLeviston$snaker_elm$Main$JoinGame),
+				_fbonetti$elm_phoenix_socket$Phoenix_Socket$withDebug(
+					_fbonetti$elm_phoenix_socket$Phoenix_Socket$init('ws://Stagger:4000/socket/websocket')))));
 	var _p0 = A2(_fbonetti$elm_phoenix_socket$Phoenix_Socket$join, channel, initialSocket);
 	var phxSocket = _p0._0;
 	var cmd = _p0._1;
@@ -11274,72 +11293,92 @@ var _JulianLeviston$snaker_elm$Main$BoardMsg = function (a) {
 var _JulianLeviston$snaker_elm$Main$serverUpdate = F3(
 	function (msg, raw, model) {
 		var _p1 = msg;
-		if (_p1.ctor === 'JoinGame') {
-			var _p2 = A2(_elm_lang$core$Json_Decode$decodeValue, _JulianLeviston$snaker_elm$Main$joinGameDecoder, raw);
-			if (_p2.ctor === 'Ok') {
-				var _p3 = A2(
-					_JulianLeviston$snaker_elm$Data_Board$update,
-					_JulianLeviston$snaker_elm$Data_Board$toSetCurrentPlayerMsg(_p2._0._0),
-					model.board);
-				var newBoard1 = _p3._0;
-				var boardCmd1 = _p3._1;
-				var newCmd1 = A2(_elm_lang$core$Platform_Cmd$map, _JulianLeviston$snaker_elm$Main$BoardMsg, boardCmd1);
-				var _p4 = A2(
-					_JulianLeviston$snaker_elm$Data_Board$update,
-					_JulianLeviston$snaker_elm$Data_Board$toSetupPlayersMsg(_p2._0._1),
-					newBoard1);
-				var newBoard2 = _p4._0;
-				var boardCmd2 = _p4._1;
-				var newCmd2 = A2(_elm_lang$core$Platform_Cmd$map, _JulianLeviston$snaker_elm$Main$BoardMsg, boardCmd2);
-				var newModel = _elm_lang$core$Native_Utils.update(
-					model,
-					{board: newBoard2});
-				return {
-					ctor: '_Tuple2',
-					_0: newModel,
-					_1: _elm_lang$core$Platform_Cmd$batch(
-						{
-							ctor: '::',
-							_0: newCmd1,
-							_1: {
-								ctor: '::',
-								_0: newCmd2,
-								_1: {ctor: '[]'}
-							}
-						})
-				};
-			} else {
-				return {ctor: '_Tuple2', _0: model, _1: _elm_lang$core$Platform_Cmd$none};
-			}
-		} else {
-			var _p5 = A2(_elm_lang$core$Json_Decode$decodeValue, _JulianLeviston$snaker_elm$Main$newPlayerJoinedDecoder, raw);
-			if (_p5.ctor === 'Ok') {
-				var _p6 = A2(
-					_JulianLeviston$snaker_elm$Data_Board$update,
-					_JulianLeviston$snaker_elm$Data_Board$toSetupNewPlayerMsg(_p5._0),
-					model.board);
-				var newBoard = _p6._0;
-				var boardCmd = _p6._1;
-				return {
-					ctor: '_Tuple2',
-					_0: _elm_lang$core$Native_Utils.update(
+		switch (_p1.ctor) {
+			case 'JoinGame':
+				var _p2 = A2(_elm_lang$core$Json_Decode$decodeValue, _JulianLeviston$snaker_elm$Main$joinGameDecoder, raw);
+				if (_p2.ctor === 'Ok') {
+					var _p3 = A2(
+						_JulianLeviston$snaker_elm$Data_Board$update,
+						_JulianLeviston$snaker_elm$Data_Board$toSetCurrentPlayerMsg(_p2._0._0),
+						model.board);
+					var newBoard1 = _p3._0;
+					var boardCmd1 = _p3._1;
+					var newCmd1 = A2(_elm_lang$core$Platform_Cmd$map, _JulianLeviston$snaker_elm$Main$BoardMsg, boardCmd1);
+					var _p4 = A2(
+						_JulianLeviston$snaker_elm$Data_Board$update,
+						_JulianLeviston$snaker_elm$Data_Board$toSetupPlayersMsg(_p2._0._1),
+						newBoard1);
+					var newBoard2 = _p4._0;
+					var boardCmd2 = _p4._1;
+					var newCmd2 = A2(_elm_lang$core$Platform_Cmd$map, _JulianLeviston$snaker_elm$Main$BoardMsg, boardCmd2);
+					var newModel = _elm_lang$core$Native_Utils.update(
 						model,
-						{board: newBoard}),
-					_1: A2(_elm_lang$core$Platform_Cmd$map, _JulianLeviston$snaker_elm$Main$BoardMsg, boardCmd)
-				};
-			} else {
-				return {ctor: '_Tuple2', _0: model, _1: _elm_lang$core$Platform_Cmd$none};
-			}
+						{board: newBoard2});
+					return {
+						ctor: '_Tuple2',
+						_0: newModel,
+						_1: _elm_lang$core$Platform_Cmd$batch(
+							{
+								ctor: '::',
+								_0: newCmd1,
+								_1: {
+									ctor: '::',
+									_0: newCmd2,
+									_1: {ctor: '[]'}
+								}
+							})
+					};
+				} else {
+					return {ctor: '_Tuple2', _0: model, _1: _elm_lang$core$Platform_Cmd$none};
+				}
+			case 'NewPlayerJoined':
+				var _p5 = A2(_elm_lang$core$Json_Decode$decodeValue, _JulianLeviston$snaker_elm$Main$objectWithPlayerDecoder, raw);
+				if (_p5.ctor === 'Ok') {
+					var _p6 = A2(
+						_JulianLeviston$snaker_elm$Data_Board$update,
+						_JulianLeviston$snaker_elm$Data_Board$toSetupNewPlayerMsg(_p5._0),
+						model.board);
+					var newBoard = _p6._0;
+					var boardCmd = _p6._1;
+					return {
+						ctor: '_Tuple2',
+						_0: _elm_lang$core$Native_Utils.update(
+							model,
+							{board: newBoard}),
+						_1: A2(_elm_lang$core$Platform_Cmd$map, _JulianLeviston$snaker_elm$Main$BoardMsg, boardCmd)
+					};
+				} else {
+					return {ctor: '_Tuple2', _0: model, _1: _elm_lang$core$Platform_Cmd$none};
+				}
+			default:
+				var _p7 = A2(_elm_lang$core$Json_Decode$decodeValue, _JulianLeviston$snaker_elm$Main$objectWithPlayerDecoder, raw);
+				if (_p7.ctor === 'Ok') {
+					var _p8 = A2(
+						_JulianLeviston$snaker_elm$Data_Board$update,
+						_JulianLeviston$snaker_elm$Data_Board$toRemovePlayerMsg(_p7._0),
+						model.board);
+					var newBoard = _p8._0;
+					var boardCmd = _p8._1;
+					return {
+						ctor: '_Tuple2',
+						_0: _elm_lang$core$Native_Utils.update(
+							model,
+							{board: newBoard}),
+						_1: A2(_elm_lang$core$Platform_Cmd$map, _JulianLeviston$snaker_elm$Main$BoardMsg, boardCmd)
+					};
+				} else {
+					return {ctor: '_Tuple2', _0: model, _1: _elm_lang$core$Platform_Cmd$none};
+				}
 		}
 	});
 var _JulianLeviston$snaker_elm$Main$update = F2(
 	function (msg, model) {
-		var _p7 = msg;
-		switch (_p7.ctor) {
+		var _p9 = msg;
+		switch (_p9.ctor) {
 			case 'BoardMsg':
-				var _p8 = A2(_JulianLeviston$snaker_elm$Data_Board$update, _p7._0, model.board);
-				var newBoard = _p8._0;
-				var boardCmds = _p8._1;
+				var _p10 = A2(_JulianLeviston$snaker_elm$Data_Board$update, _p9._0, model.board);
+				var newBoard = _p10._0;
+				var boardCmds = _p10._1;
 				return {
 					ctor: '_Tuple2',
 					_0: _elm_lang$core$Native_Utils.update(
@@ -11348,9 +11387,9 @@ var _JulianLeviston$snaker_elm$Main$update = F2(
 					_1: A2(_elm_lang$core$Platform_Cmd$map, _JulianLeviston$snaker_elm$Main$BoardMsg, boardCmds)
 				};
 			case 'PhoenixMsg':
-				var _p9 = A2(_fbonetti$elm_phoenix_socket$Phoenix_Socket$update, _p7._0, model.phxSocket);
-				var phxSocket = _p9._0;
-				var phxCmd = _p9._1;
+				var _p11 = A2(_fbonetti$elm_phoenix_socket$Phoenix_Socket$update, _p9._0, model.phxSocket);
+				var phxSocket = _p11._0;
+				var phxCmd = _p11._1;
 				return {
 					ctor: '_Tuple2',
 					_0: _elm_lang$core$Native_Utils.update(
@@ -11359,7 +11398,7 @@ var _JulianLeviston$snaker_elm$Main$update = F2(
 					_1: A2(_elm_lang$core$Platform_Cmd$map, _JulianLeviston$snaker_elm$Main$PhoenixMsg, phxCmd)
 				};
 			case 'DispatchServerMsg':
-				return A3(_JulianLeviston$snaker_elm$Main$serverUpdate, _p7._0, _p7._1, model);
+				return A3(_JulianLeviston$snaker_elm$Main$serverUpdate, _p9._0, _p9._1, model);
 			default:
 				return {ctor: '_Tuple2', _0: model, _1: _elm_lang$core$Platform_Cmd$none};
 		}
@@ -11367,18 +11406,18 @@ var _JulianLeviston$snaker_elm$Main$update = F2(
 var _JulianLeviston$snaker_elm$Main$tickBoardSubscription = A2(
 	_elm_lang$core$Time$every,
 	_JulianLeviston$snaker_elm$Data_Board$tickDuration,
-	function (_p10) {
+	function (_p12) {
 		return _JulianLeviston$snaker_elm$Main$BoardMsg(
-			_JulianLeviston$snaker_elm$Data_Board$tickBoardMsg(_p10));
+			_JulianLeviston$snaker_elm$Data_Board$tickBoardMsg(_p12));
 	});
 var _JulianLeviston$snaker_elm$Main$keyCodeToChangeDirectionMsg = function (keyCode) {
 	var maybeDirection = _JulianLeviston$snaker_elm$Data_Direction$keyCodeToMaybeDirection(keyCode);
-	var _p11 = maybeDirection;
-	if (_p11.ctor === 'Nothing') {
+	var _p13 = maybeDirection;
+	if (_p13.ctor === 'Nothing') {
 		return _JulianLeviston$snaker_elm$Main$Noop;
 	} else {
 		return _JulianLeviston$snaker_elm$Main$BoardMsg(
-			_JulianLeviston$snaker_elm$Data_Board$toChangeDirectionMsg(_p11._0));
+			_JulianLeviston$snaker_elm$Data_Board$toChangeDirectionMsg(_p13._0));
 	}
 };
 var _JulianLeviston$snaker_elm$Main$keyboardBoardControlSubscription = _elm_lang$keyboard$Keyboard$ups(_JulianLeviston$snaker_elm$Main$keyCodeToChangeDirectionMsg);
@@ -11398,12 +11437,12 @@ var _JulianLeviston$snaker_elm$Main$subscriptions = function (model) {
 			}
 		});
 };
-var _JulianLeviston$snaker_elm$Main$view = function (_p12) {
-	var _p13 = _p12;
+var _JulianLeviston$snaker_elm$Main$view = function (_p14) {
+	var _p15 = _p14;
 	return A2(
 		_elm_lang$html$Html$map,
 		_JulianLeviston$snaker_elm$Main$BoardMsg,
-		_JulianLeviston$snaker_elm$Board_Html$view(_p13.board));
+		_JulianLeviston$snaker_elm$Board_Html$view(_p15.board));
 };
 var _JulianLeviston$snaker_elm$Main$main = _elm_lang$html$Html$program(
 	{init: _JulianLeviston$snaker_elm$Main$init, view: _JulianLeviston$snaker_elm$Main$view, update: _JulianLeviston$snaker_elm$Main$update, subscriptions: _JulianLeviston$snaker_elm$Main$subscriptions})();

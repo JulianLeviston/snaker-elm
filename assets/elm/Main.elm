@@ -29,6 +29,7 @@ type alias Model =
 type ServerMsg
     = JoinGame
     | NewPlayerJoined
+    | PlayerLeft
 
 
 init : ( Model, Cmd Msg )
@@ -39,13 +40,8 @@ init =
                 |> Socket.withDebug
                 |> Socket.on "join" "game:snake" (DispatchServerMsg JoinGame)
                 |> Socket.on "player:join" "game:snake" (DispatchServerMsg NewPlayerJoined)
+                |> Socket.on "player:leave" "game:snake" (DispatchServerMsg PlayerLeft)
 
-        -- when we get a "join" message, we set the player and currentPlayerId
-        -- when we get a "player:join", we update our players Dict with player infos
-        -- -- any new players, we give them init snakes
-        -- build a table of connected snakes on the screen
-        -- make removing work
-        --
         channel =
             Channel.init "game:snake"
 
@@ -126,11 +122,23 @@ serverUpdate msg raw model =
                     ( model, Cmd.none )
 
         NewPlayerJoined ->
-            case JD.decodeValue newPlayerJoinedDecoder raw of
+            case JD.decodeValue objectWithPlayerDecoder raw of
                 Ok player ->
                     let
                         ( newBoard, boardCmd ) =
                             Board.update (Board.toSetupNewPlayerMsg player) model.board
+                    in
+                        ( { model | board = newBoard }, Cmd.map BoardMsg boardCmd )
+
+                Err _ ->
+                    ( model, Cmd.none )
+
+        PlayerLeft ->
+            case JD.decodeValue objectWithPlayerDecoder raw of
+                Ok player ->
+                    let
+                        ( newBoard, boardCmd ) =
+                            Board.update (Board.toRemovePlayerMsg player) model.board
                     in
                         ( { model | board = newBoard }, Cmd.map BoardMsg boardCmd )
 
@@ -145,8 +153,8 @@ joinGameDecoder =
         (JD.field "players" Player.playerDictDecoder)
 
 
-newPlayerJoinedDecoder : JD.Decoder Player
-newPlayerJoinedDecoder =
+objectWithPlayerDecoder : JD.Decoder Player
+objectWithPlayerDecoder =
     JD.field "player" Player.playerDecoder
 
 

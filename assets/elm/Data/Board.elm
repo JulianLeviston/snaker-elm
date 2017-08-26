@@ -14,6 +14,7 @@ module Data.Board
         , toSetCurrentPlayerMsg
         , toSetupPlayersMsg
         , toSetupNewPlayerMsg
+        , toRemovePlayerMsg
         , tickBoardMsg
         )
 
@@ -83,6 +84,7 @@ type Msg
     | SetCurrentPlayer Player
     | SetupPlayers (Dict PlayerId Player)
     | SetupNewPlayer Player
+    | RemovePlayer Player
 
 
 currentPlayerId : Board -> PlayerId
@@ -103,6 +105,11 @@ toSetupPlayersMsg =
 toSetupNewPlayerMsg : Player -> Msg
 toSetupNewPlayerMsg =
     SetupNewPlayer
+
+
+toRemovePlayerMsg : Player -> Msg
+toRemovePlayerMsg =
+    RemovePlayer
 
 
 progressBoard : Time -> PlayerId -> Board -> Board
@@ -180,6 +187,13 @@ update msg ({ currentPlayerId, snakes, apples, time } as model) =
 
                 newSnakes =
                     Dict.insert (Snake.id newSnake) newSnake snakes
+            in
+                ( { model | snakes = newSnakes }, Cmd.none )
+
+        RemovePlayer { playerId } ->
+            let
+                newSnakes =
+                    Dict.remove playerId snakes
             in
                 ( { model | snakes = newSnakes }, Cmd.none )
 
