@@ -9299,9 +9299,40 @@ var _JulianLeviston$snaker_elm$Data_Direction$South = {ctor: 'South'};
 var _JulianLeviston$snaker_elm$Data_Direction$West = {ctor: 'West'};
 var _JulianLeviston$snaker_elm$Data_Direction$East = {ctor: 'East'};
 var _JulianLeviston$snaker_elm$Data_Direction$North = {ctor: 'North'};
-var _JulianLeviston$snaker_elm$Data_Direction$keyCodeToMaybeDirection = function (keyCode) {
-	var _p0 = keyCode;
+var _JulianLeviston$snaker_elm$Data_Direction$fromString = function (string) {
+	var _p0 = string;
 	switch (_p0) {
+		case 'north':
+			return _elm_lang$core$Maybe$Just(_JulianLeviston$snaker_elm$Data_Direction$North);
+		case 'North':
+			return _elm_lang$core$Maybe$Just(_JulianLeviston$snaker_elm$Data_Direction$North);
+		case 'NORTH':
+			return _elm_lang$core$Maybe$Just(_JulianLeviston$snaker_elm$Data_Direction$North);
+		case 'east':
+			return _elm_lang$core$Maybe$Just(_JulianLeviston$snaker_elm$Data_Direction$East);
+		case 'East':
+			return _elm_lang$core$Maybe$Just(_JulianLeviston$snaker_elm$Data_Direction$East);
+		case 'EAST':
+			return _elm_lang$core$Maybe$Just(_JulianLeviston$snaker_elm$Data_Direction$East);
+		case 'west':
+			return _elm_lang$core$Maybe$Just(_JulianLeviston$snaker_elm$Data_Direction$West);
+		case 'West':
+			return _elm_lang$core$Maybe$Just(_JulianLeviston$snaker_elm$Data_Direction$West);
+		case 'WEST':
+			return _elm_lang$core$Maybe$Just(_JulianLeviston$snaker_elm$Data_Direction$West);
+		case 'south':
+			return _elm_lang$core$Maybe$Just(_JulianLeviston$snaker_elm$Data_Direction$South);
+		case 'South':
+			return _elm_lang$core$Maybe$Just(_JulianLeviston$snaker_elm$Data_Direction$South);
+		case 'SOUTH':
+			return _elm_lang$core$Maybe$Just(_JulianLeviston$snaker_elm$Data_Direction$South);
+		default:
+			return _elm_lang$core$Maybe$Nothing;
+	}
+};
+var _JulianLeviston$snaker_elm$Data_Direction$keyCodeToMaybeDirection = function (keyCode) {
+	var _p1 = keyCode;
+	switch (_p1) {
 		case 38:
 			return _elm_lang$core$Maybe$Just(_JulianLeviston$snaker_elm$Data_Direction$North);
 		case 37:
@@ -9696,6 +9727,11 @@ var _JulianLeviston$snaker_elm$Data_Board$tileTypeFromPositionTileTypePairs = F2
 				{ctor: '_Tuple2', _0: tilePosition.x, _1: tilePosition.y},
 				renderables));
 	});
+var _JulianLeviston$snaker_elm$Data_Board$ChangeDirectionOfPlayer = F2(
+	function (a, b) {
+		return {ctor: 'ChangeDirectionOfPlayer', _0: a, _1: b};
+	});
+var _JulianLeviston$snaker_elm$Data_Board$toMovePlayerMsg = _JulianLeviston$snaker_elm$Data_Board$ChangeDirectionOfPlayer;
 var _JulianLeviston$snaker_elm$Data_Board$RemovePlayer = function (a) {
 	return {ctor: 'RemovePlayer', _0: a};
 };
@@ -9751,6 +9787,21 @@ var _JulianLeviston$snaker_elm$Data_Board$update = F2(
 								_p14.currentPlayerId,
 								_elm_lang$core$Maybe$map(
 									_JulianLeviston$snaker_elm$Data_Snake$changeSnakeDirection(_p15._0)),
+								_p20)
+						}),
+					_1: _elm_lang$core$Platform_Cmd$none
+				};
+			case 'ChangeDirectionOfPlayer':
+				return {
+					ctor: '_Tuple2',
+					_0: _elm_lang$core$Native_Utils.update(
+						_p19,
+						{
+							snakes: A3(
+								_elm_lang$core$Dict$update,
+								_p15._0,
+								_elm_lang$core$Maybe$map(
+									_JulianLeviston$snaker_elm$Data_Snake$changeSnakeDirection(_p15._1)),
 								_p20)
 						}),
 					_1: _elm_lang$core$Platform_Cmd$none
@@ -11235,6 +11286,27 @@ var _fbonetti$elm_phoenix_socket$Phoenix_Socket$listen = F2(
 			});
 	});
 
+var _JulianLeviston$snaker_elm$Main$playerMoveDecoder = A3(
+	_elm_lang$core$Json_Decode$map2,
+	F2(
+		function (v0, v1) {
+			return {ctor: '_Tuple2', _0: v0, _1: v1};
+		}),
+	A2(_elm_lang$core$Json_Decode$field, 'player_id', _elm_lang$core$Json_Decode$int),
+	A2(
+		_elm_lang$core$Json_Decode$field,
+		'direction',
+		A2(
+			_elm_lang$core$Json_Decode$andThen,
+			function (string) {
+				var _p0 = _JulianLeviston$snaker_elm$Data_Direction$fromString(string);
+				if (_p0.ctor === 'Just') {
+					return _elm_lang$core$Json_Decode$succeed(_p0._0);
+				} else {
+					return _elm_lang$core$Json_Decode$fail('Direction not supplied');
+				}
+			},
+			_elm_lang$core$Json_Decode$string)));
 var _JulianLeviston$snaker_elm$Main$objectWithPlayerDecoder = A2(_elm_lang$core$Json_Decode$field, 'player', _JulianLeviston$snaker_elm$Data_Player$playerDecoder);
 var _JulianLeviston$snaker_elm$Main$joinGameDecoder = A3(
 	_elm_lang$core$Json_Decode$map2,
@@ -11248,6 +11320,7 @@ var _JulianLeviston$snaker_elm$Main$Model = F2(
 	function (a, b) {
 		return {board: a, phxSocket: b};
 	});
+var _JulianLeviston$snaker_elm$Main$PlayerMoved = {ctor: 'PlayerMoved'};
 var _JulianLeviston$snaker_elm$Main$PlayerLeft = {ctor: 'PlayerLeft'};
 var _JulianLeviston$snaker_elm$Main$NewPlayerJoined = {ctor: 'NewPlayerJoined'};
 var _JulianLeviston$snaker_elm$Main$JoinGame = {ctor: 'JoinGame'};
@@ -11263,24 +11336,29 @@ var _JulianLeviston$snaker_elm$Main$init = function () {
 	var channel = _fbonetti$elm_phoenix_socket$Phoenix_Channel$init('game:snake');
 	var initialSocket = A4(
 		_fbonetti$elm_phoenix_socket$Phoenix_Socket$on,
-		'player:leave',
+		'player:move',
 		'game:snake',
-		_JulianLeviston$snaker_elm$Main$DispatchServerMsg(_JulianLeviston$snaker_elm$Main$PlayerLeft),
+		_JulianLeviston$snaker_elm$Main$DispatchServerMsg(_JulianLeviston$snaker_elm$Main$PlayerMoved),
 		A4(
 			_fbonetti$elm_phoenix_socket$Phoenix_Socket$on,
-			'player:join',
+			'player:leave',
 			'game:snake',
-			_JulianLeviston$snaker_elm$Main$DispatchServerMsg(_JulianLeviston$snaker_elm$Main$NewPlayerJoined),
+			_JulianLeviston$snaker_elm$Main$DispatchServerMsg(_JulianLeviston$snaker_elm$Main$PlayerLeft),
 			A4(
 				_fbonetti$elm_phoenix_socket$Phoenix_Socket$on,
-				'join',
+				'player:join',
 				'game:snake',
-				_JulianLeviston$snaker_elm$Main$DispatchServerMsg(_JulianLeviston$snaker_elm$Main$JoinGame),
-				_fbonetti$elm_phoenix_socket$Phoenix_Socket$withDebug(
-					_fbonetti$elm_phoenix_socket$Phoenix_Socket$init('ws://Stagger:4000/socket/websocket')))));
-	var _p0 = A2(_fbonetti$elm_phoenix_socket$Phoenix_Socket$join, channel, initialSocket);
-	var phxSocket = _p0._0;
-	var cmd = _p0._1;
+				_JulianLeviston$snaker_elm$Main$DispatchServerMsg(_JulianLeviston$snaker_elm$Main$NewPlayerJoined),
+				A4(
+					_fbonetti$elm_phoenix_socket$Phoenix_Socket$on,
+					'join',
+					'game:snake',
+					_JulianLeviston$snaker_elm$Main$DispatchServerMsg(_JulianLeviston$snaker_elm$Main$JoinGame),
+					_fbonetti$elm_phoenix_socket$Phoenix_Socket$withDebug(
+						_fbonetti$elm_phoenix_socket$Phoenix_Socket$init('ws://Stagger:4000/socket/websocket'))))));
+	var _p1 = A2(_fbonetti$elm_phoenix_socket$Phoenix_Socket$join, channel, initialSocket);
+	var phxSocket = _p1._0;
+	var cmd = _p1._1;
 	return {
 		ctor: '_Tuple2',
 		_0: {board: _JulianLeviston$snaker_elm$Data_Board$init, phxSocket: phxSocket},
@@ -11292,24 +11370,24 @@ var _JulianLeviston$snaker_elm$Main$BoardMsg = function (a) {
 };
 var _JulianLeviston$snaker_elm$Main$serverUpdate = F3(
 	function (msg, raw, model) {
-		var _p1 = msg;
-		switch (_p1.ctor) {
+		var _p2 = msg;
+		switch (_p2.ctor) {
 			case 'JoinGame':
-				var _p2 = A2(_elm_lang$core$Json_Decode$decodeValue, _JulianLeviston$snaker_elm$Main$joinGameDecoder, raw);
-				if (_p2.ctor === 'Ok') {
-					var _p3 = A2(
-						_JulianLeviston$snaker_elm$Data_Board$update,
-						_JulianLeviston$snaker_elm$Data_Board$toSetCurrentPlayerMsg(_p2._0._0),
-						model.board);
-					var newBoard1 = _p3._0;
-					var boardCmd1 = _p3._1;
-					var newCmd1 = A2(_elm_lang$core$Platform_Cmd$map, _JulianLeviston$snaker_elm$Main$BoardMsg, boardCmd1);
+				var _p3 = A2(_elm_lang$core$Json_Decode$decodeValue, _JulianLeviston$snaker_elm$Main$joinGameDecoder, raw);
+				if (_p3.ctor === 'Ok') {
 					var _p4 = A2(
 						_JulianLeviston$snaker_elm$Data_Board$update,
-						_JulianLeviston$snaker_elm$Data_Board$toSetupPlayersMsg(_p2._0._1),
+						_JulianLeviston$snaker_elm$Data_Board$toSetCurrentPlayerMsg(_p3._0._0),
+						model.board);
+					var newBoard1 = _p4._0;
+					var boardCmd1 = _p4._1;
+					var newCmd1 = A2(_elm_lang$core$Platform_Cmd$map, _JulianLeviston$snaker_elm$Main$BoardMsg, boardCmd1);
+					var _p5 = A2(
+						_JulianLeviston$snaker_elm$Data_Board$update,
+						_JulianLeviston$snaker_elm$Data_Board$toSetupPlayersMsg(_p3._0._1),
 						newBoard1);
-					var newBoard2 = _p4._0;
-					var boardCmd2 = _p4._1;
+					var newBoard2 = _p5._0;
+					var boardCmd2 = _p5._1;
 					var newCmd2 = A2(_elm_lang$core$Platform_Cmd$map, _JulianLeviston$snaker_elm$Main$BoardMsg, boardCmd2);
 					var newModel = _elm_lang$core$Native_Utils.update(
 						model,
@@ -11332,14 +11410,33 @@ var _JulianLeviston$snaker_elm$Main$serverUpdate = F3(
 					return {ctor: '_Tuple2', _0: model, _1: _elm_lang$core$Platform_Cmd$none};
 				}
 			case 'NewPlayerJoined':
-				var _p5 = A2(_elm_lang$core$Json_Decode$decodeValue, _JulianLeviston$snaker_elm$Main$objectWithPlayerDecoder, raw);
-				if (_p5.ctor === 'Ok') {
-					var _p6 = A2(
+				var _p6 = A2(_elm_lang$core$Json_Decode$decodeValue, _JulianLeviston$snaker_elm$Main$objectWithPlayerDecoder, raw);
+				if (_p6.ctor === 'Ok') {
+					var _p7 = A2(
 						_JulianLeviston$snaker_elm$Data_Board$update,
-						_JulianLeviston$snaker_elm$Data_Board$toSetupNewPlayerMsg(_p5._0),
+						_JulianLeviston$snaker_elm$Data_Board$toSetupNewPlayerMsg(_p6._0),
 						model.board);
-					var newBoard = _p6._0;
-					var boardCmd = _p6._1;
+					var newBoard = _p7._0;
+					var boardCmd = _p7._1;
+					return {
+						ctor: '_Tuple2',
+						_0: _elm_lang$core$Native_Utils.update(
+							model,
+							{board: newBoard}),
+						_1: A2(_elm_lang$core$Platform_Cmd$map, _JulianLeviston$snaker_elm$Main$BoardMsg, boardCmd)
+					};
+				} else {
+					return {ctor: '_Tuple2', _0: model, _1: _elm_lang$core$Platform_Cmd$none};
+				}
+			case 'PlayerLeft':
+				var _p8 = A2(_elm_lang$core$Json_Decode$decodeValue, _JulianLeviston$snaker_elm$Main$objectWithPlayerDecoder, raw);
+				if (_p8.ctor === 'Ok') {
+					var _p9 = A2(
+						_JulianLeviston$snaker_elm$Data_Board$update,
+						_JulianLeviston$snaker_elm$Data_Board$toRemovePlayerMsg(_p8._0),
+						model.board);
+					var newBoard = _p9._0;
+					var boardCmd = _p9._1;
 					return {
 						ctor: '_Tuple2',
 						_0: _elm_lang$core$Native_Utils.update(
@@ -11351,14 +11448,14 @@ var _JulianLeviston$snaker_elm$Main$serverUpdate = F3(
 					return {ctor: '_Tuple2', _0: model, _1: _elm_lang$core$Platform_Cmd$none};
 				}
 			default:
-				var _p7 = A2(_elm_lang$core$Json_Decode$decodeValue, _JulianLeviston$snaker_elm$Main$objectWithPlayerDecoder, raw);
-				if (_p7.ctor === 'Ok') {
-					var _p8 = A2(
+				var _p10 = A2(_elm_lang$core$Json_Decode$decodeValue, _JulianLeviston$snaker_elm$Main$playerMoveDecoder, raw);
+				if (_p10.ctor === 'Ok') {
+					var _p11 = A2(
 						_JulianLeviston$snaker_elm$Data_Board$update,
-						_JulianLeviston$snaker_elm$Data_Board$toRemovePlayerMsg(_p7._0),
+						A2(_JulianLeviston$snaker_elm$Data_Board$toMovePlayerMsg, _p10._0._0, _p10._0._1),
 						model.board);
-					var newBoard = _p8._0;
-					var boardCmd = _p8._1;
+					var newBoard = _p11._0;
+					var boardCmd = _p11._1;
 					return {
 						ctor: '_Tuple2',
 						_0: _elm_lang$core$Native_Utils.update(
@@ -11373,12 +11470,12 @@ var _JulianLeviston$snaker_elm$Main$serverUpdate = F3(
 	});
 var _JulianLeviston$snaker_elm$Main$update = F2(
 	function (msg, model) {
-		var _p9 = msg;
-		switch (_p9.ctor) {
+		var _p12 = msg;
+		switch (_p12.ctor) {
 			case 'BoardMsg':
-				var _p10 = A2(_JulianLeviston$snaker_elm$Data_Board$update, _p9._0, model.board);
-				var newBoard = _p10._0;
-				var boardCmds = _p10._1;
+				var _p13 = A2(_JulianLeviston$snaker_elm$Data_Board$update, _p12._0, model.board);
+				var newBoard = _p13._0;
+				var boardCmds = _p13._1;
 				return {
 					ctor: '_Tuple2',
 					_0: _elm_lang$core$Native_Utils.update(
@@ -11387,9 +11484,9 @@ var _JulianLeviston$snaker_elm$Main$update = F2(
 					_1: A2(_elm_lang$core$Platform_Cmd$map, _JulianLeviston$snaker_elm$Main$BoardMsg, boardCmds)
 				};
 			case 'PhoenixMsg':
-				var _p11 = A2(_fbonetti$elm_phoenix_socket$Phoenix_Socket$update, _p9._0, model.phxSocket);
-				var phxSocket = _p11._0;
-				var phxCmd = _p11._1;
+				var _p14 = A2(_fbonetti$elm_phoenix_socket$Phoenix_Socket$update, _p12._0, model.phxSocket);
+				var phxSocket = _p14._0;
+				var phxCmd = _p14._1;
 				return {
 					ctor: '_Tuple2',
 					_0: _elm_lang$core$Native_Utils.update(
@@ -11398,7 +11495,7 @@ var _JulianLeviston$snaker_elm$Main$update = F2(
 					_1: A2(_elm_lang$core$Platform_Cmd$map, _JulianLeviston$snaker_elm$Main$PhoenixMsg, phxCmd)
 				};
 			case 'DispatchServerMsg':
-				return A3(_JulianLeviston$snaker_elm$Main$serverUpdate, _p9._0, _p9._1, model);
+				return A3(_JulianLeviston$snaker_elm$Main$serverUpdate, _p12._0, _p12._1, model);
 			default:
 				return {ctor: '_Tuple2', _0: model, _1: _elm_lang$core$Platform_Cmd$none};
 		}
@@ -11406,18 +11503,18 @@ var _JulianLeviston$snaker_elm$Main$update = F2(
 var _JulianLeviston$snaker_elm$Main$tickBoardSubscription = A2(
 	_elm_lang$core$Time$every,
 	_JulianLeviston$snaker_elm$Data_Board$tickDuration,
-	function (_p12) {
+	function (_p15) {
 		return _JulianLeviston$snaker_elm$Main$BoardMsg(
-			_JulianLeviston$snaker_elm$Data_Board$tickBoardMsg(_p12));
+			_JulianLeviston$snaker_elm$Data_Board$tickBoardMsg(_p15));
 	});
 var _JulianLeviston$snaker_elm$Main$keyCodeToChangeDirectionMsg = function (keyCode) {
 	var maybeDirection = _JulianLeviston$snaker_elm$Data_Direction$keyCodeToMaybeDirection(keyCode);
-	var _p13 = maybeDirection;
-	if (_p13.ctor === 'Nothing') {
+	var _p16 = maybeDirection;
+	if (_p16.ctor === 'Nothing') {
 		return _JulianLeviston$snaker_elm$Main$Noop;
 	} else {
 		return _JulianLeviston$snaker_elm$Main$BoardMsg(
-			_JulianLeviston$snaker_elm$Data_Board$toChangeDirectionMsg(_p13._0));
+			_JulianLeviston$snaker_elm$Data_Board$toChangeDirectionMsg(_p16._0));
 	}
 };
 var _JulianLeviston$snaker_elm$Main$keyboardBoardControlSubscription = _elm_lang$keyboard$Keyboard$ups(_JulianLeviston$snaker_elm$Main$keyCodeToChangeDirectionMsg);
@@ -11437,12 +11534,12 @@ var _JulianLeviston$snaker_elm$Main$subscriptions = function (model) {
 			}
 		});
 };
-var _JulianLeviston$snaker_elm$Main$view = function (_p14) {
-	var _p15 = _p14;
+var _JulianLeviston$snaker_elm$Main$view = function (_p17) {
+	var _p18 = _p17;
 	return A2(
 		_elm_lang$html$Html$map,
 		_JulianLeviston$snaker_elm$Main$BoardMsg,
-		_JulianLeviston$snaker_elm$Board_Html$view(_p15.board));
+		_JulianLeviston$snaker_elm$Board_Html$view(_p18.board));
 };
 var _JulianLeviston$snaker_elm$Main$main = _elm_lang$html$Html$program(
 	{init: _JulianLeviston$snaker_elm$Main$init, view: _JulianLeviston$snaker_elm$Main$view, update: _JulianLeviston$snaker_elm$Main$update, subscriptions: _JulianLeviston$snaker_elm$Main$subscriptions})();

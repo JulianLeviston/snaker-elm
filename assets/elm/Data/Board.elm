@@ -16,6 +16,7 @@ module Data.Board
         , toSetupNewPlayerMsg
         , toRemovePlayerMsg
         , tickBoardMsg
+        , toMovePlayerMsg
         )
 
 import Html
@@ -85,6 +86,12 @@ type Msg
     | SetupPlayers (Dict PlayerId Player)
     | SetupNewPlayer Player
     | RemovePlayer Player
+    | ChangeDirectionOfPlayer PlayerId Direction
+
+
+toMovePlayerMsg : PlayerId -> Direction -> Msg
+toMovePlayerMsg =
+    ChangeDirectionOfPlayer
 
 
 currentPlayerId : Board -> PlayerId
@@ -154,6 +161,9 @@ update msg ({ currentPlayerId, snakes, apples, time } as model) =
 
         ChangeDirection direction ->
             ( { model | snakes = Dict.update currentPlayerId (Maybe.map (changeSnakeDirection direction)) snakes }, Cmd.none )
+
+        ChangeDirectionOfPlayer playerId direction ->
+            ( { model | snakes = Dict.update playerId (Maybe.map (changeSnakeDirection direction)) snakes }, Cmd.none )
 
         AddApple apple ->
             ( { model | apples = apple :: model.apples }, Cmd.none )

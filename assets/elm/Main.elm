@@ -6,7 +6,7 @@ import Time
 import Keyboard
 import Random
 import Dict exposing (Dict)
-import Data.Direction as Direction
+import Data.Direction as Direction exposing (Direction(..))
 import Data.Board as Board exposing (Board)
 import Data.Player as Player exposing (Player, PlayerId)
 import Board.Html
@@ -30,6 +30,7 @@ type ServerMsg
     = JoinGame
     | NewPlayerJoined
     | PlayerLeft
+    | PlayerMoved
 
 
 init : ( Model, Cmd Msg )
@@ -41,6 +42,7 @@ init =
                 |> Socket.on "join" "game:snake" (DispatchServerMsg JoinGame)
                 |> Socket.on "player:join" "game:snake" (DispatchServerMsg NewPlayerJoined)
                 |> Socket.on "player:leave" "game:snake" (DispatchServerMsg PlayerLeft)
+                |> Socket.on "player:move" "game:snake" (DispatchServerMsg PlayerMoved)
 
         channel =
             Channel.init "game:snake"
@@ -145,6 +147,18 @@ serverUpdate msg raw model =
                 Err _ ->
                     ( model, Cmd.none )
 
+        PlayerMoved ->
+            case JD.decodeValue playerMoveDecoder raw of
+                Ok ( playerId, direction ) ->
+                    let
+                        ( newBoard, boardCmd ) =
+                            Board.update (Board.toMovePlayerMsg playerId direction) model.board
+                    in
+                        ( { model | board = newBoard }, Cmd.map BoardMsg boardCmd )
+
+                Err _ ->
+                    ( model, Cmd.none )
+
 
 joinGameDecoder : JD.Decoder ( Player, Dict PlayerId Player )
 joinGameDecoder =
@@ -156,6 +170,25 @@ joinGameDecoder =
 objectWithPlayerDecoder : JD.Decoder Player
 objectWithPlayerDecoder =
     JD.field "player" Player.playerDecoder
+
+
+playerMoveDecoder : JD.Decoder ( PlayerId, Direction )
+playerMoveDecoder =
+    JD.map2 (,)
+        (JD.field "player_id" JD.int)
+        (JD.field "direction"
+            (JD.string
+                |> JD.andThen
+                    (\string ->
+                        case Direction.fromString string of
+                            Just direction ->
+                                JD.succeed direction
+
+                            Nothing ->
+                                JD.fail "Direction not supplied"
+                    )
+            )
+        )
 
 
 
