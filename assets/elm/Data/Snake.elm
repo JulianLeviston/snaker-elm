@@ -2,6 +2,8 @@ module Data.Snake
     exposing
         ( Snake
         , id
+        , setId
+        , setPlayer
         , colour
         , initialSnake
         , moveSnake
@@ -65,6 +67,22 @@ initialSnake =
             ]
         , direction = initialDirection
         }
+
+
+setPlayer : Player -> Snake -> Snake
+setPlayer player snake =
+    { snake | player = player }
+
+
+setId : PlayerId -> Snake -> Snake
+setId id snake =
+    let
+        player =
+            Player.init
+                |> Player.setId id
+    in
+        snake
+            |> setPlayer player
 
 
 moveSnake : Snake -> Snake

@@ -8,7 +8,13 @@ import Random
 import Dict exposing (Dict)
 import Data.Direction as Direction
 import Data.Board as Board exposing (Board)
+import Data.Player as Player exposing (Player, PlayerId)
 import Board.Html
+import Phoenix.Socket as Socket exposing (Socket)
+import Phoenix.Channel as Channel
+import Phoenix.Push as Push
+import Json.Encode as JE
+import Json.Decode as JD
 
 
 -- model
@@ -16,15 +22,41 @@ import Board.Html
 
 type alias Model =
     { board : Board
+    , phxSocket : Socket Msg
     }
+
+
+type ServerMsg
+    = JoinGame
+    | NewPlayerJoined
 
 
 init : ( Model, Cmd Msg )
 init =
-    ( { board = Board.init
-      }
-    , Cmd.none
-    )
+    let
+        initialSocket =
+            Socket.init "ws://Stagger:4000/socket/websocket"
+                |> Socket.withDebug
+                |> Socket.on "join" "game:snake" (DispatchServerMsg JoinGame)
+                |> Socket.on "player:join" "game:snake" (DispatchServerMsg NewPlayerJoined)
+
+        -- when we get a "join" message, we set the player and currentPlayerId
+        -- when we get a "player:join", we update our players Dict with player infos
+        -- -- any new players, we give them init snakes
+        -- build a table of connected snakes on the screen
+        -- make removing work
+        --
+        channel =
+            Channel.init "game:snake"
+
+        ( phxSocket, cmd ) =
+            Socket.join channel initialSocket
+    in
+        ( { board = Board.init
+          , phxSocket = phxSocket
+          }
+        , Cmd.map PhoenixMsg cmd
+        )
 
 
 
@@ -33,6 +65,8 @@ init =
 
 type Msg
     = BoardMsg Board.Msg
+    | PhoenixMsg (Socket.Msg Msg)
+    | DispatchServerMsg ServerMsg JE.Value
     | Noop
 
 
@@ -48,8 +82,72 @@ update msg model =
                 , Cmd.map BoardMsg boardCmds
                 )
 
+        PhoenixMsg msg ->
+            let
+                ( phxSocket, phxCmd ) =
+                    Socket.update msg model.phxSocket
+            in
+                ( { model | phxSocket = phxSocket }
+                , Cmd.map PhoenixMsg phxCmd
+                )
+
+        DispatchServerMsg msg jsonEncodeValue ->
+            serverUpdate msg jsonEncodeValue model
+
         Noop ->
             ( model, Cmd.none )
+
+
+serverUpdate : ServerMsg -> JE.Value -> Model -> ( Model, Cmd Msg )
+serverUpdate msg raw model =
+    case msg of
+        JoinGame ->
+            case JD.decodeValue joinGameDecoder raw of
+                Ok ( player, playersDict ) ->
+                    let
+                        ( newBoard1, boardCmd1 ) =
+                            Board.update (Board.toSetCurrentPlayerMsg player) model.board
+
+                        newCmd1 =
+                            Cmd.map BoardMsg boardCmd1
+
+                        ( newBoard2, boardCmd2 ) =
+                            Board.update (Board.toSetupPlayersMsg playersDict) newBoard1
+
+                        newCmd2 =
+                            Cmd.map BoardMsg boardCmd2
+
+                        newModel =
+                            { model | board = newBoard2 }
+                    in
+                        ( newModel, Cmd.batch [ newCmd1, newCmd2 ] )
+
+                Err _ ->
+                    ( model, Cmd.none )
+
+        NewPlayerJoined ->
+            case JD.decodeValue newPlayerJoinedDecoder raw of
+                Ok player ->
+                    let
+                        ( newBoard, boardCmd ) =
+                            Board.update (Board.toSetupNewPlayerMsg player) model.board
+                    in
+                        ( { model | board = newBoard }, Cmd.map BoardMsg boardCmd )
+
+                Err _ ->
+                    ( model, Cmd.none )
+
+
+joinGameDecoder : JD.Decoder ( Player, Dict PlayerId Player )
+joinGameDecoder =
+    JD.map2 (,)
+        (JD.field "player" Player.playerDecoder)
+        (JD.field "players" Player.playerDictDecoder)
+
+
+newPlayerJoinedDecoder : JD.Decoder Player
+newPlayerJoinedDecoder =
+    JD.field "player" Player.playerDecoder
 
 
 
@@ -61,6 +159,7 @@ subscriptions model =
     Sub.batch
         [ tickBoardSubscription
         , keyboardBoardControlSubscription
+        , Socket.listen model.phxSocket PhoenixMsg
         ]
 
 

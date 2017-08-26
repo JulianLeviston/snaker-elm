@@ -9,14 +9,20 @@ module Data.Board
         , tickDuration
         , tileTypeFromPositionTileTypePairs
         , convertToKVPair
+        , currentPlayerId
         , toChangeDirectionMsg
+        , toSetCurrentPlayerMsg
+        , toSetupPlayersMsg
+        , toSetupNewPlayerMsg
         , tickBoardMsg
         )
 
+import Html
 import Time exposing (Time, second)
 import Dict exposing (Dict)
 import Random
 import Data.Direction exposing (Direction(..))
+import Data.Player as Player exposing (Player, PlayerId)
 import Data.Position
     exposing
         ( Position
@@ -53,15 +59,11 @@ type TileType
 
 init : Board
 init =
-    let
-        playerId =
-            Snake.id initialSnake
-    in
-        { currentPlayerId = 1
-        , time = 0
-        , snakes = Dict.fromList [ ( playerId, initialSnake ) ]
-        , apples = []
-        }
+    { currentPlayerId = 0
+    , time = 0
+    , snakes = Dict.fromList []
+    , apples = []
+    }
 
 
 oneHundredMillis : Time
@@ -78,26 +80,50 @@ type Msg
     = Tick Time
     | ChangeDirection Direction
     | AddApple Apple
+    | SetCurrentPlayer Player
+    | SetupPlayers (Dict PlayerId Player)
+    | SetupNewPlayer Player
 
 
-updateSnakeAndApples : PlayerId -> Board -> Board
-updateSnakeAndApples playerId ({ snakes, apples, time } as board) =
+currentPlayerId : Board -> PlayerId
+currentPlayerId =
+    .currentPlayerId
+
+
+toSetCurrentPlayerMsg : Player -> Msg
+toSetCurrentPlayerMsg =
+    SetCurrentPlayer
+
+
+toSetupPlayersMsg : Dict PlayerId Player -> Msg
+toSetupPlayersMsg =
+    SetupPlayers
+
+
+toSetupNewPlayerMsg : Player -> Msg
+toSetupNewPlayerMsg =
+    SetupNewPlayer
+
+
+progressBoard : Time -> PlayerId -> Board -> Board
+progressBoard nextTime playerId ({ snakes, apples } as board) =
     let
-        ( newSnakes, newApples ) =
+        ( nextSnakes, nextApples ) =
             case Dict.get playerId snakes of
                 Nothing ->
                     ( snakes, apples )
 
                 Just snake ->
                     let
-                        ( newSnake, newApples_ ) =
-                            nextSnakeAndApples time snake apples
+                        ( newSnake, newApples ) =
+                            nextSnakeAndApples nextTime snake apples
                     in
-                        ( Dict.insert playerId newSnake snakes, newApples_ )
+                        ( Dict.insert playerId newSnake snakes, newApples )
     in
         { board
-            | snakes = newSnakes
-            , apples = newApples
+            | time = nextTime
+            , snakes = nextSnakes
+            , apples = nextApples
         }
 
 
@@ -110,7 +136,7 @@ update msg ({ currentPlayerId, snakes, apples, time } as model) =
                     Dict.keys snakes
 
                 newBoard =
-                    List.foldl updateSnakeAndApples { model | time = newTime } playerIds
+                    List.foldl (progressBoard newTime) model playerIds
             in
                 ( newBoard
                 , if newBoard.apples == [] then
@@ -123,9 +149,39 @@ update msg ({ currentPlayerId, snakes, apples, time } as model) =
             ( { model | snakes = Dict.update currentPlayerId (Maybe.map (changeSnakeDirection direction)) snakes }, Cmd.none )
 
         AddApple apple ->
-            ( { model | apples = apple :: model.apples }
-            , Cmd.none
-            )
+            ( { model | apples = apple :: model.apples }, Cmd.none )
+
+        SetCurrentPlayer player ->
+            let
+                playerId =
+                    Player.id player
+
+                playerSnake =
+                    Snake.initialSnake
+                        |> Snake.setPlayer player
+
+                newSnakes =
+                    model.snakes
+                        |> Dict.insert playerId playerSnake
+            in
+                ( { model | currentPlayerId = playerId, snakes = newSnakes }, Cmd.none )
+
+        SetupPlayers playersDict ->
+            let
+                newSnakes =
+                    Dict.map (\_ player -> Snake.setPlayer player (Snake.initialSnake)) playersDict
+            in
+                ( { model | snakes = newSnakes }, Cmd.none )
+
+        SetupNewPlayer player ->
+            let
+                newSnake =
+                    Snake.setPlayer player (Snake.initialSnake)
+
+                newSnakes =
+                    Dict.insert (Snake.id newSnake) newSnake snakes
+            in
+                ( { model | snakes = newSnakes }, Cmd.none )
 
 
 toChangeDirectionMsg : Direction -> Msg

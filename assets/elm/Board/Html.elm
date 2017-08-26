@@ -21,6 +21,8 @@ view board =
     Html.div []
         [ mkGrid board
         , text <| "Score: " ++ toString (Board.score board)
+        , text " "
+        , text (toString <| Board.currentPlayerId board)
         ]
 
 

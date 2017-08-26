@@ -10,7 +10,7 @@ defmodule SnakerWeb.GameChannel do
 
   def handle_info({:after_join, message}, socket) do
     broadcast!(socket, "player:join", %{player: socket.assigns.player})
-    push(socket, "join", %{status: "connected", players: Worker.players()})
+    push(socket, "join", %{status: "connected", player: socket.assigns.player, players: Worker.players()})
     # TODO: push the entire board to the new client, along with a period, and a list of apples
     # and players. Whenever a new apple is added, we must send a broadcast message
     # to the client, and whenever a movement happens from the client, likewise.
@@ -27,7 +27,7 @@ defmodule SnakerWeb.GameChannel do
 
   def handle_in("player:move", %{direction: direction, player_id: player_id} = msg, socket) do
     broadcast!(socket, "player:move", %{player_id: player_id, direction: direction})
-    {:reply, {:ok, %{player_id: msg["player_id"]}}, socket}
+    {:reply, {:ok, %{player_id: player_id}}, socket}
   end
 
   def handle_out("player:join", %{player: %{id: id}} = msg, socket) do

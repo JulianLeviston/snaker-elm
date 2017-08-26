@@ -33,8 +33,9 @@ defmodule Snaker.Worker do
   end
 
   def handle_call({:new_player}, _from, %{players: players} = state) do
+    player_id = next_player_id(players)
     player_data = %{
-      id: next_player_id(players),
+      id: player_id,
       colour: random_colour(),
       name: random_name()
     }
