@@ -77,9 +77,6 @@ update msg model =
                 ( newBoard, boardCmds ) =
                     Board.update boardMsg model.board
 
-                blah =
-                    Debug.log (toString boardMsg)
-
                 updatedModel =
                     { model | board = newBoard }
 
@@ -181,9 +178,6 @@ serverUpdate msg raw model =
 
                 maybeCurrentDirection =
                     Board.directionOfPlayer currentPlayerId model.board
-
-                blah =
-                    Debug.log (toString maybeCurrentDirection)
             in
                 case maybeCurrentDirection of
                     Nothing ->
