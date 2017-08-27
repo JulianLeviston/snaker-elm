@@ -10,13 +10,14 @@ module Data.Board
         , tileTypeFromPositionTileTypePairs
         , convertToKVPair
         , currentPlayerId
+        , directionOfPlayer
         , toChangeDirectionMsg
         , toSetCurrentPlayerMsg
         , toSetupPlayersMsg
         , toSetupNewPlayerMsg
         , toRemovePlayerMsg
         , tickBoardMsg
-        , toMovePlayerMsg
+        , toChangePlayerDirectionMsg
         )
 
 import Html
@@ -89,14 +90,20 @@ type Msg
     | ChangeDirectionOfPlayer PlayerId Direction
 
 
-toMovePlayerMsg : PlayerId -> Direction -> Msg
-toMovePlayerMsg =
+toChangePlayerDirectionMsg : PlayerId -> Direction -> Msg
+toChangePlayerDirectionMsg =
     ChangeDirectionOfPlayer
 
 
 currentPlayerId : Board -> PlayerId
 currentPlayerId =
     .currentPlayerId
+
+
+directionOfPlayer : PlayerId -> Board -> Maybe Direction
+directionOfPlayer playerId { snakes } =
+    Dict.get playerId snakes
+        |> Maybe.map Snake.direction
 
 
 toSetCurrentPlayerMsg : Player -> Msg

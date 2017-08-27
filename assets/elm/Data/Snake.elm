@@ -5,6 +5,8 @@ module Data.Snake
         , setId
         , setPlayer
         , colour
+        , player
+        , direction
         , initialSnake
         , moveSnake
         , growSnake
@@ -28,6 +30,16 @@ type alias Snake =
 colour : Snake -> PlayerColour
 colour { player } =
     Player.colour player
+
+
+player : Snake -> Player
+player =
+    .player
+
+
+direction : Snake -> Direction
+direction =
+    .direction
 
 
 id : Snake -> PlayerId

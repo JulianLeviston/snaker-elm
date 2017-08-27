@@ -25,8 +25,8 @@ defmodule SnakerWeb.GameChannel do
     Logger.debug("> #{inspect(socket.assigns.player)} leaving because of #{inspect(reason)}")
   end
 
-  def handle_in("player:move", %{direction: direction, player_id: player_id} = msg, socket) do
-    broadcast!(socket, "player:move", %{player_id: player_id, direction: direction})
+  def handle_in("player:change_direction", %{direction: direction, player_id: player_id} = msg, socket) do
+    broadcast!(socket, "player:change_direction", %{player_id: player_id, direction: direction})
     {:reply, {:ok, %{player_id: player_id}}, socket}
   end
 
@@ -37,9 +37,9 @@ defmodule SnakerWeb.GameChannel do
     {:noreply, socket}
   end
 
-  def handle_out("player:move", %{direction: _, player_id: player_id} = msg, socket) do
+  def handle_out("player:change_direction", %{direction: _, player_id: player_id} = msg, socket) do
     if socket.assigns.player.id != player_id do
-      push(socket, "player:move", Map.take(msg, [:direction, :player_id]))
+      push(socket, "player:change_direction", Map.take(msg, [:direction, :player_id]))
     end
     {:noreply, socket}
   end

@@ -31,6 +31,7 @@ type ServerMsg
     | NewPlayerJoined
     | PlayerLeft
     | PlayerMoved
+    | SendChangeDirection
 
 
 init : ( Model, Cmd Msg )
@@ -152,12 +153,44 @@ serverUpdate msg raw model =
                 Ok ( playerId, direction ) ->
                     let
                         ( newBoard, boardCmd ) =
-                            Board.update (Board.toMovePlayerMsg playerId direction) model.board
+                            Board.update (Board.toChangePlayerDirectionMsg playerId direction) model.board
                     in
                         ( { model | board = newBoard }, Cmd.map BoardMsg boardCmd )
 
                 Err _ ->
                     ( model, Cmd.none )
+
+        SendChangeDirection ->
+            let
+                currentPlayerId =
+                    Board.currentPlayerId model.board
+
+                maybeCurrentDirection =
+                    Board.directionOfPlayer currentPlayerId model.board
+            in
+                case maybeCurrentDirection of
+                    Nothing ->
+                        ( model, Cmd.none )
+
+                    Just direction ->
+                        let
+                            stringDirection =
+                                toString direction
+
+                            payload =
+                                JE.object
+                                    [ ( "player_id", JE.int currentPlayerId )
+                                    , ( "direction", JE.string stringDirection )
+                                    ]
+
+                            push_ =
+                                Phoenix.Push.init "player:change_directin" "game:snake"
+                                    |> Phoenix.Push.withPayload payload
+
+                            ( phxSocket, phxCmd ) =
+                                Phoenix.Socket.push push_ model.phxSocket
+                        in
+                            ( { model | phxSocket = phxSocket }, Cmd.map PhoenixMsg phxCmd )
 
 
 joinGameDecoder : JD.Decoder ( Player, Dict PlayerId Player )
