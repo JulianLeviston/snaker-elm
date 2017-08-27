@@ -27,14 +27,14 @@ type alias Snake =
     }
 
 
-colour : Snake -> PlayerColour
-colour { player } =
-    Player.colour player
-
-
 player : Snake -> Player
 player =
     .player
+
+
+colour : Snake -> PlayerColour
+colour =
+    Player.colour << player
 
 
 direction : Snake -> Direction
@@ -43,8 +43,8 @@ direction =
 
 
 id : Snake -> PlayerId
-id { player } =
-    Player.id player
+id =
+    Player.id << player
 
 
 initialSnake : Snake

@@ -9629,19 +9629,19 @@ var _JulianLeviston$snaker_elm$Data_Snake$initialSnake = function () {
 		direction: initialDirection
 	};
 }();
-var _JulianLeviston$snaker_elm$Data_Snake$id = function (_p15) {
-	var _p16 = _p15;
-	return _JulianLeviston$snaker_elm$Data_Player$id(_p16.player);
-};
 var _JulianLeviston$snaker_elm$Data_Snake$direction = function (_) {
 	return _.direction;
 };
 var _JulianLeviston$snaker_elm$Data_Snake$player = function (_) {
 	return _.player;
 };
-var _JulianLeviston$snaker_elm$Data_Snake$colour = function (_p17) {
-	var _p18 = _p17;
-	return _JulianLeviston$snaker_elm$Data_Player$colour(_p18.player);
+var _JulianLeviston$snaker_elm$Data_Snake$colour = function (_p15) {
+	return _JulianLeviston$snaker_elm$Data_Player$colour(
+		_JulianLeviston$snaker_elm$Data_Snake$player(_p15));
+};
+var _JulianLeviston$snaker_elm$Data_Snake$id = function (_p16) {
+	return _JulianLeviston$snaker_elm$Data_Player$id(
+		_JulianLeviston$snaker_elm$Data_Snake$player(_p16));
 };
 var _JulianLeviston$snaker_elm$Data_Snake$Snake = F3(
 	function (a, b, c) {
@@ -11484,8 +11484,6 @@ var _JulianLeviston$snaker_elm$Main$serverUpdate = F3(
 			default:
 				var currentPlayerId = _JulianLeviston$snaker_elm$Data_Board$currentPlayerId(model.board);
 				var maybeCurrentDirection = A2(_JulianLeviston$snaker_elm$Data_Board$directionOfPlayer, currentPlayerId, model.board);
-				var blah = _elm_lang$core$Debug$log(
-					_elm_lang$core$Basics$toString(maybeCurrentDirection));
 				var _p12 = maybeCurrentDirection;
 				if (_p12.ctor === 'Nothing') {
 					return {ctor: '_Tuple2', _0: model, _1: _elm_lang$core$Platform_Cmd$none};
@@ -11532,8 +11530,6 @@ var _JulianLeviston$snaker_elm$Main$update = F2(
 		switch (_p14.ctor) {
 			case 'BoardMsg':
 				var _p18 = _p14._0;
-				var blah = _elm_lang$core$Debug$log(
-					_elm_lang$core$Basics$toString(_p18));
 				var _p15 = A2(_JulianLeviston$snaker_elm$Data_Board$update, _p18, model.board);
 				var newBoard = _p15._0;
 				var boardCmds = _p15._1;

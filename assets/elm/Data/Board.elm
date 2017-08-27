@@ -25,7 +25,7 @@ import Time exposing (Time, second)
 import Dict exposing (Dict)
 import Random
 import Data.Direction exposing (Direction(..))
-import Data.Player as Player exposing (Player, PlayerId)
+import Data.Player as Player exposing (Player, PlayerId, PlayerColour)
 import Data.Position
     exposing
         ( Position
@@ -34,7 +34,6 @@ import Data.Position
         , nextPositionInDirection
         )
 import Data.Apple exposing (Apple, randomApple, expireApples)
-import Data.Player exposing (PlayerColour, PlayerId)
 import Data.Snake as Snake
     exposing
         ( Snake
