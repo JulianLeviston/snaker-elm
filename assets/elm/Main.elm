@@ -30,7 +30,7 @@ type ServerMsg
     = JoinGame
     | NewPlayerJoined
     | PlayerLeft
-    | PlayerMoved
+    | PlayerChangedDirection
     | SendChangeDirection
 
 
@@ -43,7 +43,7 @@ init =
                 |> Socket.on "join" "game:snake" (DispatchServerMsg JoinGame)
                 |> Socket.on "player:join" "game:snake" (DispatchServerMsg NewPlayerJoined)
                 |> Socket.on "player:leave" "game:snake" (DispatchServerMsg PlayerLeft)
-                |> Socket.on "player:move" "game:snake" (DispatchServerMsg PlayerMoved)
+                |> Socket.on "player:change_direction" "game:snake" (DispatchServerMsg PlayerChangedDirection)
 
         channel =
             Channel.init "game:snake"
@@ -148,8 +148,8 @@ serverUpdate msg raw model =
                 Err _ ->
                     ( model, Cmd.none )
 
-        PlayerMoved ->
-            case JD.decodeValue playerMoveDecoder raw of
+        PlayerChangedDirection ->
+            case JD.decodeValue playerChangedDirectionDecoder raw of
                 Ok ( playerId, direction ) ->
                     let
                         ( newBoard, boardCmd ) =
@@ -184,11 +184,11 @@ serverUpdate msg raw model =
                                     ]
 
                             push_ =
-                                Phoenix.Push.init "player:change_directin" "game:snake"
-                                    |> Phoenix.Push.withPayload payload
+                                Push.init "player:change_direction" "game:snake"
+                                    |> Push.withPayload payload
 
                             ( phxSocket, phxCmd ) =
-                                Phoenix.Socket.push push_ model.phxSocket
+                                Socket.push push_ model.phxSocket
                         in
                             ( { model | phxSocket = phxSocket }, Cmd.map PhoenixMsg phxCmd )
 
@@ -205,8 +205,8 @@ objectWithPlayerDecoder =
     JD.field "player" Player.playerDecoder
 
 
-playerMoveDecoder : JD.Decoder ( PlayerId, Direction )
-playerMoveDecoder =
+playerChangedDirectionDecoder : JD.Decoder ( PlayerId, Direction )
+playerChangedDirectionDecoder =
     JD.map2 (,)
         (JD.field "player_id" JD.int)
         (JD.field "direction"
