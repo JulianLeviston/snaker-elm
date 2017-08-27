@@ -59,7 +59,6 @@ init =
 
 
 
--- need a function that creates a command at the top level
 -- update
 
 
