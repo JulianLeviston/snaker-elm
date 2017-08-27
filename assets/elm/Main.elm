@@ -83,7 +83,7 @@ update msg model =
                 ( newModel, newCmd ) =
                     case boardMsg of
                         Board.ChangeDirection direction ->
-                            serverUpdate SendChangeDirection (JE.string (toString direction)) updatedModel
+                            updateToServer SendChangeDirection updatedModel
 
                         _ ->
                             ( updatedModel, Cmd.none )
@@ -102,14 +102,14 @@ update msg model =
                 )
 
         DispatchServerMsg msg jsonEncodeValue ->
-            serverUpdate msg jsonEncodeValue model
+            updateFromServer msg jsonEncodeValue model
 
         Noop ->
             ( model, Cmd.none )
 
 
-serverUpdate : ServerMsg -> JE.Value -> Model -> ( Model, Cmd Msg )
-serverUpdate msg raw model =
+updateFromServer : ServerMsg -> JE.Value -> Model -> ( Model, Cmd Msg )
+updateFromServer msg raw model =
     case msg of
         JoinGame ->
             case JD.decodeValue joinGameDecoder raw of
@@ -171,6 +171,13 @@ serverUpdate msg raw model =
                 Err _ ->
                     ( model, Cmd.none )
 
+        _ ->
+            ( model, Cmd.none )
+
+
+updateToServer : ServerMsg -> Model -> ( Model, Cmd Msg )
+updateToServer msg model =
+    case msg of
         SendChangeDirection ->
             let
                 currentPlayerId =
@@ -202,6 +209,9 @@ serverUpdate msg raw model =
                                 Socket.push push_ model.phxSocket
                         in
                             ( { model | phxSocket = phxSocket }, Cmd.map PhoenixMsg phxCmd )
+
+        _ ->
+            ( model, Cmd.none )
 
 
 joinGameDecoder : JD.Decoder ( Player, Dict PlayerId Player )
