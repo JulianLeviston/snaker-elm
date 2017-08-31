@@ -1,5 +1,6 @@
 # Snaker
-A new and adjusted version of the classic Snake game, written in Elm and Phoenix
+A new and adjusted version of the classic Snake game, written in Elm and Phoenix.
+Currently WIP because while multiplayer is working, it does't sync state properly.
 
 ![](https://raw.githubusercontent.com/JulianLeviston/snaker-elm/master/images/snaker-elm.png)
 
@@ -31,11 +32,9 @@ So far, using the `Html` library, but will probably change soon for performance 
 
 Things I'd like to change:
 
-* WebSockets with Phoenix.
-* Using something that uses `requestAnimationFrame` instead of `setTimeout`.
+* Possibly using something that uses `requestAnimationFrame` instead of `setTimeout`.
 * Possibly try re-building pieces in WebGL.
 * Experiment with SVG instead of the `Html` library.
-* Network Multiplayer (To test out writing some Elixir).
-* "Levels" (more to come): implement new ideas for features to make it really fun.
+* "Levels" and other intresting features (more to come): implement new ideas for features to make it really fun.
 * Remove the grid and make the styling nicer.
 * A more interesting scoring system.
