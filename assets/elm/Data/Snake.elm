@@ -1,14 +1,50 @@
-module Data.Snake exposing (Snake, initialSnake, moveSnake, growSnake, eatApples, changeSnakeDirection)
+module Data.Snake
+    exposing
+        ( Snake
+        , id
+        , setId
+        , setPlayer
+        , colour
+        , player
+        , direction
+        , initialSnake
+        , moveSnake
+        , growSnake
+        , eatApples
+        , changeSnakeDirection
+        )
 
 import Data.Direction exposing (Direction(..))
 import Data.Position exposing (Position, gridDimensions, nextPositionInDirection)
 import Data.Apple exposing (Apple, eatApplesAt)
+import Data.Player as Player exposing (Player, PlayerId, PlayerColour)
 
 
 type alias Snake =
-    { direction : Direction
+    { player : Player
+    , direction : Direction
     , body : List Position
     }
+
+
+player : Snake -> Player
+player =
+    .player
+
+
+colour : Snake -> PlayerColour
+colour =
+    Player.colour << player
+
+
+direction : Snake -> Direction
+direction =
+    .direction
+
+
+id : Snake -> PlayerId
+id =
+    Player.id << player
 
 
 initialSnake : Snake
@@ -35,13 +71,30 @@ initialSnake =
         lastSegment =
             nextPositionInDirection tailDirection subsequentSegment
     in
-        { body =
+        { player = Player.init
+        , body =
             [ initialSegment
             , subsequentSegment
             , lastSegment
             ]
         , direction = initialDirection
         }
+
+
+setPlayer : Player -> Snake -> Snake
+setPlayer player snake =
+    { snake | player = player }
+
+
+setId : PlayerId -> Snake -> Snake
+setId id snake =
+    let
+        player =
+            Player.init
+                |> Player.setId id
+    in
+        snake
+            |> setPlayer player
 
 
 moveSnake : Snake -> Snake
@@ -84,8 +137,8 @@ eatApples { body } apples =
             eatApplesAt snakeHead apples
 
 
-changeSnakeDirection : Snake -> Direction -> Snake
-changeSnakeDirection originalSnake newDirection =
+changeSnakeDirection : Direction -> Snake -> Snake
+changeSnakeDirection newDirection originalSnake =
     let
         changedDirection =
             case ( originalSnake.direction, newDirection ) of

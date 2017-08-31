@@ -9,14 +9,23 @@ module Data.Board
         , tickDuration
         , tileTypeFromPositionTileTypePairs
         , convertToKVPair
+        , currentPlayerId
+        , directionOfPlayer
         , toChangeDirectionMsg
+        , toSetCurrentPlayerMsg
+        , toSetupPlayersMsg
+        , toSetupNewPlayerMsg
+        , toRemovePlayerMsg
         , tickBoardMsg
+        , toChangePlayerDirectionMsg
         )
 
+import Html
 import Time exposing (Time, second)
 import Dict exposing (Dict)
 import Random
 import Data.Direction exposing (Direction(..))
+import Data.Player as Player exposing (Player, PlayerId, PlayerColour)
 import Data.Position
     exposing
         ( Position
@@ -25,7 +34,7 @@ import Data.Position
         , nextPositionInDirection
         )
 import Data.Apple exposing (Apple, randomApple, expireApples)
-import Data.Snake
+import Data.Snake as Snake
     exposing
         ( Snake
         , initialSnake
@@ -37,22 +46,24 @@ import Data.Snake
 
 
 type alias Board =
-    { time : Time
-    , snake : Snake
+    { currentPlayerId : PlayerId
+    , time : Time
+    , snakes : Dict PlayerId Snake
     , apples : List Apple
     }
 
 
 type TileType
     = EmptyTile
-    | SnakeSegment
+    | SnakeSegment PlayerColour
     | AppleTile
 
 
 init : Board
 init =
-    { time = 0
-    , snake = initialSnake
+    { currentPlayerId = 0
+    , time = 0
+    , snakes = Dict.fromList []
     , apples = []
     }
 
@@ -71,34 +82,136 @@ type Msg
     = Tick Time
     | ChangeDirection Direction
     | AddApple Apple
+    | SetCurrentPlayer Player
+    | SetupPlayers (Dict PlayerId Player)
+    | SetupNewPlayer Player
+    | RemovePlayer Player
+    | ChangeDirectionOfPlayer PlayerId Direction
+
+
+toChangePlayerDirectionMsg : PlayerId -> Direction -> Msg
+toChangePlayerDirectionMsg =
+    ChangeDirectionOfPlayer
+
+
+currentPlayerId : Board -> PlayerId
+currentPlayerId =
+    .currentPlayerId
+
+
+directionOfPlayer : PlayerId -> Board -> Maybe Direction
+directionOfPlayer playerId { snakes } =
+    Dict.get playerId snakes
+        |> Maybe.map Snake.direction
+
+
+toSetCurrentPlayerMsg : Player -> Msg
+toSetCurrentPlayerMsg =
+    SetCurrentPlayer
+
+
+toSetupPlayersMsg : Dict PlayerId Player -> Msg
+toSetupPlayersMsg =
+    SetupPlayers
+
+
+toSetupNewPlayerMsg : Player -> Msg
+toSetupNewPlayerMsg =
+    SetupNewPlayer
+
+
+toRemovePlayerMsg : Player -> Msg
+toRemovePlayerMsg =
+    RemovePlayer
+
+
+progressBoard : Time -> PlayerId -> Board -> Board
+progressBoard nextTime playerId ({ snakes, apples } as board) =
+    let
+        ( nextSnakes, nextApples ) =
+            case Dict.get playerId snakes of
+                Nothing ->
+                    ( snakes, apples )
+
+                Just snake ->
+                    let
+                        ( newSnake, newApples ) =
+                            nextSnakeAndApples nextTime snake apples
+                    in
+                        ( Dict.insert playerId newSnake snakes, newApples )
+    in
+        { board
+            | time = nextTime
+            , snakes = nextSnakes
+            , apples = nextApples
+        }
 
 
 update : Msg -> Board -> ( Board, Cmd Msg )
-update msg ({ snake, apples, time } as model) =
+update msg ({ currentPlayerId, snakes, apples, time } as model) =
     case msg of
         Tick newTime ->
             let
-                ( newSnake, newApples ) =
-                    nextSnakeAndApples newTime snake apples
+                playerIds =
+                    Dict.keys snakes
+
+                newBoard =
+                    List.foldl (progressBoard newTime) model playerIds
             in
-                ( { model
-                    | time = newTime
-                    , snake = newSnake
-                    , apples = newApples
-                  }
-                , if newApples == [] then
+                ( newBoard
+                , if newBoard.apples == [] then
                     Random.generate AddApple (randomApple newTime)
                   else
                     Cmd.none
                 )
 
         ChangeDirection direction ->
-            ( { model | snake = changeSnakeDirection snake direction }, Cmd.none )
+            ( { model | snakes = Dict.update currentPlayerId (Maybe.map (changeSnakeDirection direction)) snakes }, Cmd.none )
+
+        ChangeDirectionOfPlayer playerId direction ->
+            ( { model | snakes = Dict.update playerId (Maybe.map (changeSnakeDirection direction)) snakes }, Cmd.none )
 
         AddApple apple ->
-            ( { model | apples = apple :: model.apples }
-            , Cmd.none
-            )
+            ( { model | apples = apple :: model.apples }, Cmd.none )
+
+        SetCurrentPlayer player ->
+            let
+                playerId =
+                    Player.id player
+
+                playerSnake =
+                    Snake.initialSnake
+                        |> Snake.setPlayer player
+
+                newSnakes =
+                    model.snakes
+                        |> Dict.insert playerId playerSnake
+            in
+                ( { model | currentPlayerId = playerId, snakes = newSnakes }, Cmd.none )
+
+        SetupPlayers playersDict ->
+            let
+                newSnakes =
+                    Dict.map (\_ player -> Snake.setPlayer player (Snake.initialSnake)) playersDict
+            in
+                ( { model | snakes = newSnakes }, Cmd.none )
+
+        SetupNewPlayer player ->
+            let
+                newSnake =
+                    Snake.setPlayer player (Snake.initialSnake)
+
+                newSnakes =
+                    Dict.insert (Snake.id newSnake) newSnake snakes
+            in
+                ( { model | snakes = newSnakes }, Cmd.none )
+
+        RemovePlayer { playerId } ->
+            let
+                newSnakes =
+                    Dict.remove playerId snakes
+            in
+                ( { model | snakes = newSnakes }, Cmd.none )
 
 
 toChangeDirectionMsg : Direction -> Msg
@@ -128,8 +241,13 @@ nextSnakeAndApples time snake apples =
 
 
 score : Board -> Int
-score { snake } =
-    List.length snake.body
+score { currentPlayerId, snakes } =
+    case Dict.get currentPlayerId snakes of
+        Nothing ->
+            0
+
+        Just snake ->
+            List.length snake.body
 
 
 convertToKVPair : ( Position, TileType ) -> ( ( Int, Int ), TileType )
