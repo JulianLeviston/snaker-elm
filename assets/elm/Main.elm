@@ -38,7 +38,7 @@ init : ( Model, Cmd Msg )
 init =
     let
         initialSocket =
-            Socket.init "ws://Stagger:4000/socket/websocket"
+            Socket.init "ws://localhost:4000/socket/websocket"
                 |> Socket.withDebug
                 |> Socket.on "join" "game:snake" (DispatchServerMsg JoinGame)
                 |> Socket.on "player:join" "game:snake" (DispatchServerMsg NewPlayerJoined)
