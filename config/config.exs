@@ -15,8 +15,10 @@ config :snaker, SnakerWeb.Endpoint,
   url: [host: "localhost"],
   secret_key_base: "b7gIM26+Z3rBPByFm9tffYuKEjIz0B5ELdVVkJL6BvWkrhw1JZIeFyKvbEYVleg7",
   render_errors: [view: SnakerWeb.ErrorView, accepts: ~w(html json)],
-  pubsub: [name: Snaker.PubSub,
-           adapter: Phoenix.PubSub.PG2]
+  pubsub_server: Snaker.PubSub
+
+# Configure Phoenix to use Jason for JSON encoding
+config :phoenix, :json_library, Jason
 
 # Configures Elixir's Logger
 config :logger, :console,
