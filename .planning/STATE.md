@@ -49,6 +49,11 @@ Phase 3: [          ] 0% (0/2)
 - [ ] Research client prediction patterns during Phase 2 planning (optional optimization)
 - [ ] Test multi-client scenarios with network latency throttling in Phase 3
 
+### Pending Todos
+
+1 todo in `.planning/todos/pending/`:
+- **Multi-language multi-backend showcase system** (planning) — expand to showcase multiple frontend/backend stacks
+
 ### Blockers
 
 **Active:** None
