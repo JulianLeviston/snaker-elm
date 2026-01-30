@@ -1,7 +1,7 @@
 # Project State: Snaker Elm Upgrade
 
-**Last Updated:** 2026-01-30
-**Current Focus:** Phase 1 - Backend Modernization
+**Last Updated:** 2026-01-31
+**Current Focus:** Phase 2 - Frontend Upgrade (Phase 1 complete)
 
 ## Project Reference
 
@@ -12,27 +12,27 @@ Two players in separate browsers join the game. Player A sees Player B's snake a
 
 ## Current Position
 
-**Phase:** 1 of 3 (Backend Modernization)
-**Plan:** 2 of 3 complete in phase
-**Status:** In progress
-**Last activity:** 2026-01-30 - Completed 01-02-PLAN.md (Phoenix 1.7 Upgrade)
+**Phase:** 1 of 3 (Backend Modernization) - COMPLETE
+**Plan:** 3 of 3 complete in phase
+**Status:** Phase 1 complete, ready for Phase 2
+**Last activity:** 2026-01-31 - Completed 01-03-PLAN.md (Server-Authoritative Game State)
 
 **Progress:**
 ```
-[####                ] 10% (2/20 requirements)
+[######              ] 15% (3/20 requirements)
 
-Phase 1: [######    ] 67% (2/3 plans)
+Phase 1: [##########] 100% (3/3 plans) ✓
 Phase 2: [          ] 0% (0/? plans)
 Phase 3: [          ] 0% (0/? plans)
 ```
 
 ## Performance Metrics
 
-**Velocity:** 1 plan/session (Phase 1 in progress)
+**Velocity:** 1.5 plans/session average (Phase 1 complete)
 **Quality:** N/A (no verification runs yet)
 
 **Phase History:**
-- Phase 1: In progress (1/3 plans complete)
+- Phase 1: Complete (3/3 plans, 3 sessions, ~30 min total)
 
 ## Accumulated Context
 
@@ -47,6 +47,12 @@ Phase 3: [          ] 0% (0/? plans)
 | 2026-01-30 | Add phoenix_view for compatibility | Phoenix 1.7 extracted View to separate package | Maintains existing template architecture |
 | 2026-01-30 | WebSocket config in endpoint | Phoenix 1.7 moved transport config from socket | Standard Phoenix 1.7 pattern |
 | 2026-01-30 | Phoenix.PubSub in supervision tree | Phoenix 2.0 requires explicit supervisor child | Enables channel broadcasts |
+| 2026-01-31 | 100ms tick interval for game loop | Balance between smooth gameplay and server load | 10 updates/second for multiplayer snake |
+| 2026-01-31 | Input buffering with rate limiting | Prevent input spam and ensure fairness | First direction change per tick only |
+| 2026-01-31 | Wall wrap-around behavior | Classic arcade snake gameplay | Snakes wrap at grid edges instead of dying |
+| 2026-01-31 | 1.5 second invincibility on spawn | Prevent instant death in crowded areas | Brief grace period after spawn/respawn |
+| 2026-01-31 | Pure game logic modules | Separate rules from state management | Testable, reusable Snake/Apple/Grid modules |
+| 2026-01-31 | Full state on join, delta on tick | Balance initial sync with update efficiency | Can optimize to true deltas later |
 
 ### Cross-Phase TODOs
 
@@ -76,8 +82,8 @@ Phase 3: [          ] 0% (0/? plans)
 
 ## Session Continuity
 
-**Last session:** 2026-01-30 23:09 UTC
-**Stopped at:** Completed 01-02-PLAN.md
+**Last session:** 2026-01-31 01:44 UTC
+**Stopped at:** Completed 01-03-PLAN.md (Phase 1 complete)
 **Resume file:** None
 
 **What to Remember:**
@@ -87,20 +93,27 @@ Phase 3: [          ] 0% (0/? plans)
 - Research identified WebSocket rewrite as highest-risk component
 - Quick depth means aggressive phase compression (3 phases for 20 requirements)
 - Mise environment: Elixir 1.15.8, Erlang/OTP 26, Node 20
-- Phoenix 1.7.21 now running with Jason, PubSub 2.0, and WebSocket transport
+- Phoenix 1.7.21 running with Jason, PubSub 2.0, and WebSocket transport
+
+**Phase 1 Complete:**
+- ✅ Mise environment setup (Elixir 1.15.8, Erlang 26, Node 20)
+- ✅ Phoenix 1.7.21 upgrade with PubSub 2.0
+- ✅ GameServer GenServer with 100ms tick loop
+- ✅ Pure game logic modules (Snake, Apple, Grid)
+- ✅ Server-authoritative game state with delta broadcasts
 
 **Next Action:**
-Execute 01-03-PLAN.md to implement server-authoritative game state (final Phase 1 plan).
+Plan Phase 2: Frontend Upgrade (Elm 0.18 → 0.19.1 with ports-based WebSocket)
 
 **Context for Next Session:**
-- Phoenix 1.7.21 server compiles and starts on port 4000
-- WebSocket endpoint configured at `/socket` with `websocket: true`
-- Phoenix.PubSub 2.0 in supervision tree, ready for broadcasts
-- Read 01-02-SUMMARY.md for upgrade details and deprecation warnings
-- Channel code exists but untested with Phoenix 1.7
-- Asset pipeline (Brunch) still works but is deprecated
-- Read ROADMAP.md for phase structure and success criteria
-- Check this STATE.md for decisions and accumulated context
+- Backend is fully modernized and running Phoenix 1.7.21
+- GameServer ticks every 100ms and broadcasts deltas via PubSub
+- Frontend still Elm 0.18 with client-side simulation (incompatible)
+- Need ports-based WebSocket implementation for Elm 0.19
+- Frontend will consume server ticks instead of simulating locally
+- Read 01-03-SUMMARY.md for game logic architecture
+- Check GameServer modules in lib/snaker/game_server.ex and lib/snaker/game/
+- Asset pipeline (Brunch) still works but deprecated - consider esbuild migration
 
 ---
 
