@@ -9,15 +9,15 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Environment Setup
 
-- [ ] **ENV-01**: mise manages Elixir, Erlang, and Node versions
-- [ ] **ENV-02**: `.mise.toml` committed with version pins
+- [x] **ENV-01**: mise manages Elixir, Erlang, and Node versions
+- [x] **ENV-02**: `.mise.toml` committed with version pins
 
 ### Phoenix Upgrade
 
-- [ ] **PHX-01**: Phoenix upgraded to 1.7.x
-- [ ] **PHX-02**: Elixir upgraded to 1.15+
-- [ ] **PHX-03**: WebSocket transport configured for Phoenix 1.7
-- [ ] **PHX-04**: JSON encoding uses Jason (replaces Poison)
+- [x] **PHX-01**: Phoenix upgraded to 1.7.x
+- [x] **PHX-02**: Elixir upgraded to 1.15+
+- [x] **PHX-03**: WebSocket transport configured for Phoenix 1.7
+- [x] **PHX-04**: JSON encoding uses Jason (replaces Poison)
 
 ### Asset Pipeline
 
@@ -41,7 +41,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### State Sync Fix
 
-- [ ] **SYNC-01**: Server maintains authoritative game state (snakes, apples)
+- [x] **SYNC-01**: Server maintains authoritative game state (snakes, apples)
 - [ ] **SYNC-02**: Server broadcasts full state on player join
 - [ ] **SYNC-03**: When any player joins, all connected players (n > 1) see each other's snakes in correct positions immediately
 
@@ -72,13 +72,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ENV-01 | Phase 1 | Pending |
-| ENV-02 | Phase 1 | Pending |
-| PHX-01 | Phase 1 | Pending |
-| PHX-02 | Phase 1 | Pending |
-| PHX-03 | Phase 1 | Pending |
-| PHX-04 | Phase 1 | Pending |
-| SYNC-01 | Phase 1 | Pending |
+| ENV-01 | Phase 1 | Complete |
+| ENV-02 | Phase 1 | Complete |
+| PHX-01 | Phase 1 | Complete |
+| PHX-02 | Phase 1 | Complete |
+| PHX-03 | Phase 1 | Complete |
+| PHX-04 | Phase 1 | Complete |
+| SYNC-01 | Phase 1 | Complete |
 | AST-01 | Phase 2 | Pending |
 | AST-02 | Phase 2 | Pending |
 | AST-03 | Phase 2 | Pending |
@@ -105,4 +105,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-01-30*
-*Last updated: 2026-01-30 after roadmap creation*
+*Last updated: 2026-01-31 after Phase 1 completion*
