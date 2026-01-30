@@ -17,6 +17,13 @@ Upgrade from legacy stack (Elm 0.18 + Phoenix 1.3) to modern stack (Elm 0.19.1 +
 
 **Dependencies:** None (foundation phase)
 
+**Plans:** 3 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Environment setup with mise version pins
+- [ ] 01-02-PLAN.md — Phoenix 1.3 to 1.7 upgrade with Jason/PubSub
+- [ ] 01-03-PLAN.md — GameServer with authoritative state and tick loop
+
 **Requirements:**
 - ENV-01: mise manages Elixir, Erlang, and Node versions
 - ENV-02: `.mise.toml` committed with version pins
@@ -84,7 +91,7 @@ Upgrade from legacy stack (Elm 0.18 + Phoenix 1.3) to modern stack (Elm 0.19.1 +
 
 | Phase | Status | Requirements | Completion |
 |-------|--------|--------------|------------|
-| 1 - Backend Modernization | Pending | 7/20 | 0% |
+| 1 - Backend Modernization | Planned | 7/20 | 0% |
 | 2 - Frontend Migration | Pending | 11/20 | 0% |
 | 3 - Integration & Sync | Pending | 2/20 | 0% |
 
@@ -116,4 +123,4 @@ Upgrade from legacy stack (Elm 0.18 + Phoenix 1.3) to modern stack (Elm 0.19.1 +
 
 ---
 
-*Last updated: 2026-01-30*
+*Last updated: 2026-01-31*
