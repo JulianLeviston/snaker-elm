@@ -72,32 +72,37 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ENV-01 | TBD | Pending |
-| ENV-02 | TBD | Pending |
-| PHX-01 | TBD | Pending |
-| PHX-02 | TBD | Pending |
-| PHX-03 | TBD | Pending |
-| PHX-04 | TBD | Pending |
-| AST-01 | TBD | Pending |
-| AST-02 | TBD | Pending |
-| AST-03 | TBD | Pending |
-| ELM-01 | TBD | Pending |
-| ELM-02 | TBD | Pending |
-| ELM-03 | TBD | Pending |
-| ELM-04 | TBD | Pending |
-| ELM-05 | TBD | Pending |
-| WS-01 | TBD | Pending |
-| WS-02 | TBD | Pending |
-| WS-03 | TBD | Pending |
-| SYNC-01 | TBD | Pending |
-| SYNC-02 | TBD | Pending |
-| SYNC-03 | TBD | Pending |
+| ENV-01 | Phase 1 | Pending |
+| ENV-02 | Phase 1 | Pending |
+| PHX-01 | Phase 1 | Pending |
+| PHX-02 | Phase 1 | Pending |
+| PHX-03 | Phase 1 | Pending |
+| PHX-04 | Phase 1 | Pending |
+| SYNC-01 | Phase 1 | Pending |
+| AST-01 | Phase 2 | Pending |
+| AST-02 | Phase 2 | Pending |
+| AST-03 | Phase 2 | Pending |
+| ELM-01 | Phase 2 | Pending |
+| ELM-02 | Phase 2 | Pending |
+| ELM-03 | Phase 2 | Pending |
+| ELM-04 | Phase 2 | Pending |
+| ELM-05 | Phase 2 | Pending |
+| WS-01 | Phase 2 | Pending |
+| WS-02 | Phase 2 | Pending |
+| WS-03 | Phase 2 | Pending |
+| SYNC-02 | Phase 3 | Pending |
+| SYNC-03 | Phase 3 | Pending |
 
 **Coverage:**
 - v1 requirements: 20 total
-- Mapped to phases: 0
-- Unmapped: 20 (pending roadmap creation)
+- Mapped to phases: 20
+- Unmapped: 0
+
+**Phase Distribution:**
+- Phase 1 (Backend Modernization): 7 requirements
+- Phase 2 (Frontend Migration): 11 requirements
+- Phase 3 (Integration & Sync): 2 requirements
 
 ---
 *Requirements defined: 2026-01-30*
-*Last updated: 2026-01-30 after initial definition*
+*Last updated: 2026-01-30 after roadmap creation*
