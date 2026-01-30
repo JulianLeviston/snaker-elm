@@ -16,9 +16,7 @@ defmodule SnakerWeb.UserSocket do
   #
   # See `Phoenix.Token` documentation for examples in
   # performing token verification on connect.
-  def connect(_params, old_socket) do
-    new_player = Worker.new_player()
-    socket = assign(old_socket, :player, new_player)
+  def connect(_params, socket, _connect_info) do
     {:ok, socket}
   end
 

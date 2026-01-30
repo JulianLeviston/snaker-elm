@@ -8,6 +8,8 @@ defmodule Snaker.Application do
     children = [
       # Start PubSub before Endpoint
       {Phoenix.PubSub, name: Snaker.PubSub},
+      # Start GameServer for authoritative game state
+      Snaker.GameServer,
       # Start the endpoint when the application starts
       SnakerWeb.Endpoint,
       # Start your own worker by calling: Snaker.Worker.start_link(arg1, arg2, arg3)
