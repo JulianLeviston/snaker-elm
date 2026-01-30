@@ -11370,7 +11370,7 @@ var _JulianLeviston$snaker_elm$Main$init = function () {
 					'game:snake',
 					_JulianLeviston$snaker_elm$Main$DispatchServerMsg(_JulianLeviston$snaker_elm$Main$JoinGame),
 					_fbonetti$elm_phoenix_socket$Phoenix_Socket$withDebug(
-						_fbonetti$elm_phoenix_socket$Phoenix_Socket$init('ws://Stagger:4000/socket/websocket'))))));
+						_fbonetti$elm_phoenix_socket$Phoenix_Socket$init('ws://localhost:4000/socket/websocket'))))));
 	var _p1 = A2(_fbonetti$elm_phoenix_socket$Phoenix_Socket$join, channel, initialSocket);
 	var phxSocket = _p1._0;
 	var cmd = _p1._1;

@@ -35,6 +35,7 @@ defmodule Snaker.Mixfile do
       {:phoenix, "~> 1.7.0"},
       {:phoenix_pubsub, "~> 2.0"},
       {:phoenix_html, "~> 3.0"},
+      {:phoenix_view, "~> 2.0"},
       {:phoenix_live_reload, "~> 1.0", only: :dev},
       {:gettext, "~> 0.20"},
       {:jason, "~> 1.0"},
