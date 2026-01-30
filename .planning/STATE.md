@@ -13,15 +13,15 @@ Two players in separate browsers join the game. Player A sees Player B's snake a
 ## Current Position
 
 **Phase:** 1 of 3 (Backend Modernization)
-**Plan:** 1 of 3 complete in phase
+**Plan:** 2 of 3 complete in phase
 **Status:** In progress
-**Last activity:** 2026-01-30 - Completed 01-01-PLAN.md (Mise Environment Setup)
+**Last activity:** 2026-01-30 - Completed 01-02-PLAN.md (Phoenix 1.7 Upgrade)
 
 **Progress:**
 ```
-[##                  ] 5% (1/20 requirements)
+[####                ] 10% (2/20 requirements)
 
-Phase 1: [###       ] 33% (1/3 plans)
+Phase 1: [######    ] 67% (2/3 plans)
 Phase 2: [          ] 0% (0/? plans)
 Phase 3: [          ] 0% (0/? plans)
 ```
@@ -44,12 +44,16 @@ Phase 3: [          ] 0% (0/? plans)
 | 2026-01-30 | Server-authoritative architecture | Root cause of sync bug is client simulation | Major architectural shift in Phase 1 |
 | 2026-01-30 | Ports-based WebSocket | elm-phoenix-socket incompatible with Elm 0.19 | Complete WebSocket rewrite in Phase 2 |
 | 2026-01-30 | Minor version ranges in mise | Allows flexibility while ensuring minimum compatibility | Easier maintenance, slightly less reproducibility |
+| 2026-01-30 | Add phoenix_view for compatibility | Phoenix 1.7 extracted View to separate package | Maintains existing template architecture |
+| 2026-01-30 | WebSocket config in endpoint | Phoenix 1.7 moved transport config from socket | Standard Phoenix 1.7 pattern |
+| 2026-01-30 | Phoenix.PubSub in supervision tree | Phoenix 2.0 requires explicit supervisor child | Enables channel broadcasts |
 
 ### Cross-Phase TODOs
 
-- [ ] Verify exact Phoenix 1.7.x patch version during Phase 1 environment setup
+- [x] Verify exact Phoenix 1.7.x patch version during Phase 1 environment setup — Phoenix 1.7.21
 - [ ] Research client prediction patterns during Phase 2 planning (optional optimization)
 - [ ] Test multi-client scenarios with network latency throttling in Phase 3
+- [ ] Consider migrating from Brunch to esbuild (asset pipeline modernization)
 
 ### Pending Todos
 
@@ -72,8 +76,8 @@ Phase 3: [          ] 0% (0/? plans)
 
 ## Session Continuity
 
-**Last session:** 2026-01-30 15:37 UTC
-**Stopped at:** Completed 01-01-PLAN.md
+**Last session:** 2026-01-30 23:09 UTC
+**Stopped at:** Completed 01-02-PLAN.md
 **Resume file:** None
 
 **What to Remember:**
@@ -82,14 +86,19 @@ Phase 3: [          ] 0% (0/? plans)
 - Strict sequential dependency: Backend → Frontend → Integration (no parallelization)
 - Research identified WebSocket rewrite as highest-risk component
 - Quick depth means aggressive phase compression (3 phases for 20 requirements)
-- Mise environment now configured with Elixir 1.15.8, Erlang/OTP 26, Node 20
+- Mise environment: Elixir 1.15.8, Erlang/OTP 26, Node 20
+- Phoenix 1.7.21 now running with Jason, PubSub 2.0, and WebSocket transport
 
 **Next Action:**
-Execute 01-02-PLAN.md to continue Phase 1 backend modernization.
+Execute 01-03-PLAN.md to implement server-authoritative game state (final Phase 1 plan).
 
 **Context for Next Session:**
-- Environment ready: `mise exec -- elixir --version` shows 1.15.8
-- Read 01-01-SUMMARY.md for environment setup details
+- Phoenix 1.7.21 server compiles and starts on port 4000
+- WebSocket endpoint configured at `/socket` with `websocket: true`
+- Phoenix.PubSub 2.0 in supervision tree, ready for broadcasts
+- Read 01-02-SUMMARY.md for upgrade details and deprecation warnings
+- Channel code exists but untested with Phoenix 1.7
+- Asset pipeline (Brunch) still works but is deprecated
 - Read ROADMAP.md for phase structure and success criteria
 - Check this STATE.md for decisions and accumulated context
 
