@@ -5,6 +5,7 @@ module Snake exposing
     , directionToString
     , decoder
     , positionDecoder
+    , head
     )
 
 import Json.Decode as JD
@@ -28,6 +29,9 @@ type alias Snake =
     , body : List Position
     , direction : Direction
     , color : String
+    , name : String
+    , isInvincible : Bool
+    , state : String
     }
 
 
@@ -79,8 +83,20 @@ directionDecoder =
 
 decoder : JD.Decoder Snake
 decoder =
-    JD.map4 Snake
+    JD.map7 Snake
         (JD.field "id" JD.string)
         (JD.field "body" (JD.list positionDecoder))
         (JD.field "direction" directionDecoder)
         (JD.field "color" JD.string)
+        (JD.field "name" JD.string)
+        (JD.field "is_invincible" JD.bool)
+        (JD.oneOf
+            [ JD.field "state" JD.string
+            , JD.succeed "alive"
+            ]
+        )
+
+
+head : Snake -> Maybe Position
+head snake =
+    List.head snake.body
