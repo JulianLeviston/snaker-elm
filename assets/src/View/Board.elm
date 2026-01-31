@@ -153,19 +153,33 @@ renderSnakeHead snake pos =
         eyeRadius =
             2
 
-        ( eyeX1, eyeX2, eyeY1, eyeY2 ) =
+        ( eyeX1, eyeY1 ) =
             case snake.direction of
                 Snake.Up ->
-                    ( cx_ - eyeOffset, cx_ + eyeOffset, cy_ - eyeOffset, cy_ - eyeOffset )
+                    ( cx_ - eyeOffset, cy_ - eyeOffset )
 
                 Snake.Down ->
-                    ( cx_ - eyeOffset, cx_ + eyeOffset, cy_ + eyeOffset, cy_ + eyeOffset )
+                    ( cx_ - eyeOffset, cy_ + eyeOffset )
 
                 Snake.Left ->
-                    ( cx_ - eyeOffset, cx_ - eyeOffset, cy_ - eyeOffset, cy_ + eyeOffset )
+                    ( cx_ - eyeOffset, cy_ - eyeOffset )
 
                 Snake.Right ->
-                    ( cx_ + eyeOffset, cx_ + eyeOffset, cy_ - eyeOffset, cy_ + eyeOffset )
+                    ( cx_ + eyeOffset, cy_ - eyeOffset )
+
+        ( eyeX2, eyeY2 ) =
+            case snake.direction of
+                Snake.Up ->
+                    ( cx_ + eyeOffset, cy_ - eyeOffset )
+
+                Snake.Down ->
+                    ( cx_ + eyeOffset, cy_ + eyeOffset )
+
+                Snake.Left ->
+                    ( cx_ - eyeOffset, cy_ + eyeOffset )
+
+                Snake.Right ->
+                    ( cx_ + eyeOffset, cy_ + eyeOffset )
     in
     g [ class "snake-head" ]
         [ circle
