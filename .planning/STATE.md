@@ -1,7 +1,7 @@
 # Project State: Snaker Elm Upgrade
 
 **Last Updated:** 2026-01-31
-**Current Focus:** Phase 2 - Frontend Upgrade (Plan 2 of 3 complete)
+**Current Focus:** Phase 3 - Integration & Sync (Phase 2 complete)
 
 ## Project Reference
 
@@ -12,28 +12,28 @@ Two players in separate browsers join the game. Player A sees Player B's snake a
 
 ## Current Position
 
-**Phase:** 2 of 3 (Frontend Migration)
-**Plan:** 2 of 3 complete in phase
-**Status:** In progress - Elm 0.19.1 application ready
-**Last activity:** 2026-01-31 - Completed 02-02-PLAN.md (Elm 0.19.1 Application Setup)
+**Phase:** 2 of 3 (Frontend Migration) - COMPLETE
+**Plan:** 3 of 3 complete in phase
+**Status:** Phase 2 complete, ready for Phase 3
+**Last activity:** 2026-01-31 - Completed 02-03-PLAN.md (WebSocket Integration)
 
 **Progress:**
 ```
-[##########          ] 25% (5/20 requirements)
+[##############      ] 70% (14/20 requirements)
 
-Phase 1: [##########] 100% (3/3 plans)
-Phase 2: [######    ] 67% (2/3 plans)
+Phase 1: [##########] 100% (3/3 plans) ✓
+Phase 2: [##########] 100% (3/3 plans) ✓
 Phase 3: [          ] 0% (0/? plans)
 ```
 
 ## Performance Metrics
 
-**Velocity:** 1.7 plans/session average
+**Velocity:** 2.0 plans/session average
 **Quality:** N/A (no verification runs yet)
 
 **Phase History:**
 - Phase 1: Complete (3/3 plans, 3 sessions, ~30 min total)
-- Phase 2: In progress (2/3 plans, ~5 min)
+- Phase 2: Complete (3/3 plans, 1 session, ~20 min)
 
 ## Accumulated Context
 
@@ -57,6 +57,8 @@ Phase 3: [          ] 0% (0/? plans)
 | 2026-01-31 | esbuild with TypeScript strict mode | Modern build toolchain; type safety | Replaced Brunch, enables TS adoption |
 | 2026-01-31 | esbuild context API for watch mode | Current best practice, not deprecated build() | Proper incremental builds |
 | 2026-01-31 | elm@0.19.1-6 npm package | System Elm was 0.18.0, npm package ensures consistent version | Local project control of Elm version |
+| 2026-01-31 | Auto-join game on Elm init | Simplify user flow; join immediately on page load | No manual join button needed |
+| 2026-01-31 | Serialize tuples as maps for JSON | Elixir tuples can't serialize to JSON | Convert {x,y} to %{x: x, y: y} |
 
 ### Cross-Phase TODOs
 
@@ -80,48 +82,46 @@ Phase 3: [          ] 0% (0/? plans)
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|------------|--------|------------|
-| Ports WebSocket rewrite fails | Low | High | Port definitions complete; channel integration is last step |
+| Ports WebSocket rewrite fails | Resolved | - | WebSocket integration complete and verified |
 | State sync introduces latency | Medium | Medium | Start with simple server-render; add client prediction if needed |
 | Breaking changes uncovered during upgrade | Low | Medium | Research identified 30 pitfalls; mapped to phases |
 
 ## Session Continuity
 
-**Last session:** 2026-01-31 09:39 UTC
-**Stopped at:** Completed 02-02-PLAN.md (Elm 0.19.1 Application Setup)
+**Last session:** 2026-01-31
+**Stopped at:** Completed 02-03-PLAN.md (WebSocket Integration)
 **Resume file:** None
 
 **What to Remember:**
 - This is a legacy upgrade (Elm 0.18 → 0.19.1, Phoenix 1.3 → 1.7) combined with bug fix
 - The sync bug exists because clients simulate independently; server must become authoritative
 - Strict sequential dependency: Backend → Frontend → Integration (no parallelization)
-- Research identified WebSocket rewrite as highest-risk component
 - Quick depth means aggressive phase compression (3 phases for 20 requirements)
 - Mise environment: Elixir 1.15.8, Erlang/OTP 26, Node 20
 - Phoenix 1.7.21 running with Jason, PubSub 2.0, and WebSocket transport
 
 **Phase 1 Complete:**
-- Mise environment setup (Elixir 1.15.8, Erlang 26, Node 20)
-- Phoenix 1.7.21 upgrade with PubSub 2.0
-- GameServer GenServer with 100ms tick loop
-- Pure game logic modules (Snake, Apple, Grid)
-- Server-authoritative game state with delta broadcasts
+- ✅ Mise environment setup (Elixir 1.15.8, Erlang 26, Node 20)
+- ✅ Phoenix 1.7.21 upgrade with PubSub 2.0
+- ✅ GameServer GenServer with 100ms tick loop
+- ✅ Pure game logic modules (Snake, Apple, Grid)
+- ✅ Server-authoritative game state with delta broadcasts
 
-**Phase 2 Progress:**
-- 02-01: esbuild toolchain with TypeScript and Elm plugin support
-- 02-02: Elm 0.19.1 application with ports and keyboard input
-- Next: 02-03 Port-based WebSocket integration
+**Phase 2 Complete:**
+- ✅ 02-01: esbuild toolchain with TypeScript and Elm plugin support
+- ✅ 02-02: Elm 0.19.1 application with ports and keyboard input
+- ✅ 02-03: WebSocket integration with Phoenix Channels
 
 **Next Action:**
-Execute 02-03-PLAN.md: Port-based WebSocket integration
+Plan Phase 3: Integration & Sync
 
 **Context for Next Session:**
-- Elm 0.19.1 application ready with Browser.element entry point
-- All port definitions in place (joinGame, leaveGame, sendDirection, receive*)
-- Keyboard input handling works with Arrow keys and WASD
-- JSON decoders match server message format from Phase 1
-- app.ts initializes Elm and logs port activity
-- Need to wire Phoenix WebSocket to Elm ports in 02-03
-- Old Elm 0.18 code still in assets/elm/ (will be removed after Phase 2)
+- Full stack now modernized: Phoenix 1.7.21 + Elm 0.19.1
+- WebSocket communication working bidirectionally
+- Elm receives tick events from server (10/second)
+- Direction changes flow from Elm → JS → Phoenix → GameServer
+- Need to: render snakes/apples, handle player join/leave, verify sync
+- Old Elm 0.18 code still in assets/elm/ (can be removed)
 
 ---
 
