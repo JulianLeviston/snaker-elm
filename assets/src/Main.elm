@@ -10,6 +10,7 @@ import Json.Decode as JD
 import Json.Encode as JE
 import Ports
 import Snake exposing (Direction(..))
+import View.Board as Board
 
 
 type alias Model =
@@ -60,10 +61,6 @@ update msg model =
         KeyPressed maybeDir ->
             case maybeDir of
                 Just dir ->
-                    let
-                        _ =
-                            Debug.log "Direction change" (Snake.directionToString dir)
-                    in
                     ( { model | currentDirection = dir }
                     , Ports.sendDirection
                         (JE.object [ ( "direction", JE.string (Snake.directionToString dir) ) ])
@@ -82,41 +79,79 @@ update msg model =
                     , Cmd.none
                     )
 
-                Err err ->
-                    let
-                        _ =
-                            Debug.log "Decode error" (JD.errorToString err)
-                    in
+                Err _ ->
                     ( model, Cmd.none )
 
         GotError errorMsg ->
             ( { model | error = Just errorMsg }, Cmd.none )
 
-        PlayerJoined _ ->
-            -- Will handle in Phase 3
-            ( model, Cmd.none )
+        PlayerJoined value ->
+            case JD.decodeValue playerJoinedDecoder value of
+                Ok playerData ->
+                    ( { model | playerId = Just playerData.id }
+                    , Cmd.none
+                    )
+
+                Err _ ->
+                    ( model, Cmd.none )
 
         PlayerLeft _ ->
-            -- Will handle in Phase 3
+            -- Player left handling (future enhancement)
             ( model, Cmd.none )
 
         GotTick value ->
-            -- Will handle in Phase 3
-            let
-                _ =
-                    Debug.log "Tick received" value
-            in
-            ( model, Cmd.none )
+            case JD.decodeValue tickDecoder value of
+                Ok tickData ->
+                    ( { model
+                        | gameState =
+                            Maybe.map
+                                (\gs -> { gs | snakes = tickData.snakes, apples = tickData.apples })
+                                model.gameState
+                      }
+                    , Cmd.none
+                    )
+
+                Err _ ->
+                    ( model, Cmd.none )
+
+
+type alias PlayerJoinedData =
+    { id : String
+    }
+
+
+playerJoinedDecoder : JD.Decoder PlayerJoinedData
+playerJoinedDecoder =
+    JD.map PlayerJoinedData
+        (JD.field "id" JD.string)
+
+
+type alias TickData =
+    { snakes : List Snake.Snake
+    , apples : List Game.Apple
+    }
+
+
+tickDecoder : JD.Decoder TickData
+tickDecoder =
+    JD.map2 TickData
+        (JD.field "snakes" (JD.list Snake.decoder))
+        (JD.field "apples" (JD.list Game.appleDecoder))
 
 
 view : Model -> Html Msg
 view model =
     div [ class "game-container", style "padding" "20px" ]
         [ h1 [] [ text "Snaker - Elm 0.19.1" ]
-        , div []
-            [ text ("Status: " ++ connectionStatusToString model.connectionStatus) ]
-        , div []
-            [ text ("Direction: " ++ Snake.directionToString model.currentDirection) ]
+        , div [ class "game-status" ]
+            [ text ("Status: " ++ connectionStatusToString model.connectionStatus)
+            , case model.playerId of
+                Just pid ->
+                    text (" | Player ID: " ++ pid)
+
+                Nothing ->
+                    text ""
+            ]
         , case model.error of
             Just err ->
                 div [ style "color" "red" ] [ text ("Error: " ++ err) ]
@@ -125,10 +160,7 @@ view model =
                 text ""
         , case model.gameState of
             Just state ->
-                div []
-                    [ text ("Snakes: " ++ String.fromInt (List.length state.snakes))
-                    , text (", Apples: " ++ String.fromInt (List.length state.apples))
-                    ]
+                Board.view state model.playerId
 
             Nothing ->
                 div [] [ text "Waiting for game state..." ]
