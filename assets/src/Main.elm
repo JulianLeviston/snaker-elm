@@ -42,10 +42,10 @@ init _ =
     ( { gameState = Nothing
       , playerId = Nothing
       , currentDirection = Right
-      , connectionStatus = Disconnected
+      , connectionStatus = Connecting
       , error = Nothing
       }
-    , Cmd.none
+    , Ports.joinGame (JE.object [])
     )
 
 
