@@ -9,8 +9,12 @@ import Input
 import Json.Decode as JD
 import Json.Encode as JE
 import Ports
+import Process
 import Snake exposing (Direction(..))
+import Task
 import View.Board as Board
+import View.Notifications as Notifications
+import View.Scoreboard as Scoreboard
 
 
 type alias Model =
@@ -19,6 +23,7 @@ type alias Model =
     , currentDirection : Direction
     , connectionStatus : ConnectionStatus
     , error : Maybe String
+    , notification : Maybe String
     }
 
 
@@ -36,6 +41,7 @@ type Msg
     | PlayerLeft JD.Value
     | GotTick JD.Value
     | JoinGame
+    | ClearNotification
 
 
 init : () -> ( Model, Cmd Msg )
@@ -45,6 +51,7 @@ init _ =
       , currentDirection = Right
       , connectionStatus = Connecting
       , error = Nothing
+      , notification = Nothing
       }
     , Ports.joinGame (JE.object [])
     )
@@ -88,18 +95,44 @@ update msg model =
         PlayerJoined value ->
             case JD.decodeValue playerJoinedDecoder value of
                 Ok playerData ->
-                    ( { model | playerId = Just playerData.id }
-                    , Cmd.none
+                    let
+                        -- Only show notification if this isn't our own join
+                        notificationMsg =
+                            if model.playerId == Nothing then
+                                -- This is our join, don't show notification
+                                Nothing
+
+                            else
+                                Just (playerData.name ++ " joined")
+
+                        clearCmd =
+                            case notificationMsg of
+                                Just _ ->
+                                    Process.sleep 3000
+                                        |> Task.perform (\_ -> ClearNotification)
+
+                                Nothing ->
+                                    Cmd.none
+                    in
+                    ( { model
+                        | playerId = Just playerData.id
+                        , notification = notificationMsg
+                      }
+                    , clearCmd
                     )
 
                 Err _ ->
                     ( model, Cmd.none )
 
         PlayerLeft _ ->
-            -- Player left handling (future enhancement)
-            ( model, Cmd.none )
+            ( { model | notification = Just "Player left" }
+            , Process.sleep 3000
+                |> Task.perform (\_ -> ClearNotification)
+            )
 
         GotTick value ->
+            -- Merge tick delta (snakes, apples) into existing state
+            -- Grid dimensions come from initial game_state, tick only has entity updates
             case JD.decodeValue tickDecoder value of
                 Ok tickData ->
                     ( { model
@@ -114,16 +147,23 @@ update msg model =
                 Err _ ->
                     ( model, Cmd.none )
 
+        ClearNotification ->
+            ( { model | notification = Nothing }, Cmd.none )
+
 
 type alias PlayerJoinedData =
     { id : String
+    , name : String
     }
 
 
 playerJoinedDecoder : JD.Decoder PlayerJoinedData
 playerJoinedDecoder =
-    JD.map PlayerJoinedData
-        (JD.field "id" JD.string)
+    JD.field "player"
+        (JD.map2 PlayerJoinedData
+            (JD.field "id" (JD.map String.fromInt JD.int))
+            (JD.field "name" JD.string)
+        )
 
 
 type alias TickData =
@@ -137,6 +177,8 @@ tickDecoder =
     JD.map2 TickData
         (JD.field "snakes" (JD.list Snake.decoder))
         (JD.field "apples" (JD.list Game.appleDecoder))
+
+
 
 
 view : Model -> Html Msg
@@ -160,10 +202,14 @@ view model =
                 text ""
         , case model.gameState of
             Just state ->
-                Board.view state model.playerId
+                div [ class "game-layout" ]
+                    [ Board.view state model.playerId
+                    , Scoreboard.view state.snakes model.playerId
+                    ]
 
             Nothing ->
                 div [] [ text "Waiting for game state..." ]
+        , Notifications.view model.notification
         ]
 
 
