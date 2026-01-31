@@ -47,6 +47,13 @@ Plans:
 
 **Dependencies:** Phase 1 (requires Phoenix 1.7 WebSocket transport)
 
+**Plans:** 3 plans
+
+Plans:
+- [ ] 02-01-PLAN.md — Replace Brunch with esbuild asset pipeline
+- [ ] 02-02-PLAN.md — Fresh Elm 0.19.1 project with ports and keyboard input
+- [ ] 02-03-PLAN.md — WebSocket integration with Phoenix Channels
+
 **Requirements:**
 - AST-01: Brunch removed, esbuild configured
 - AST-02: Elm compilation integrated with asset pipeline
@@ -92,7 +99,7 @@ Plans:
 | Phase | Status | Requirements | Completion |
 |-------|--------|--------------|------------|
 | 1 - Backend Modernization | Complete | 7/7 | 100% |
-| 2 - Frontend Migration | Pending | 0/11 | 0% |
+| 2 - Frontend Migration | Planned | 0/11 | 0% |
 | 3 - Integration & Sync | Pending | 0/2 | 0% |
 
 **Overall:** 7/20 requirements complete (35%)
@@ -101,7 +108,7 @@ Plans:
 
 ## Phase Sequencing
 
-**Critical path:** 1 → 2 → 3 (strictly sequential)
+**Critical path:** 1 -> 2 -> 3 (strictly sequential)
 
 **Rationale:**
 - Phase 1 establishes server-authoritative architecture foundation (GameServer, authoritative state)
