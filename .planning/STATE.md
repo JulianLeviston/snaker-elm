@@ -1,7 +1,7 @@
 # Project State: Snaker Elm Upgrade
 
 **Last Updated:** 2026-01-31
-**Current Focus:** Phase 2 - Frontend Upgrade (Phase 1 complete)
+**Current Focus:** Phase 2 - Frontend Upgrade (Plan 1 of 3 complete)
 
 ## Project Reference
 
@@ -12,27 +12,28 @@ Two players in separate browsers join the game. Player A sees Player B's snake a
 
 ## Current Position
 
-**Phase:** 1 of 3 (Backend Modernization) - COMPLETE
-**Plan:** 3 of 3 complete in phase
-**Status:** Phase 1 complete, ready for Phase 2
-**Last activity:** 2026-01-31 - Completed 01-03-PLAN.md (Server-Authoritative Game State)
+**Phase:** 2 of 3 (Frontend Migration)
+**Plan:** 1 of 3 complete in phase
+**Status:** In progress - esbuild toolchain ready
+**Last activity:** 2026-01-31 - Completed 02-01-PLAN.md (esbuild Migration)
 
 **Progress:**
 ```
-[######              ] 15% (3/20 requirements)
+[########            ] 20% (4/20 requirements)
 
-Phase 1: [##########] 100% (3/3 plans) ✓
-Phase 2: [          ] 0% (0/? plans)
+Phase 1: [##########] 100% (3/3 plans)
+Phase 2: [###       ] 33% (1/3 plans)
 Phase 3: [          ] 0% (0/? plans)
 ```
 
 ## Performance Metrics
 
-**Velocity:** 1.5 plans/session average (Phase 1 complete)
+**Velocity:** 1.5 plans/session average
 **Quality:** N/A (no verification runs yet)
 
 **Phase History:**
 - Phase 1: Complete (3/3 plans, 3 sessions, ~30 min total)
+- Phase 2: In progress (1/3 plans, ~2 min)
 
 ## Accumulated Context
 
@@ -53,13 +54,15 @@ Phase 3: [          ] 0% (0/? plans)
 | 2026-01-31 | 1.5 second invincibility on spawn | Prevent instant death in crowded areas | Brief grace period after spawn/respawn |
 | 2026-01-31 | Pure game logic modules | Separate rules from state management | Testable, reusable Snake/Apple/Grid modules |
 | 2026-01-31 | Full state on join, delta on tick | Balance initial sync with update efficiency | Can optimize to true deltas later |
+| 2026-01-31 | esbuild with TypeScript strict mode | Modern build toolchain; type safety | Replaced Brunch, enables TS adoption |
+| 2026-01-31 | esbuild context API for watch mode | Current best practice, not deprecated build() | Proper incremental builds |
 
 ### Cross-Phase TODOs
 
 - [x] Verify exact Phoenix 1.7.x patch version during Phase 1 environment setup — Phoenix 1.7.21
 - [ ] Research client prediction patterns during Phase 2 planning (optional optimization)
 - [ ] Test multi-client scenarios with network latency throttling in Phase 3
-- [ ] Consider migrating from Brunch to esbuild (asset pipeline modernization)
+- [x] Consider migrating from Brunch to esbuild (asset pipeline modernization) — Completed in 02-01
 
 ### Pending Todos
 
@@ -82,8 +85,8 @@ Phase 3: [          ] 0% (0/? plans)
 
 ## Session Continuity
 
-**Last session:** 2026-01-31 01:44 UTC
-**Stopped at:** Completed 01-03-PLAN.md (Phase 1 complete)
+**Last session:** 2026-01-31 09:33 UTC
+**Stopped at:** Completed 02-01-PLAN.md (esbuild Migration)
 **Resume file:** None
 
 **What to Remember:**
@@ -96,24 +99,26 @@ Phase 3: [          ] 0% (0/? plans)
 - Phoenix 1.7.21 running with Jason, PubSub 2.0, and WebSocket transport
 
 **Phase 1 Complete:**
-- ✅ Mise environment setup (Elixir 1.15.8, Erlang 26, Node 20)
-- ✅ Phoenix 1.7.21 upgrade with PubSub 2.0
-- ✅ GameServer GenServer with 100ms tick loop
-- ✅ Pure game logic modules (Snake, Apple, Grid)
-- ✅ Server-authoritative game state with delta broadcasts
+- Mise environment setup (Elixir 1.15.8, Erlang 26, Node 20)
+- Phoenix 1.7.21 upgrade with PubSub 2.0
+- GameServer GenServer with 100ms tick loop
+- Pure game logic modules (Snake, Apple, Grid)
+- Server-authoritative game state with delta broadcasts
+
+**Phase 2 Progress:**
+- 02-01: esbuild toolchain with TypeScript and Elm plugin support
+- Next: 02-02 Elm 0.19.1 upgrade
 
 **Next Action:**
-Plan Phase 2: Frontend Upgrade (Elm 0.18 → 0.19.1 with ports-based WebSocket)
+Execute 02-02-PLAN.md: Elm 0.19.1 upgrade with syntax migration
 
 **Context for Next Session:**
-- Backend is fully modernized and running Phoenix 1.7.21
-- GameServer ticks every 100ms and broadcasts deltas via PubSub
-- Frontend still Elm 0.18 with client-side simulation (incompatible)
-- Need ports-based WebSocket implementation for Elm 0.19
-- Frontend will consume server ticks instead of simulating locally
-- Read 01-03-SUMMARY.md for game logic architecture
-- Check GameServer modules in lib/snaker/game_server.ex and lib/snaker/game/
-- Asset pipeline (Brunch) still works but deprecated - consider esbuild migration
+- Build toolchain ready: esbuild + TypeScript + esbuild-plugin-elm
+- Phoenix watcher configured for build.js --watch
+- elm.json needed for Elm plugin to work (created in 02-02)
+- System Elm still 0.18.0 - needs upgrade to 0.19.1
+- Elm code in assets/elm/ needs syntax migration for 0.19
+- Read 02-01-SUMMARY.md for build configuration
 
 ---
 
