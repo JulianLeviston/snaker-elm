@@ -328,7 +328,9 @@ defmodule Snaker.GameServer do
       body: Enum.map(snake.segments, &serialize_position/1),
       direction: Atom.to_string(snake.direction),
       color: snake.color,
-      name: snake.name
+      name: snake.name,
+      is_invincible: Snake.is_invincible?(snake),
+      state: "alive"  # Death handling in later plan
     }
   end
 
