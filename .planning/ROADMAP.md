@@ -50,9 +50,9 @@ Plans:
 **Plans:** 3 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — Replace Brunch with esbuild asset pipeline
-- [ ] 02-02-PLAN.md — Fresh Elm 0.19.1 project with ports and keyboard input
-- [ ] 02-03-PLAN.md — WebSocket integration with Phoenix Channels
+- [x] 02-01-PLAN.md — Replace Brunch with esbuild asset pipeline
+- [x] 02-02-PLAN.md — Fresh Elm 0.19.1 project with ports and keyboard input
+- [x] 02-03-PLAN.md — WebSocket integration with Phoenix Channels
 
 **Requirements:**
 - AST-01: Brunch removed, esbuild configured
@@ -99,10 +99,10 @@ Plans:
 | Phase | Status | Requirements | Completion |
 |-------|--------|--------------|------------|
 | 1 - Backend Modernization | Complete | 7/7 | 100% |
-| 2 - Frontend Migration | Planned | 0/11 | 0% |
+| 2 - Frontend Migration | Complete | 11/11 | 100% |
 | 3 - Integration & Sync | Pending | 0/2 | 0% |
 
-**Overall:** 7/20 requirements complete (35%)
+**Overall:** 18/20 requirements complete (90%)
 
 ---
 

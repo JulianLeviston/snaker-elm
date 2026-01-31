@@ -21,23 +21,23 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Asset Pipeline
 
-- [ ] **AST-01**: Brunch removed, esbuild configured
-- [ ] **AST-02**: Elm compilation integrated with asset pipeline
-- [ ] **AST-03**: Development watchers work (auto-rebuild on change)
+- [x] **AST-01**: Brunch removed, esbuild configured
+- [x] **AST-02**: Elm compilation integrated with asset pipeline
+- [x] **AST-03**: Development watchers work (auto-rebuild on change)
 
 ### Elm Upgrade
 
-- [ ] **ELM-01**: Elm upgraded to 0.19.1
-- [ ] **ELM-02**: elm.json replaces elm-package.json
-- [ ] **ELM-03**: Html.program migrated to Browser.element
-- [ ] **ELM-04**: Keyboard input uses Browser.Events (not removed Keyboard module)
-- [ ] **ELM-05**: All Elm code compiles without errors
+- [x] **ELM-01**: Elm upgraded to 0.19.1
+- [x] **ELM-02**: elm.json replaces elm-package.json
+- [x] **ELM-03**: Html.program migrated to Browser.element
+- [x] **ELM-04**: Keyboard input uses Browser.Events (not removed Keyboard module)
+- [x] **ELM-05**: All Elm code compiles without errors
 
 ### WebSocket/Channels
 
-- [ ] **WS-01**: Phoenix Channels communication via ports (replaces elm-phoenix-socket)
-- [ ] **WS-02**: Player can join game channel
-- [ ] **WS-03**: Direction changes sent to server and broadcast to other players
+- [x] **WS-01**: Phoenix Channels communication via ports (replaces elm-phoenix-socket)
+- [x] **WS-02**: Player can join game channel
+- [x] **WS-03**: Direction changes sent to server and broadcast to other players
 
 ### State Sync Fix
 
@@ -79,17 +79,17 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PHX-03 | Phase 1 | Complete |
 | PHX-04 | Phase 1 | Complete |
 | SYNC-01 | Phase 1 | Complete |
-| AST-01 | Phase 2 | Pending |
-| AST-02 | Phase 2 | Pending |
-| AST-03 | Phase 2 | Pending |
-| ELM-01 | Phase 2 | Pending |
-| ELM-02 | Phase 2 | Pending |
-| ELM-03 | Phase 2 | Pending |
-| ELM-04 | Phase 2 | Pending |
-| ELM-05 | Phase 2 | Pending |
-| WS-01 | Phase 2 | Pending |
-| WS-02 | Phase 2 | Pending |
-| WS-03 | Phase 2 | Pending |
+| AST-01 | Phase 2 | Complete |
+| AST-02 | Phase 2 | Complete |
+| AST-03 | Phase 2 | Complete |
+| ELM-01 | Phase 2 | Complete |
+| ELM-02 | Phase 2 | Complete |
+| ELM-03 | Phase 2 | Complete |
+| ELM-04 | Phase 2 | Complete |
+| ELM-05 | Phase 2 | Complete |
+| WS-01 | Phase 2 | Complete |
+| WS-02 | Phase 2 | Complete |
+| WS-03 | Phase 2 | Complete |
 | SYNC-02 | Phase 3 | Pending |
 | SYNC-03 | Phase 3 | Pending |
 
@@ -105,4 +105,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-01-30*
-*Last updated: 2026-01-31 after Phase 1 completion*
+*Last updated: 2026-01-31 after Phase 2 completion*
