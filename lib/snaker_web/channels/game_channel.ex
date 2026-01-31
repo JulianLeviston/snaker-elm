@@ -4,7 +4,7 @@ defmodule SnakerWeb.GameChannel do
   alias Snaker.GameServer
 
   def join("game:snake", _message, socket) do
-    # Subscribe to game broadcasts
+    # Subscribe to game tick broadcasts from GameServer
     Phoenix.PubSub.subscribe(Snaker.PubSub, "game:snake")
 
     # Join game and get initial state
@@ -19,11 +19,13 @@ defmodule SnakerWeb.GameChannel do
   end
 
   def handle_info(:after_join, socket) do
-    broadcast!(socket, "player:join", %{player: socket.assigns.player})
+    # Push player:join to all clients via direct push (not broadcast)
+    push(socket, "player:join", %{player: socket.assigns.player})
     {:noreply, socket}
   end
 
   def handle_info({:tick, delta}, socket) do
+    Logger.debug("[GameChannel] Pushing tick to client")
     push(socket, "tick", delta)
     {:noreply, socket}
   end
@@ -33,10 +35,16 @@ defmodule SnakerWeb.GameChannel do
     {:noreply, socket}
   end
 
+  # Handle PubSub broadcasts received by this process
+  def handle_info(%Phoenix.Socket.Broadcast{event: _event, payload: _payload}, socket) do
+    # Ignore broadcasts from other channels (we handle ticks via :tick tuple)
+    {:noreply, socket}
+  end
+
   def terminate(_reason, socket) do
     if socket.assigns[:player] do
       GameServer.leave_game(socket.assigns.player.id)
-      broadcast!(socket, "player:leave", %{player: socket.assigns.player})
+      # Player leave is broadcast via PubSub from GameServer
     end
     :ok
   end

@@ -305,7 +305,7 @@ defmodule Snaker.GameServer do
     # Can optimize to true delta later if needed
     %{
       snakes: new_state.snakes |> Map.values() |> Enum.map(&serialize_snake/1),
-      apples: new_state.apples
+      apples: Enum.map(new_state.apples, &serialize_position/1)
     }
   end
 
@@ -316,20 +316,23 @@ defmodule Snaker.GameServer do
   defp serialize_full_state(state) do
     %{
       snakes: state.snakes |> Map.values() |> Enum.map(&serialize_snake/1),
-      apples: state.apples,
-      grid: %{width: elem(state.grid, 0), height: elem(state.grid, 1)}
+      apples: Enum.map(state.apples, &serialize_position/1),
+      grid_width: elem(state.grid, 0),
+      grid_height: elem(state.grid, 1)
     }
   end
 
   defp serialize_snake(snake) do
     %{
-      id: snake.id,
-      segments: snake.segments,
-      direction: snake.direction,
+      id: to_string(snake.id),
+      body: Enum.map(snake.segments, &serialize_position/1),
+      direction: Atom.to_string(snake.direction),
       color: snake.color,
       name: snake.name
     }
   end
+
+  defp serialize_position({x, y}), do: %{x: x, y: y}
 
   defp random_name do
     [name, adjective, animal] =

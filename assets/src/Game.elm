@@ -32,8 +32,7 @@ type alias GameState =
 
 appleDecoder : JD.Decoder Apple
 appleDecoder =
-    JD.map Apple
-        (JD.field "position" Snake.positionDecoder)
+    JD.map Apple Snake.positionDecoder
 
 
 playerDecoder : JD.Decoder Player
