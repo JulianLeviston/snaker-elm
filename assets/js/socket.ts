@@ -72,14 +72,16 @@ export function connectSocket(app: ElmApp): void {
     }
   });
 
-  // Handle leave game request from Elm
-  app.ports.leaveGame.subscribe(() => {
-    if (channel) {
-      console.log("Leaving game channel...");
-      channel.leave();
-      channel = null;
-    }
-  });
+  // Handle leave game request from Elm (port may be tree-shaken if unused)
+  if (app.ports.leaveGame) {
+    app.ports.leaveGame.subscribe(() => {
+      if (channel) {
+        console.log("Leaving game channel...");
+        channel.leave();
+        channel = null;
+      }
+    });
+  }
 
   // Handle socket errors
   socket.onError(() => {

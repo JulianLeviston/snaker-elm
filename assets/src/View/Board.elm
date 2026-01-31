@@ -6,12 +6,20 @@ import Html.Attributes
 import Html.Keyed
 import Snake exposing (Position, Snake)
 import Svg exposing (Svg, circle, g, rect, svg, text_)
-import Svg.Attributes exposing (..)
+import Svg.Attributes as SA
 
 
 cellSize : Int
 cellSize =
     20
+
+
+{-| Safari has a bug where setting className property on SVG elements fails
+because SVGAnimatedString is readonly. Use setAttribute via `attribute` instead.
+-}
+svgClass : String -> Svg.Attribute msg
+svgClass name =
+    Html.Attributes.attribute "class" name
 
 
 view : GameState -> Maybe String -> Html msg
@@ -24,10 +32,10 @@ view gameState maybePlayerId =
             gameState.gridHeight * cellSize
     in
     svg
-        [ Svg.Attributes.width (String.fromInt width)
-        , Svg.Attributes.height (String.fromInt height)
-        , viewBox ("0 0 " ++ String.fromInt width ++ " " ++ String.fromInt height)
-        , Html.Attributes.class "game-board"
+        [ SA.width (String.fromInt width)
+        , SA.height (String.fromInt height)
+        , SA.viewBox ("0 0 " ++ String.fromInt width ++ " " ++ String.fromInt height)
+        , svgClass "game-board"
         ]
         [ background width height
         , renderApples gameState.apples
@@ -38,18 +46,18 @@ view gameState maybePlayerId =
 background : Int -> Int -> Svg msg
 background width height =
     rect
-        [ x "0"
-        , y "0"
-        , Svg.Attributes.width (String.fromInt width)
-        , Svg.Attributes.height (String.fromInt height)
-        , fill "#1a1a2e"
+        [ SA.x "0"
+        , SA.y "0"
+        , SA.width (String.fromInt width)
+        , SA.height (String.fromInt height)
+        , SA.fill "#1a1a2e"
         ]
         []
 
 
 renderApples : List Apple -> Svg msg
 renderApples apples =
-    g [ class "apples" ]
+    g [ svgClass "apples" ]
         (List.map renderApple apples)
 
 
@@ -64,18 +72,18 @@ renderApple apple =
     in
     g []
         [ circle
-            [ cx (String.fromInt cx_)
-            , cy (String.fromInt cy_)
-            , r (String.fromInt (cellSize // 2 - 2))
-            , fill "#ff6b6b"
-            , class "apple"
+            [ SA.cx (String.fromInt cx_)
+            , SA.cy (String.fromInt cy_)
+            , SA.r (String.fromInt (cellSize // 2 - 2))
+            , SA.fill "#ff6b6b"
+            , svgClass "apple"
             ]
             []
         , text_
-            [ x (String.fromInt cx_)
-            , y (String.fromInt (cy_ + 4))
-            , textAnchor "middle"
-            , fontSize "14"
+            [ SA.x (String.fromInt cx_)
+            , SA.y (String.fromInt (cy_ + 4))
+            , SA.textAnchor "middle"
+            , SA.fontSize "14"
             ]
             [ Svg.text "+" ]
         ]
@@ -84,7 +92,7 @@ renderApple apple =
 renderSnakes : List Snake -> Maybe String -> Svg msg
 renderSnakes snakes maybePlayerId =
     Html.Keyed.node "g"
-        [ class "snakes" ]
+        [ svgClass "snakes" ]
         (List.map (keyedSnake maybePlayerId) snakes)
 
 
@@ -120,7 +128,7 @@ renderSnake snake maybePlayerId =
                 |> List.filter (not << String.isEmpty)
                 |> String.join " "
     in
-    g [ class classes ]
+    g [ svgClass classes ]
         (renderSnakeBody snake)
 
 
@@ -181,26 +189,26 @@ renderSnakeHead snake pos =
                 Snake.Right ->
                     ( cx_ + eyeOffset, cy_ + eyeOffset )
     in
-    g [ class "snake-head" ]
+    g [ svgClass "snake-head" ]
         [ circle
-            [ cx (String.fromInt cx_)
-            , cy (String.fromInt cy_)
-            , r (String.fromInt headRadius)
-            , fill ("#" ++ snake.color)
+            [ SA.cx (String.fromInt cx_)
+            , SA.cy (String.fromInt cy_)
+            , SA.r (String.fromInt headRadius)
+            , SA.fill ("#" ++ snake.color)
             ]
             []
         , circle
-            [ cx (String.fromInt eyeX1)
-            , cy (String.fromInt eyeY1)
-            , r (String.fromInt eyeRadius)
-            , fill "#ffffff"
+            [ SA.cx (String.fromInt eyeX1)
+            , SA.cy (String.fromInt eyeY1)
+            , SA.r (String.fromInt eyeRadius)
+            , SA.fill "#ffffff"
             ]
             []
         , circle
-            [ cx (String.fromInt eyeX2)
-            , cy (String.fromInt eyeY2)
-            , r (String.fromInt eyeRadius)
-            , fill "#ffffff"
+            [ SA.cx (String.fromInt eyeX2)
+            , SA.cy (String.fromInt eyeY2)
+            , SA.r (String.fromInt eyeRadius)
+            , SA.fill "#ffffff"
             ]
             []
         ]
@@ -219,10 +227,10 @@ renderBodySegment snake index pos =
             cellSize // 2 - 2
     in
     circle
-        [ cx (String.fromInt cx_)
-        , cy (String.fromInt cy_)
-        , r (String.fromInt segmentRadius)
-        , fill ("#" ++ snake.color)
-        , class "snake-segment"
+        [ SA.cx (String.fromInt cx_)
+        , SA.cy (String.fromInt cy_)
+        , SA.r (String.fromInt segmentRadius)
+        , SA.fill ("#" ++ snake.color)
+        , svgClass "snake-segment"
         ]
         []
