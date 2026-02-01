@@ -32,6 +32,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
   console.log("Elm app initialized");
 
+  // Prevent arrow keys from scrolling the page
+  document.addEventListener("keydown", (e) => {
+    if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) {
+      e.preventDefault();
+    }
+  });
+
   // Connect Phoenix socket and wire to Elm ports
   connectSocket(app);
 });

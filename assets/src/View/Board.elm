@@ -3,7 +3,7 @@ module View.Board exposing (view)
 import Game exposing (Apple, GameState)
 import Html exposing (Html)
 import Html.Attributes
-import Html.Keyed
+import Svg.Keyed
 import Snake exposing (Position, Snake)
 import Svg exposing (Svg, circle, g, rect, svg, text_)
 import Svg.Attributes as SA
@@ -11,7 +11,7 @@ import Svg.Attributes as SA
 
 cellSize : Int
 cellSize =
-    20
+    15
 
 
 {-| Safari has a bug where setting className property on SVG elements fails
@@ -30,6 +30,9 @@ view gameState maybePlayerId =
 
         height =
             gameState.gridHeight * cellSize
+
+        _ =
+            Debug.log "Board.view" { gridW = gameState.gridWidth, gridH = gameState.gridHeight, snakeCount = List.length gameState.snakes }
     in
     svg
         [ SA.width (String.fromInt width)
@@ -91,7 +94,7 @@ renderApple apple =
 
 renderSnakes : List Snake -> Maybe String -> Svg msg
 renderSnakes snakes maybePlayerId =
-    Html.Keyed.node "g"
+    Svg.Keyed.node "g"
         [ svgClass "snakes" ]
         (List.map (keyedSnake maybePlayerId) snakes)
 

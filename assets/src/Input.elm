@@ -1,5 +1,6 @@
 module Input exposing
     ( keyDecoder
+    , keyDecoderWithPreventDefault
     )
 
 import Json.Decode as JD
@@ -23,6 +24,41 @@ keyDecoder =
                 else
                     JD.succeed (keyToDirection key)
             )
+
+
+{-| Decoder for use with preventDefaultOn.
+Returns (msg, shouldPreventDefault) tuple.
+Prevents default for arrow keys to stop page scrolling.
+-}
+keyDecoderWithPreventDefault : (Maybe Direction -> msg) -> JD.Decoder ( msg, Bool )
+keyDecoderWithPreventDefault toMsg =
+    JD.map2 Tuple.pair
+        (JD.field "key" JD.string)
+        (JD.field "repeat" JD.bool)
+        |> JD.map
+            (\( key, isRepeat ) ->
+                let
+                    direction =
+                        if isRepeat then
+                            Nothing
+                        else
+                            keyToDirection key
+
+                    shouldPreventDefault =
+                        isArrowKey key
+                in
+                ( toMsg direction, shouldPreventDefault )
+            )
+
+
+isArrowKey : String -> Bool
+isArrowKey key =
+    case key of
+        "ArrowUp" -> True
+        "ArrowDown" -> True
+        "ArrowLeft" -> True
+        "ArrowRight" -> True
+        _ -> False
 
 
 keyToDirection : String -> Maybe Direction
