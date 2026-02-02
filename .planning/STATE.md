@@ -5,35 +5,35 @@
 See: .planning/PROJECT.md (updated 2026-02-03)
 
 **Core value:** Players can play snake together in real-time without requiring a backend server
-**Current focus:** Phase 5 - P2P Connection Layer (Phase 4 complete)
+**Current focus:** Phase 5 - P2P Connection Layer (Plan 01 complete)
 
 ## Current Position
 
-Phase: 4 of 7 (Game Engine Port) - COMPLETE
-Plan: 2 of 2 in current phase
-Status: Phase complete
-Last activity: 2026-02-03 - Phase 4 verified and complete
+Phase: 5 of 7 (P2P Connection Layer)
+Plan: 1 of 2 in current phase
+Status: In progress
+Last activity: 2026-02-02 - Completed 05-01-PLAN.md
 
-Progress: [==░░░░░░░░] 25% (2/8 plans)
+Progress: [===░░░░░░░] 37% (3/8 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2 (v2)
-- Average duration: 2.75 min
-- Total execution time: 5.5 min
+- Total plans completed: 3 (v2)
+- Average duration: 3.2 min
+- Total execution time: 9.5 min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 4. Game Engine Port | 2/2 | 5.5 min | 2.75 min |
-| 5. P2P Connection Layer | 0/2 | - | - |
+| 5. P2P Connection Layer | 1/2 | 4 min | 4 min |
 | 6. Host/Client Integration | 0/2 | - | - |
 | 7. Migration & Polish | 0/2 | - | - |
 
 **Recent Trend:**
-- Last 5 plans: 04-01 (3 min), 04-02 (2.5 min)
+- Last 5 plans: 04-01 (3 min), 04-02 (2.5 min), 05-01 (4 min)
 - Trend: Consistent execution
 
 *Updated after each plan completion*
@@ -53,6 +53,9 @@ Recent decisions affecting current work:
 - [04-01]: Invincibility tracked as tick count (15 ticks = 1500ms)
 - [04-02]: Apple expiry at 100 ticks (10 seconds)
 - [04-02]: Pending spawn tracking to prevent race conditions
+- [05-01]: 4-letter A-Z room codes for human-friendly sharing
+- [05-01]: 10-second timeout for P2P join attempts
+- [05-01]: Auto-join when room code input reaches 4 characters
 
 ### Pending Todos
 
@@ -64,10 +67,10 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-03
-Stopped at: Phase 4 verified - ready for Phase 5 planning
+Last session: 2026-02-02
+Stopped at: Completed 05-01-PLAN.md
 Resume file: None
 
 ---
 *State initialized: 2026-02-03*
-*Last updated: 2026-02-03 (Phase 4 verified)*
+*Last updated: 2026-02-02 (05-01 complete)*
