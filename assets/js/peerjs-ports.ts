@@ -117,10 +117,8 @@ export function setupPeerPorts(app: ElmAppWithP2P): void {
     const roomCode = generateRoomCode();
     console.log(`Creating room with code: ${roomCode}`);
 
-    peer = new Peer(roomCode, {
-      host: "peerjs.com",
-      secure: true,
-    });
+    // Use default PeerJS cloud server (0.peerjs.com)
+    peer = new Peer(roomCode);
 
     // Handle peer open (successfully connected to signaling server)
     peer.on("open", (id) => {
@@ -175,11 +173,8 @@ export function setupPeerPorts(app: ElmAppWithP2P): void {
 
     console.log(`Joining room: ${roomCode}`);
 
-    // Create peer with random ID for client
-    peer = new Peer({
-      host: "peerjs.com",
-      secure: true,
-    });
+    // Create peer with random ID for client (uses default PeerJS cloud)
+    peer = new Peer();
 
     // Handle peer open (successfully connected to signaling server)
     peer.on("open", () => {
