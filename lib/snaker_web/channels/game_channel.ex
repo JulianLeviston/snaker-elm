@@ -3,6 +3,9 @@ defmodule SnakerWeb.GameChannel do
   require Logger
   alias Snaker.GameServer
 
+  # Intercept these events to handle via handle_out/3
+  intercept ["player:join"]
+
   def join("game:snake", _message, socket) do
     # Subscribe to game tick broadcasts from GameServer
     Phoenix.PubSub.subscribe(Snaker.PubSub, "game:snake")
@@ -19,8 +22,15 @@ defmodule SnakerWeb.GameChannel do
   end
 
   def handle_info(:after_join, socket) do
-    # Push player:join to all clients via direct push (not broadcast)
-    push(socket, "player:join", %{player: socket.assigns.player})
+    # Broadcast player:join to all OTHER clients (not the joining player)
+    # The joining player already has their info from the join response
+    broadcast_from!(socket, "player:join", %{player: socket.assigns.player})
+    {:noreply, socket}
+  end
+
+  # Handle outgoing broadcasts - push to client
+  def handle_out("player:join", payload, socket) do
+    push(socket, "player:join", payload)
     {:noreply, socket}
   end
 

@@ -96,10 +96,12 @@ update msg model =
             case JD.decodeValue playerJoinedDecoder value of
                 Ok playerData ->
                     let
+                        isOwnJoin =
+                            model.playerId == Nothing
+
                         -- Only show notification if this isn't our own join
                         notificationMsg =
-                            if model.playerId == Nothing then
-                                -- This is our join, don't show notification
+                            if isOwnJoin then
                                 Nothing
 
                             else
@@ -113,9 +115,17 @@ update msg model =
 
                                 Nothing ->
                                     Cmd.none
+
+                        -- Only set playerId on our own join
+                        newPlayerId =
+                            if isOwnJoin then
+                                Just playerData.id
+
+                            else
+                                model.playerId
                     in
                     ( { model
-                        | playerId = Just playerData.id
+                        | playerId = newPlayerId
                         , notification = notificationMsg
                       }
                     , clearCmd

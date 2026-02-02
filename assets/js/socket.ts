@@ -47,6 +47,10 @@ export function connectSocket(app: ElmApp): void {
       .join()
       .receive("ok", (response) => {
         console.log("Joined game channel successfully:", response);
+        // Send player info to Elm (for setting playerId)
+        if (response.player) {
+          app.ports.playerJoined.send({ player: response.player });
+        }
         // Send initial game state to Elm
         if (response.game_state) {
           app.ports.receiveGameState.send(response.game_state);
