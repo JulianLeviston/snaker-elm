@@ -112,3 +112,193 @@
     font-weight: bold;
     opacity: 0.9;
 }
+
+/* ==========================================================================
+   Connection UI
+   ========================================================================== */
+
+.connection-panel {
+    margin-bottom: 20px;
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 8px;
+}
+
+/* Create/Join buttons */
+.connection-buttons {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.connection-buttons button {
+    padding: 10px 20px;
+    font-size: 14px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-create {
+    background: #4CAF50;
+    color: white;
+}
+
+.btn-create:hover {
+    background: #45a049;
+}
+
+.btn-join {
+    background: #2196F3;
+    color: white;
+}
+
+.btn-join:hover {
+    background: #1976D2;
+}
+
+.btn-leave {
+    background: #f44336;
+    color: white;
+    padding: 10px 20px;
+    font-size: 14px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-leave:hover {
+    background: #d32f2f;
+}
+
+.btn-cancel {
+    background: #9e9e9e;
+    color: white;
+    padding: 8px 16px;
+    font-size: 14px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-cancel:hover {
+    background: #757575;
+}
+
+/* Room code input */
+.room-code-input-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.room-code-input {
+    font-family: monospace;
+    font-size: 18px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    padding: 10px 16px;
+    width: 120px;
+    text-align: center;
+    border: 2px solid #ddd;
+    border-radius: 4px;
+}
+
+.room-code-input:focus {
+    outline: none;
+    border-color: #2196F3;
+}
+
+.room-code-hint {
+    font-size: 13px;
+    color: #666;
+}
+
+/* Room code display (host) */
+.room-code-display {
+    text-align: center;
+    margin: 20px 0;
+}
+
+.room-code {
+    font-family: monospace;
+    font-size: 48px;
+    font-weight: bold;
+    letter-spacing: 8px;
+    color: #333;
+}
+
+.copy-button {
+    margin-left: 16px;
+    padding: 8px 16px;
+    font-size: 14px;
+    background: #e0e0e0;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    vertical-align: middle;
+}
+
+.copy-button:hover {
+    background: #d0d0d0;
+}
+
+.copied-feedback {
+    color: #4CAF50;
+    font-size: 14px;
+    margin-left: 16px;
+    font-weight: bold;
+}
+
+/* Connection status */
+.connection-status {
+    font-size: 14px;
+    color: #666;
+    margin-top: 12px;
+}
+
+.connection-status.connected {
+    color: #4CAF50;
+}
+
+.connection-actions {
+    margin-top: 16px;
+}
+
+/* Spinner */
+.spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid #ddd;
+    border-top-color: #333;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    vertical-align: middle;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Connecting state */
+.connecting-state {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+/* Toast variant for connection errors (5 second duration) */
+.toast.connection-error {
+    animation: slideInFadeOut5s 5s ease-out forwards;
+}
+
+@keyframes slideInFadeOut5s {
+    0% { transform: translateX(400px); opacity: 0; }
+    6% { transform: translateX(0); opacity: 1; }
+    94% { transform: translateX(0); opacity: 1; }
+    100% { transform: translateX(400px); opacity: 0; }
+}

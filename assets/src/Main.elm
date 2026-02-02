@@ -17,6 +17,7 @@ import Snake exposing (Direction(..), Position)
 import Task
 import Time
 import View.Board as Board
+import View.ConnectionUI as ConnectionUI exposing (P2PConnectionState(..), P2PRole(..))
 import View.Notifications as Notifications
 import View.Scoreboard as Scoreboard
 
@@ -36,22 +37,6 @@ type alias Model =
     , roomCodeInput : String
     , showCopiedFeedback : Bool
     }
-
-
-{-| P2P connection state machine
--}
-type P2PConnectionState
-    = P2PNotConnected
-    | P2PCreatingRoom
-    | P2PJoiningRoom String  -- room code being joined
-    | P2PConnected P2PRole String  -- role and room code
-
-
-{-| Role in P2P game (host runs game logic, client syncs)
--}
-type P2PRole
-    = Host
-    | Client
 
 
 type GameMode
@@ -527,6 +512,16 @@ view : Model -> Html Msg
 view model =
     div [ class "game-container", style "padding" "20px" ]
         [ h1 [] [ text "Snaker - Elm 0.19.1" ]
+        , ConnectionUI.view
+            { p2pState = model.p2pState
+            , roomCodeInput = model.roomCodeInput
+            , showCopiedFeedback = model.showCopiedFeedback
+            , onCreateRoom = CreateRoom
+            , onJoinRoom = JoinRoom
+            , onLeaveRoom = LeaveRoom
+            , onRoomCodeInput = RoomCodeInputChanged
+            , onCopyRoomCode = CopyRoomCode
+            }
         , viewStatus model
         , case model.error of
             Just err ->
