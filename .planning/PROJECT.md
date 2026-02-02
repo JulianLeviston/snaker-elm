@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A multiplayer snake game built with Elm frontend and Phoenix/Elixir backend. Players connect via WebSocket, each controlling a snake on a shared grid, collecting apples to grow. Currently on legacy versions (Elm 0.18, Phoenix 1.3, Elixir 1.4) with a multiplayer state sync bug.
+A multiplayer snake game built with Elm 0.19.1 frontend and Phoenix 1.7/Elixir 1.15 backend. Players connect via WebSocket, each controlling a snake on a shared grid, collecting apples to grow. Server-authoritative architecture ensures all players see synchronized game state in real-time.
 
 ## Core Value
 
@@ -12,46 +12,51 @@ Players can play snake together in real-time and see each other's snakes in the 
 
 ### Validated
 
-- ✓ Single-page Elm app renders snake game board — existing
-- ✓ Player snake moves via arrow keys — existing
-- ✓ Snake wraps around board edges — existing
-- ✓ Apples spawn randomly and expire after timeout — existing
-- ✓ Eating apples grows snake — existing
-- ✓ WebSocket connection to Phoenix backend — existing
-- ✓ Players can join game and see other players — existing
-- ✓ Direction changes broadcast to all players — existing
-- ✓ Player leave/disconnect handled — existing
+- ✓ Single-page Elm app renders snake game board — v1
+- ✓ Player snake moves via arrow keys — v1
+- ✓ Snake wraps around board edges — v1
+- ✓ Apples spawn randomly and expire after timeout — v1
+- ✓ Eating apples grows snake — v1
+- ✓ WebSocket connection to Phoenix backend — v1
+- ✓ Players can join game and see other players — v1
+- ✓ Direction changes broadcast to all players — v1
+- ✓ Player leave/disconnect handled — v1
+- ✓ Elm upgraded from 0.18 to 0.19.1 — v1
+- ✓ Phoenix upgraded from 1.3 to 1.7.x — v1
+- ✓ Elixir upgraded from 1.4 to 1.15+ — v1
+- ✓ mise manages Elixir/Erlang/Node versions — v1
+- ✓ Multiplayer state sync fixed — players see correct snake positions on join — v1
 
 ### Active
 
-- [ ] Upgrade Elm from 0.18 to 0.19.1
-- [ ] Upgrade Phoenix from 1.3 to latest (1.7.x)
-- [ ] Upgrade Elixir from 1.4 to latest
-- [ ] Use mise to manage Elixir/Erlang versions
-- [ ] Fix multiplayer state sync — players see correct snake positions on join
+- [ ] WebGL 3D rendering of game board (v2)
+- [ ] 3D snake models (v2)
 
 ### Out of Scope
 
-- WebGL/3D rendering — future milestone
-- Collision detection between snakes — not in current scope
+- Collision detection between snakes — not in current scope, keep game simple
 - Persistent game state/rooms — not requested
-- Authentication/user accounts — not requested
+- Authentication/user accounts — not requested, anonymous play works
+- Mobile/touch controls — web keyboard controls sufficient
+- Sound effects — not requested
 
 ## Context
 
-**State sync bug root cause (from architecture analysis):**
-The current implementation only broadcasts direction changes and join/leave events. Each client computes snake positions independently based on local tick timing. When a player joins, they don't receive the actual current positions of other snakes — they only know directions, so positions diverge from the start.
+**Current State (v1 shipped 2026-02-02):**
+- Frontend: Elm 0.19.1 with Browser.element, ports-based WebSocket, SVG rendering
+- Backend: Phoenix 1.7.21, Elixir 1.15.8, GameServer GenServer with 100ms tick loop
+- Build: esbuild with TypeScript and esbuild-plugin-elm
+- Codebase: ~12,000 lines across Elm, Elixir, TypeScript
 
-**Migration complexity:**
-- Elm 0.18 → 0.19 is a major breaking change (different package format, no Native modules, Browser.* API changes)
-- elm-phoenix-socket library may not have 0.19 support — will need alternative
-- Phoenix 1.3 → 1.7 introduces LiveView, new directory structure, updated channel patterns
-- Brunch replaced by esbuild/mix in modern Phoenix
+**Architecture:**
+- Server-authoritative: GameServer maintains all game state (snakes, apples, collisions)
+- Tick-based updates: 100ms intervals, server broadcasts state to all clients
+- Full state on join: New players receive complete game state immediately
+- Input buffering: Server rate-limits direction changes to first per tick
 
-**Existing codebase:**
-- Frontend: `assets/elm/` with Main.elm and Data/* modules
-- Backend: `lib/snaker_web/` (channels, controllers) and `lib/snaker/` (Worker GenServer)
-- Build: Brunch-based asset pipeline
+**Known technical debt:**
+- `use Mix.Config` deprecated (should migrate to `import Config`)
+- `Endpoint.init/2` deprecated (should migrate to `config/runtime.exs`)
 
 ## Constraints
 
@@ -63,8 +68,13 @@ The current implementation only broadcasts direction changes and join/leave even
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Keep event-driven architecture | Proven pattern for real-time games | — Pending |
-| Fix sync by sending positions on join | Root cause is missing initial state | — Pending |
+| Server-authoritative architecture | Root cause of sync bug was client-side simulation | ✓ Good - sync issue resolved |
+| Ports-based WebSocket | elm-phoenix-socket incompatible with Elm 0.19 | ✓ Good - clean integration |
+| esbuild over Brunch | Brunch deprecated in Phoenix 1.7 | ✓ Good - fast builds |
+| 100ms tick interval | Balance smooth gameplay with server load | ✓ Good - responsive multiplayer |
+| Full state on join, delta on tick | Simplify initial sync | ✓ Good - reliable sync |
+| CSS for visual effects | GPU compositing, separate concerns | ✓ Good - smooth animations |
+| Html.Keyed for snake lists | Optimize frequent list updates | ✓ Good - better performance |
 
 ---
-*Last updated: 2026-01-30 after initialization*
+*Last updated: 2026-02-02 after v1 milestone*

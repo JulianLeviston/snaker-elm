@@ -1,13 +1,14 @@
-# Roadmap: Snaker Elm Upgrade
+# Milestone v1: Snaker-Elm Multiplayer Game Upgrade
 
-**Project:** Snaker-Elm Multiplayer Game Upgrade
-**Core Value:** Players can play snake together in real-time and see each other's snakes in the correct positions
-**Depth:** Quick (3 phases)
-**Created:** 2026-01-30
+**Status:** SHIPPED 2026-02-02
+**Phases:** 1-3
+**Total Plans:** 9
 
 ## Overview
 
 Upgrade from legacy stack (Elm 0.18 + Phoenix 1.3) to modern stack (Elm 0.19.1 + Phoenix 1.7) while fixing the multiplayer state synchronization bug. The migration follows a strict dependency chain: backend modernization enables server-authoritative game state, frontend migration enables ports-based WebSocket communication, and full integration delivers the sync fix.
+
+**Core Value:** Players can play snake together in real-time and see each other's snakes in the correct positions
 
 ## Phases
 
@@ -38,6 +39,8 @@ Plans:
 2. Phoenix server runs on 1.7.x with WebSocket transport accepting connections
 3. Server maintains game state and broadcasts tick events to console every 100ms
 4. All mix dependencies resolve and compile without errors
+
+**Completed:** 2026-01-30
 
 ---
 
@@ -74,6 +77,8 @@ Plans:
 4. Browser console shows successful WebSocket connection and channel join
 5. Direction changes flow bidirectionally through ports (JavaScript logs show messages)
 
+**Completed:** 2026-01-31
+
 ---
 
 ### Phase 3: Integration & Sync
@@ -99,42 +104,39 @@ Plans:
 3. Apples appear at identical positions and times across all connected clients
 4. Player disconnect removes their snake from all other clients' views immediately
 
----
-
-## Progress
-
-| Phase | Status | Requirements | Completion |
-|-------|--------|--------------|------------|
-| 1 - Backend Modernization | Complete | 7/7 | 100% |
-| 2 - Frontend Migration | Complete | 11/11 | 100% |
-| 3 - Integration & Sync | Complete | 2/2 | 100% |
-
-**Overall:** 20/20 requirements complete (100%)
+**Completed:** 2026-02-02
 
 ---
 
-## Phase Sequencing
+## Milestone Summary
 
-**Critical path:** 1 -> 2 -> 3 (strictly sequential)
+**Key Decisions:**
+- Server-authoritative architecture: Root cause of sync bug was client-side simulation; server must be source of truth
+- Ports-based WebSocket: elm-phoenix-socket incompatible with Elm 0.19 (Native modules removed)
+- esbuild over Brunch: Brunch deprecated in Phoenix 1.7, esbuild is official replacement
+- Quick depth (3 phases): Compress related work for faster delivery; minimal viable phase boundaries
+- 100ms tick interval: 10 updates/second balances smooth gameplay with server load
+- Full state on join, delta on tick: Simplifies initial sync while enabling future optimization
 
-**Rationale:**
-- Phase 1 establishes server-authoritative architecture foundation (GameServer, authoritative state)
-- Phase 2 requires Phoenix 1.7 WebSocket transport (from Phase 1) to test ports integration
-- Phase 3 requires working WebSocket communication (from Phase 2) to implement state sync
+**Issues Resolved:**
+- Multiplayer state sync bug: Clients now render server-authoritative state instead of independent simulation
+- Phoenix.View extraction: Added phoenix_view package for backward compatibility
+- JSON serialization: Convert Elixir tuples to maps for JSON encoding
+- Phoenix 1.7 layout: Changed @inner to @inner_content
+- Player notification broadcast: Used broadcast_from! with intercept for correct routing
 
-**No parallelization:** Phases are tightly coupled through breaking changes in WebSocket protocol and architectural shift from client-driven to server-authoritative game state.
+**Issues Deferred:**
+- Client prediction for smoother local movement (optional optimization)
+- Network latency testing with throttling
+- Mix.Config deprecation migration to `import Config`
+- Endpoint.init/2 deprecation migration to config/runtime.exs
+
+**Technical Debt Incurred:**
+- `use Mix.Config` deprecated in config files (still works)
+- Endpoint.init/2 callback deprecated (still works)
+- Multi-language multi-backend showcase (tracked as todo)
 
 ---
 
-## Key Decisions
-
-| Decision | Phase | Rationale |
-|----------|-------|-----------|
-| Server-authoritative architecture | 1 | Root cause of sync bug is client-side simulation; server must be source of truth |
-| Ports-based WebSocket | 2 | elm-phoenix-socket incompatible with Elm 0.19 (Native modules removed) |
-| esbuild over Brunch | 2 | Brunch deprecated in Phoenix 1.7, esbuild is official replacement |
-| Quick depth (3 phases) | All | Compress related work for faster delivery; minimal viable phase boundaries |
-
----
-
-*Last updated: 2026-02-02*
+*For current project status, see .planning/PROJECT.md*
+*Archived: 2026-02-02*

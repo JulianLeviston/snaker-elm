@@ -1,3 +1,13 @@
+# Requirements Archive: v1 Snaker-Elm Multiplayer Game Upgrade
+
+**Archived:** 2026-02-02
+**Status:** SHIPPED
+
+This is the archived requirements specification for v1.
+For current requirements, see `.planning/REQUIREMENTS.md` (created for next milestone).
+
+---
+
 # Requirements: Snaker Elm Upgrade
 
 **Defined:** 2026-01-30
@@ -14,8 +24,8 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Phoenix Upgrade
 
-- [x] **PHX-01**: Phoenix upgraded to 1.7.x
-- [x] **PHX-02**: Elixir upgraded to 1.15+
+- [x] **PHX-01**: Phoenix upgraded to 1.7.x (1.7.21)
+- [x] **PHX-02**: Elixir upgraded to 1.15+ (1.15.8)
 - [x] **PHX-03**: WebSocket transport configured for Phoenix 1.7
 - [x] **PHX-04**: JSON encoding uses Jason (replaces Poison)
 
@@ -42,8 +52,8 @@ Requirements for this milestone. Each maps to roadmap phases.
 ### State Sync Fix
 
 - [x] **SYNC-01**: Server maintains authoritative game state (snakes, apples)
-- [ ] **SYNC-02**: Server broadcasts full state on player join
-- [ ] **SYNC-03**: When any player joins, all connected players (n > 1) see each other's snakes in correct positions immediately
+- [x] **SYNC-02**: Server broadcasts full state on player join
+- [x] **SYNC-03**: When any player joins, all connected players (n > 1) see each other's snakes in correct positions immediately
 
 ## v2 Requirements
 
@@ -90,8 +100,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WS-01 | Phase 2 | Complete |
 | WS-02 | Phase 2 | Complete |
 | WS-03 | Phase 2 | Complete |
-| SYNC-02 | Phase 3 | Pending |
-| SYNC-03 | Phase 3 | Pending |
+| SYNC-02 | Phase 3 | Complete |
+| SYNC-03 | Phase 3 | Complete |
 
 **Coverage:**
 - v1 requirements: 20 total
@@ -104,5 +114,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 - Phase 3 (Integration & Sync): 2 requirements
 
 ---
-*Requirements defined: 2026-01-30*
-*Last updated: 2026-01-31 after Phase 2 completion*
+
+## Milestone Summary
+
+**Shipped:** 20 of 20 v1 requirements (100%)
+
+**Adjusted:** None - all requirements shipped as originally specified
+
+**Dropped:** None
+
+---
+*Archived: 2026-02-02 as part of v1 milestone completion*
