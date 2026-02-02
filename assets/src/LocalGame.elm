@@ -4,14 +4,19 @@ module LocalGame exposing
     , tick
     , changeDirection
     , toGameState
+    , addApple
+    , needsMoreApples
+    , getOccupiedPositions
+    , respawnSnake
     )
 
 {-| Local game state and logic for single-player mode.
 
 Runs game engine entirely in Elm without server dependency.
-Mirrors Elixir GameServer tick order: applyInput -> move -> collisions -> (eating in Plan 02)
+Mirrors Elixir GameServer tick order: applyInput -> move -> collisions -> eating -> expiration
 -}
 
+import Engine.Apple as Apple exposing (Apple)
 import Engine.Collision as Collision
 import Engine.Grid as Grid
 import Random
@@ -22,13 +27,24 @@ import Snake exposing (Direction(..), Position, Snake)
 -}
 type alias LocalGameState =
     { snake : Snake
-    , apples : List Position
+    , apples : List Apple
     , grid : { width : Int, height : Int }
     , inputBuffer : Maybe Direction
     , score : Int
     , currentTick : Int
     , invincibleUntilTick : Int
     , needsRespawn : Bool
+    }
+
+
+{-| Result of a tick operation.
+
+Includes updated state plus signals for Main to handle random spawning.
+-}
+type alias TickResult =
+    { state : LocalGameState
+    , needsAppleSpawn : Int  -- Number of apples needed
+    , expiredApples : List Apple  -- Apples that expired and need respawning
     }
 
 
@@ -64,22 +80,16 @@ randomPosition grid =
         (Random.int 0 (grid.height - 1))
 
 
-{-| Generate a random respawn position.
--}
-respawnGenerator : { width : Int, height : Int } -> Random.Generator Position
-respawnGenerator grid =
-    randomPosition grid
-
-
 {-| Process a single game tick.
 
 Order matches Elixir GameServer:
 1. Apply buffered input
 2. Move snake
 3. Check collisions
-4. (Apple eating in Plan 02)
+4. Check apple eating
+5. Check apple expiration
 -}
-tick : LocalGameState -> LocalGameState
+tick : LocalGameState -> TickResult
 tick state =
     let
         -- 1. Apply buffered input
@@ -94,14 +104,97 @@ tick state =
         stateAfterCollisions =
             checkCollisions stateAfterMove
 
-        -- 4. Clear input buffer and increment tick
+        -- 4. Check apple eating
+        stateAfterEating =
+            checkAppleEating stateAfterCollisions
+
+        -- 5. Check apple expiration
+        expirationResult =
+            Apple.tickExpiredApples stateAfterEating.currentTick stateAfterEating.apples
+
+        stateAfterExpiration =
+            { stateAfterEating | apples = expirationResult.remaining }
+
+        -- 6. Clear input buffer and increment tick
         finalState =
-            { stateAfterCollisions
+            { stateAfterExpiration
                 | inputBuffer = Nothing
-                , currentTick = stateAfterCollisions.currentTick + 1
+                , currentTick = stateAfterExpiration.currentTick + 1
             }
+
+        -- Calculate how many apples we need to spawn
+        applesNeeded =
+            Apple.spawnIfNeeded finalState.apples
     in
-    finalState
+    { state = finalState
+    , needsAppleSpawn = applesNeeded + List.length expirationResult.expired
+    , expiredApples = expirationResult.expired
+    }
+
+
+{-| Check if snake head has eaten an apple.
+
+Updates score, grows snake, and removes eaten apple.
+-}
+checkAppleEating : LocalGameState -> LocalGameState
+checkAppleEating state =
+    case Snake.head state.snake of
+        Nothing ->
+            state
+
+        Just headPos ->
+            let
+                result =
+                    Apple.checkEaten headPos state.apples
+            in
+            if result.eaten then
+                let
+                    snake =
+                        state.snake
+
+                    grownSnake =
+                        { snake | pendingGrowth = snake.pendingGrowth + Apple.growthAmount }
+                in
+                { state
+                    | apples = result.remaining
+                    , snake = grownSnake
+                    , score = state.score + 1
+                }
+
+            else
+                state
+
+
+{-| Add an apple to the game state.
+
+Called by Main when a random position is generated.
+-}
+addApple : Apple -> LocalGameState -> LocalGameState
+addApple apple state =
+    { state | apples = apple :: state.apples }
+
+
+{-| Check if more apples are needed.
+-}
+needsMoreApples : LocalGameState -> Bool
+needsMoreApples state =
+    List.length state.apples < Apple.minApples
+
+
+{-| Get all occupied positions (snake + apples).
+
+Used for safe apple spawning.
+-}
+getOccupiedPositions : LocalGameState -> List Position
+getOccupiedPositions state =
+    let
+        snakePositions =
+            state.snake.body
+
+        applePositions =
+            List.map .position state.apples
+    in
+    snakePositions ++ applePositions
 
 
 {-| Apply buffered direction change to snake.
@@ -244,14 +337,7 @@ toGameState state =
             { snake | isInvincible = state.currentTick < state.invincibleUntilTick }
     in
     { snakes = [ snakeWithInvincibility ]
-    , apples = List.map (\pos -> { position = pos }) state.apples
+    , apples = List.map (\apple -> { position = apple.position }) state.apples
     , gridWidth = state.grid.width
     , gridHeight = state.grid.height
     }
-
-
-{-| Get respawn generator for external use (Main.elm).
--}
-respawnPositionGenerator : LocalGameState -> Random.Generator Position
-respawnPositionGenerator state =
-    respawnGenerator state.grid

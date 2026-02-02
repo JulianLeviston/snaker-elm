@@ -2,8 +2,9 @@ module Main exposing (main)
 
 import Browser
 import Browser.Events
+import Engine.Apple as Apple exposing (Apple)
 import Game exposing (GameState)
-import Html exposing (Html, div, h1, text)
+import Html exposing (Html, div, h1, span, text)
 import Html.Attributes exposing (class, style)
 import Input
 import Json.Decode as JD
@@ -29,6 +30,7 @@ type alias Model =
     , error : Maybe String
     , notification : Maybe String
     , gameMode : GameMode
+    , pendingAppleSpawns : Int  -- Track in-flight Random.generate calls
     }
 
 
@@ -56,6 +58,7 @@ type Msg
     | Tick Time.Posix
     | InitGame LocalGameState
     | NewSpawnPosition Position
+    | NewApplePosition Position
 
 
 init : () -> ( Model, Cmd Msg )
@@ -69,6 +72,7 @@ init _ =
       , error = Nothing
       , notification = Nothing
       , gameMode = LocalMode
+      , pendingAppleSpawns = 0
       }
     , Random.generate InitGame LocalGame.init
     )
@@ -82,8 +86,11 @@ update msg model =
             case model.localGame of
                 Just localState ->
                     let
-                        newState =
+                        tickResult =
                             LocalGame.tick localState
+
+                        newState =
+                            tickResult.state
                     in
                     if newState.needsRespawn then
                         -- Need random respawn position
@@ -92,37 +99,80 @@ update msg model =
                         )
 
                     else
-                        ( { model | localGame = Just newState }, Cmd.none )
+                        -- Check if we need to spawn apples
+                        let
+                            -- Account for pending spawns to avoid race conditions
+                            effectiveAppleCount =
+                                List.length newState.apples + model.pendingAppleSpawns
+
+                            applesNeeded =
+                                max 0 (Apple.minApples - effectiveAppleCount + List.length tickResult.expiredApples)
+
+                            ( newPendingCount, spawnCmd ) =
+                                if applesNeeded > 0 then
+                                    ( model.pendingAppleSpawns + applesNeeded
+                                    , spawnAppleCommands applesNeeded (LocalGame.getOccupiedPositions newState) newState.grid
+                                    )
+
+                                else
+                                    ( model.pendingAppleSpawns, Cmd.none )
+                        in
+                        ( { model
+                            | localGame = Just newState
+                            , pendingAppleSpawns = newPendingCount
+                          }
+                        , spawnCmd
+                        )
 
                 Nothing ->
                     ( model, Cmd.none )
 
         InitGame localState ->
-            ( { model | localGame = Just localState }, Cmd.none )
+            -- Game initialized, spawn initial apples
+            let
+                applesNeeded =
+                    Apple.minApples
+
+                spawnCmd =
+                    spawnAppleCommands applesNeeded (LocalGame.getOccupiedPositions localState) localState.grid
+            in
+            ( { model
+                | localGame = Just localState
+                , pendingAppleSpawns = applesNeeded
+              }
+            , spawnCmd
+            )
 
         NewSpawnPosition pos ->
             case model.localGame of
                 Just localState ->
                     let
-                        snake =
-                            localState.snake
+                        newState =
+                            LocalGame.respawnSnake pos localState
+                    in
+                    ( { model | localGame = Just newState }, Cmd.none )
 
-                        respawnedSnake =
-                            { snake
-                                | body = [ pos ]
-                                , direction = Right
-                                , pendingGrowth = 0
-                                , isInvincible = True
+                Nothing ->
+                    ( model, Cmd.none )
+
+        NewApplePosition pos ->
+            case model.localGame of
+                Just localState ->
+                    let
+                        apple =
+                            { position = pos
+                            , expiresAtTick = localState.currentTick + Apple.ticksUntilExpiry
                             }
 
                         newState =
-                            { localState
-                                | snake = respawnedSnake
-                                , invincibleUntilTick = localState.currentTick + 15
-                                , needsRespawn = False
-                            }
+                            LocalGame.addApple apple localState
                     in
-                    ( { model | localGame = Just newState }, Cmd.none )
+                    ( { model
+                        | localGame = Just newState
+                        , pendingAppleSpawns = max 0 (model.pendingAppleSpawns - 1)
+                      }
+                    , Cmd.none
+                    )
 
                 Nothing ->
                     ( model, Cmd.none )
@@ -246,6 +296,19 @@ update msg model =
             ( { model | notification = Nothing }, Cmd.none )
 
 
+{-| Generate commands to spawn multiple apples.
+-}
+spawnAppleCommands : Int -> List Position -> { width : Int, height : Int } -> Cmd Msg
+spawnAppleCommands count occupied grid =
+    if count <= 0 then
+        Cmd.none
+
+    else
+        List.range 1 count
+            |> List.map (\_ -> Random.generate NewApplePosition (Apple.randomSafePosition occupied grid))
+            |> Cmd.batch
+
+
 {-| Generate a random position within grid bounds.
 -}
 randomPosition : { width : Int, height : Int } -> Random.Generator Position
@@ -316,7 +379,10 @@ viewStatus model =
                 text ""
         , case model.localGame of
             Just localState ->
-                text (" | Tick: " ++ String.fromInt localState.currentTick)
+                span []
+                    [ text (" | Tick: " ++ String.fromInt localState.currentTick)
+                    , text (" | Score: " ++ String.fromInt localState.score)
+                    ]
 
             Nothing ->
                 text ""
