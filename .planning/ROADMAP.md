@@ -31,11 +31,11 @@ This roadmap delivers serverless P2P multiplayer for Snaker Elm. The journey sta
   2. Snake moves continuously, wraps at edges, and responds to arrow keys
   3. Eating apple grows snake, increments score, and spawns new apple
   4. Apple expires and respawns after timeout if not eaten
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 04-01: TBD
-- [ ] 04-02: TBD
+- [ ] 04-01-PLAN.md - Core engine: tick loop, movement, wrapping, collision
+- [ ] 04-02-PLAN.md - Apple system: spawning, eating, growth, expiration, score
 
 ### Phase 5: P2P Connection Layer
 **Goal**: Players can establish peer connections via room codes
@@ -90,7 +90,7 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 4. Game Engine Port | v2 | 0/2 | Not started | - |
+| 4. Game Engine Port | v2 | 0/2 | Planned | - |
 | 5. P2P Connection Layer | v2 | 0/2 | Not started | - |
 | 6. Host/Client Integration | v2 | 0/2 | Not started | - |
 | 7. Migration & Polish | v2 | 0/2 | Not started | - |
