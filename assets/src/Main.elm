@@ -31,7 +31,27 @@ type alias Model =
     , notification : Maybe String
     , gameMode : GameMode
     , pendingAppleSpawns : Int  -- Track in-flight Random.generate calls
+    -- P2P connection state
+    , p2pState : P2PConnectionState
+    , roomCodeInput : String
+    , showCopiedFeedback : Bool
     }
+
+
+{-| P2P connection state machine
+-}
+type P2PConnectionState
+    = P2PNotConnected
+    | P2PCreatingRoom
+    | P2PJoiningRoom String  -- room code being joined
+    | P2PConnected P2PRole String  -- role and room code
+
+
+{-| Role in P2P game (host runs game logic, client syncs)
+-}
+type P2PRole
+    = Host
+    | Client
 
 
 type GameMode
@@ -59,6 +79,18 @@ type Msg
     | InitGame LocalGameState
     | NewSpawnPosition Position
     | NewApplePosition Position
+      -- P2P messages
+    | CreateRoom
+    | JoinRoom
+    | LeaveRoom
+    | RoomCodeInputChanged String
+    | GotRoomCreated String
+    | GotPeerConnected JD.Value
+    | GotPeerDisconnected String
+    | GotConnectionError String
+    | CopyRoomCode
+    | GotClipboardCopySuccess
+    | HideCopiedFeedback
 
 
 init : () -> ( Model, Cmd Msg )
@@ -73,6 +105,10 @@ init _ =
       , notification = Nothing
       , gameMode = LocalMode
       , pendingAppleSpawns = 0
+      -- P2P initial state
+      , p2pState = P2PNotConnected
+      , roomCodeInput = ""
+      , showCopiedFeedback = False
       }
     , Random.generate InitGame LocalGame.init
     )
@@ -295,6 +331,119 @@ update msg model =
         ClearNotification ->
             ( { model | notification = Nothing }, Cmd.none )
 
+        -- P2P message handlers
+        CreateRoom ->
+            ( { model | p2pState = P2PCreatingRoom }
+            , Ports.createRoom ()
+            )
+
+        JoinRoom ->
+            let
+                roomCode =
+                    String.toUpper model.roomCodeInput
+            in
+            if String.length roomCode == 4 then
+                ( { model | p2pState = P2PJoiningRoom roomCode }
+                , Ports.joinRoom roomCode
+                )
+
+            else
+                ( model, Cmd.none )
+
+        LeaveRoom ->
+            ( { model | p2pState = P2PNotConnected }
+            , Ports.leaveRoom ()
+            )
+
+        RoomCodeInputChanged str ->
+            let
+                -- Uppercase and limit to 4 characters
+                normalized =
+                    str
+                        |> String.toUpper
+                        |> String.filter Char.isAlpha
+                        |> String.left 4
+
+                -- Auto-join if we have exactly 4 characters
+                ( newState, cmd ) =
+                    if String.length normalized == 4 then
+                        ( { model
+                            | roomCodeInput = normalized
+                            , p2pState = P2PJoiningRoom normalized
+                          }
+                        , Ports.joinRoom normalized
+                        )
+
+                    else
+                        ( { model | roomCodeInput = normalized }
+                        , Cmd.none
+                        )
+            in
+            ( newState, cmd )
+
+        GotRoomCreated roomCode ->
+            ( { model | p2pState = P2PConnected Host roomCode }
+            , Cmd.none
+            )
+
+        GotPeerConnected value ->
+            case JD.decodeValue peerConnectedDecoder value of
+                Ok data ->
+                    ( { model | p2pState = P2PConnected data.role data.roomCode }
+                    , Cmd.none
+                    )
+
+                Err _ ->
+                    ( model, Cmd.none )
+
+        GotPeerDisconnected _ ->
+            ( { model
+                | p2pState = P2PNotConnected
+                , notification = Just "Disconnected"
+              }
+            , Process.sleep 3000
+                |> Task.perform (\_ -> ClearNotification)
+            )
+
+        GotConnectionError errorMsg ->
+            let
+                -- Reset state based on what we were trying to do
+                newP2PState =
+                    case model.p2pState of
+                        P2PCreatingRoom ->
+                            P2PNotConnected
+
+                        P2PJoiningRoom _ ->
+                            P2PNotConnected
+
+                        _ ->
+                            model.p2pState
+            in
+            ( { model
+                | p2pState = newP2PState
+                , notification = Just errorMsg
+              }
+            , Process.sleep 5000
+                |> Task.perform (\_ -> ClearNotification)
+            )
+
+        CopyRoomCode ->
+            case model.p2pState of
+                P2PConnected _ roomCode ->
+                    ( model, Ports.copyToClipboard roomCode )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        GotClipboardCopySuccess ->
+            ( { model | showCopiedFeedback = True }
+            , Process.sleep 2000
+                |> Task.perform (\_ -> HideCopiedFeedback)
+            )
+
+        HideCopiedFeedback ->
+            ( { model | showCopiedFeedback = False }, Cmd.none )
+
 
 {-| Generate commands to spawn multiple apples.
 -}
@@ -344,6 +493,34 @@ tickDecoder =
     JD.map2 TickData
         (JD.field "snakes" (JD.list Snake.decoder))
         (JD.field "apples" (JD.list Game.appleDecoder))
+
+
+{-| Decoder for peerConnected events from JavaScript.
+    Host receives: { role: "host", peerId: "XXXX" }
+    Client receives: { role: "client", roomCode: "XXXX" }
+-}
+peerConnectedDecoder : JD.Decoder { role : P2PRole, roomCode : String }
+peerConnectedDecoder =
+    JD.map2 (\role roomCode -> { role = role, roomCode = roomCode })
+        (JD.field "role" (JD.string |> JD.andThen roleDecoder))
+        (JD.oneOf
+            [ JD.field "roomCode" JD.string
+            , JD.field "peerId" JD.string  -- host receives peerId from connecting client
+            ]
+        )
+
+
+roleDecoder : String -> JD.Decoder P2PRole
+roleDecoder str =
+    case str of
+        "host" ->
+            JD.succeed Host
+
+        "client" ->
+            JD.succeed Client
+
+        _ ->
+            JD.fail ("Unknown role: " ++ str)
 
 
 view : Model -> Html Msg
@@ -448,6 +625,12 @@ subscriptions model =
         , Ports.playerJoined PlayerJoined
         , Ports.playerLeft PlayerLeft
         , Ports.receiveTick GotTick
+          -- P2P subscriptions
+        , Ports.roomCreated GotRoomCreated
+        , Ports.peerConnected GotPeerConnected
+        , Ports.peerDisconnected GotPeerDisconnected
+        , Ports.connectionError GotConnectionError
+        , Ports.clipboardCopySuccess (\_ -> GotClipboardCopySuccess)
         ]
 
 
