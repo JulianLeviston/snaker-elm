@@ -8,6 +8,18 @@ A multiplayer snake game built with Elm 0.19.1 frontend and Phoenix 1.7/Elixir 1
 
 Players can play snake together in real-time and see each other's snakes in the correct positions.
 
+## Current Milestone: v2 P2P WebRTC Mode
+
+**Goal:** Enable serverless multiplayer via WebRTC, playable from pure static hosting.
+
+**Target features:**
+- P2P multiplayer using WebRTC DataChannels (no server for gameplay)
+- Game logic (tick loop, collision, apples) ported from Elixir to Elm
+- PeerJS cloud for signaling (free, client-side only)
+- Room joining via codes, shareable links, and QR codes
+- Deterministic host election with automatic migration on disconnect
+- Dual-mode: existing Phoenix mode preserved alongside new P2P mode
+
 ## Requirements
 
 ### Validated
@@ -29,8 +41,16 @@ Players can play snake together in real-time and see each other's snakes in the 
 
 ### Active
 
-- [ ] WebGL 3D rendering of game board (v2)
-- [ ] 3D snake models (v2)
+- [ ] P2P WebRTC multiplayer mode (v2)
+- [ ] Port GameServer logic from Elixir to Elm (v2)
+- [ ] PeerJS signaling integration (v2)
+- [ ] Room joining via codes, links, and QR (v2)
+- [ ] Deterministic host election with migration (v2)
+
+### Deferred
+
+- [ ] WebGL 3D rendering of game board (v3+)
+- [ ] 3D snake models (v3+)
 
 ### Out of Scope
 
@@ -77,4 +97,4 @@ Players can play snake together in real-time and see each other's snakes in the 
 | Html.Keyed for snake lists | Optimize frequent list updates | ✓ Good - better performance |
 
 ---
-*Last updated: 2026-02-02 after v1 milestone*
+*Last updated: 2026-02-03 after v2 milestone started*
