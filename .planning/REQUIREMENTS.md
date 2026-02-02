@@ -47,12 +47,12 @@ Requirements for P2P WebRTC mode. Each maps to roadmap phases.
 
 Already implemented and validated:
 
-- ✓ Phoenix mode multiplayer with server-authoritative state
-- ✓ SVG game board rendering
-- ✓ Keyboard controls (arrow keys)
-- ✓ Player join/leave in Phoenix mode
-- ✓ Toast notifications
-- ✓ Scoreboard display
+- [x] Phoenix mode multiplayer with server-authoritative state
+- [x] SVG game board rendering
+- [x] Keyboard controls (arrow keys)
+- [x] Player join/leave in Phoenix mode
+- [x] Toast notifications
+- [x] Scoreboard display
 
 ## Out of Scope
 
@@ -76,36 +76,36 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CONN-01 | TBD | Pending |
-| CONN-02 | TBD | Pending |
-| CONN-03 | TBD | Pending |
-| CONN-04 | TBD | Pending |
-| CONN-05 | TBD | Pending |
-| CONN-06 | TBD | Pending |
-| CONN-07 | TBD | Pending |
-| ENG-01 | TBD | Pending |
-| ENG-02 | TBD | Pending |
-| ENG-03 | TBD | Pending |
-| ENG-04 | TBD | Pending |
-| ENG-05 | TBD | Pending |
-| ENG-06 | TBD | Pending |
-| ENG-07 | TBD | Pending |
-| HOST-01 | TBD | Pending |
-| HOST-02 | TBD | Pending |
-| HOST-03 | TBD | Pending |
-| HOST-04 | TBD | Pending |
-| HOST-05 | TBD | Pending |
-| HOST-06 | TBD | Pending |
-| HOST-07 | TBD | Pending |
-| HOST-08 | TBD | Pending |
-| HOST-09 | TBD | Pending |
-| MODE-01 | TBD | Pending |
+| ENG-01 | Phase 4 | Pending |
+| ENG-02 | Phase 4 | Pending |
+| ENG-03 | Phase 4 | Pending |
+| ENG-04 | Phase 4 | Pending |
+| ENG-05 | Phase 4 | Pending |
+| ENG-06 | Phase 4 | Pending |
+| ENG-07 | Phase 4 | Pending |
+| CONN-01 | Phase 5 | Pending |
+| CONN-02 | Phase 5 | Pending |
+| CONN-03 | Phase 5 | Pending |
+| CONN-04 | Phase 5 | Pending |
+| HOST-01 | Phase 6 | Pending |
+| HOST-02 | Phase 6 | Pending |
+| HOST-03 | Phase 6 | Pending |
+| HOST-04 | Phase 6 | Pending |
+| HOST-05 | Phase 6 | Pending |
+| HOST-06 | Phase 6 | Pending |
+| HOST-07 | Phase 7 | Pending |
+| HOST-08 | Phase 7 | Pending |
+| HOST-09 | Phase 7 | Pending |
+| CONN-05 | Phase 7 | Pending |
+| CONN-06 | Phase 7 | Pending |
+| CONN-07 | Phase 7 | Pending |
+| MODE-01 | Phase 7 | Pending |
 
 **Coverage:**
 - v2 requirements: 24 total
-- Mapped to phases: 0
-- Unmapped: 24
+- Mapped to phases: 24
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-03*
-*Last updated: 2026-02-03 after initial definition*
+*Last updated: 2026-02-03 after roadmap creation*
