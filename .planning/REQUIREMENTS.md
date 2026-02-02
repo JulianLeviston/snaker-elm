@@ -19,13 +19,13 @@ Requirements for P2P WebRTC mode. Each maps to roadmap phases.
 
 ### Game Engine
 
-- [ ] **ENG-01**: Game tick loop runs at 100ms intervals in Elm
-- [ ] **ENG-02**: Snake movement follows current direction each tick
-- [ ] **ENG-03**: Snake grows when eating apple
-- [ ] **ENG-04**: Apple spawns at random position when eaten
-- [ ] **ENG-05**: Apple expires after timeout and respawns
-- [ ] **ENG-06**: Score increments when apple eaten
-- [ ] **ENG-07**: Snake wraps around board edges
+- [x] **ENG-01**: Game tick loop runs at 100ms intervals in Elm
+- [x] **ENG-02**: Snake movement follows current direction each tick
+- [x] **ENG-03**: Snake grows when eating apple
+- [x] **ENG-04**: Apple spawns at random position when eaten
+- [x] **ENG-05**: Apple expires after timeout and respawns
+- [x] **ENG-06**: Score increments when apple eaten
+- [x] **ENG-07**: Snake wraps around board edges
 
 ### Host/Client
 
@@ -76,13 +76,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ENG-01 | Phase 4 | Pending |
-| ENG-02 | Phase 4 | Pending |
-| ENG-03 | Phase 4 | Pending |
-| ENG-04 | Phase 4 | Pending |
-| ENG-05 | Phase 4 | Pending |
-| ENG-06 | Phase 4 | Pending |
-| ENG-07 | Phase 4 | Pending |
+| ENG-01 | Phase 4 | Complete |
+| ENG-02 | Phase 4 | Complete |
+| ENG-03 | Phase 4 | Complete |
+| ENG-04 | Phase 4 | Complete |
+| ENG-05 | Phase 4 | Complete |
+| ENG-06 | Phase 4 | Complete |
+| ENG-07 | Phase 4 | Complete |
 | CONN-01 | Phase 5 | Pending |
 | CONN-02 | Phase 5 | Pending |
 | CONN-03 | Phase 5 | Pending |
