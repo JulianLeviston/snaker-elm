@@ -1,590 +1,385 @@
-# Stack Research: Elm + Phoenix Real-Time Application (2025/2026)
+# Stack Research: P2P WebRTC for Snaker Elm
 
-**Research Date:** 2026-01-30
-**Project:** Snaker Elm Multiplayer Game Upgrade
-**Current Stack:** Elm 0.18, Phoenix 1.3, Elixir 1.4, Brunch
-**Target:** Modern Elm 0.19.1 + Phoenix + Elixir stack
-
----
+**Project:** Snaker Elm v2 - P2P Multiplayer Mode
+**Researched:** 2026-02-03
+**Overall Confidence:** HIGH
 
 ## Executive Summary
 
-The modern Elm + Phoenix stack for 2025/2026 has evolved significantly from the 2017-era setup. Key changes:
-- **Elm:** 0.19.1 is the stable version (breaking changes from 0.18)
-- **Phoenix:** 1.7.x series is current (moved to esbuild, removed Brunch)
-- **Elixir:** 1.14+ with Erlang/OTP 25+
-- **Build Tools:** esbuild replaced Brunch, Mix tasks handle assets
-- **Phoenix Channels:** WebSocket library changed for Elm 0.19
+Adding P2P WebRTC multiplayer to the existing Elm + Phoenix snake game requires minimal new dependencies. The existing ports-based architecture (TypeScript <-> Elm via JSON) maps cleanly to WebRTC operations. PeerJS provides battle-tested WebRTC abstraction with free cloud signaling. The `qr` library offers zero-dependency QR generation at minimal bundle cost.
 
 ---
 
-## 1. Language & Framework Versions
+## Recommended Stack Additions
 
-### Elm
-**Recommended:** `0.19.1`
-**Confidence:** HIGH (this is the latest stable Elm release)
+| Library | Version | Purpose | Bundle Size | Confidence |
+|---------|---------|---------|-------------|------------|
+| peerjs | 1.5.5 | WebRTC DataChannel abstraction | 31.9 KB gzip | HIGH |
+| qr | 0.5.4 | QR code generation for room links | 9 KB gzip (encode only) | HIGH |
 
-**Rationale:**
-- Elm 0.19.1 is the current stable release and has been since 2019
-- Breaking changes from 0.18:
-  - `elm-package.json` → `elm.json` format change
-  - Core library reorganization (Html.App → Browser, etc.)
-  - No more Native modules support
-  - Changed package namespace from `user/package` to package-based
-  - Kernel code is compiler-internal only
+**Total new bundle:** ~41 KB gzipped
 
-**What NOT to use:**
-- ❌ Elm 0.18.x - deprecated, incompatible package ecosystem
-- ❌ Elm 0.19.0 - had bugs, use 0.19.1 instead
-
-**Migration Impact:** MAJOR - this is the most breaking change in the upgrade path.
+**No new Elm packages required.** The existing `elm/time` and `elm/browser` packages already support game tick loops.
 
 ---
 
-### Phoenix Framework
-**Recommended:** `~> 1.7.14` (latest 1.7.x series)
-**Confidence:** MEDIUM-HIGH (1.7.x was stable as of my knowledge cutoff)
+## PeerJS Details
 
-**Rationale:**
-- Phoenix 1.7 is the mature, stable release
-- Major improvements over 1.3:
-  - Verified routes for compile-time safety
-  - Improved LiveView integration
-  - Better WebSocket performance
-  - Streamlined directory structure
-  - Asset pipeline moved from Brunch to esbuild by default
+### Current Version
+**1.5.5** (stable, latest as of npm registry check 2026-02-03)
 
-**What NOT to use:**
-- ❌ Phoenix 1.3.x - deprecated, missing security patches
-- ❌ Phoenix 1.4-1.6 - skip to 1.7 for cleanest modern patterns
-- ⚠️ Phoenix 1.8+ (if exists) - wait for community adoption on major versions
+A beta v2.0.0 exists but is not recommended for production - stick with 1.x stable line.
 
-**Migration Impact:** MODERATE-HIGH - directory restructuring, config changes, new patterns
+### Bundle Size
+- Minified + Gzipped: **31.9 KB**
+- Dependencies: 4 (webrtc-adapter, eventemitter3, etc.)
 
----
+### Core API for Data Connections
 
-### Elixir
-**Recommended:** `~> 1.14` or `~> 1.15`
-**Confidence:** MEDIUM-HIGH
+```typescript
+import Peer, { DataConnection } from 'peerjs';
 
-**Rationale:**
-- Elixir 1.14+ provides modern language features
-- Good compatibility with Phoenix 1.7.x
-- Includes improvements to compilation, debugging, and core libraries
-- Version 1.15 adds even more polish
+// Create peer (host generates room)
+const peer = new Peer();  // Auto-generated ID, or pass custom ID
+peer.on('open', (id) => console.log('My peer ID:', id));
 
-**Minimum:** `1.14.0` (for Phoenix 1.7 compatibility)
-**What NOT to use:**
-- ❌ Elixir 1.4.x - ancient, missing critical features
-- ❌ Elixir 1.5-1.12 - skip the intermediate versions
+// Host: Listen for connections
+peer.on('connection', (conn: DataConnection) => {
+  conn.on('open', () => console.log('Client connected'));
+  conn.on('data', (data) => handleClientInput(data));
+  conn.send({ type: 'gameState', state: {...} });
+});
 
-**Migration Impact:** LOW - mostly backward compatible, config format may change
+// Client: Connect to host
+const conn = peer.connect('host-peer-id');
+conn.on('open', () => conn.send({ type: 'input', direction: 'up' }));
+conn.on('data', (data) => handleGameState(data));
 
----
-
-### Erlang/OTP
-**Recommended:** `OTP 25.x` or `OTP 26.x`
-**Confidence:** MEDIUM
-
-**Rationale:**
-- OTP 25+ required for modern Elixir versions
-- Provides performance improvements and security patches
-- OTP 26 is likely the current stable version as of 2025/2026
-
-**Minimum:** OTP 25.0
-**What NOT to use:**
-- ❌ OTP 24 or older - compatibility issues with modern Elixir
-
-**Migration Impact:** LOW - transparent to application code
-
----
-
-## 2. Version Management
-
-### mise (formerly rtx)
-**Recommended:** Latest stable mise
-**Confidence:** HIGH (specified in project requirements)
-
-**Rationale:**
-- Replacement for asdf with better performance
-- Unified tool version management
-- Project requires mise specifically (not asdf)
-
-**Configuration:**
-Create `.mise.toml` in project root:
-```toml
-[tools]
-elixir = "1.15.7"
-erlang = "26.2.1"
-nodejs = "20.11.0"  # For asset compilation
+// Cleanup
+conn.close();
+peer.destroy();
 ```
 
-Or use `.tool-versions` (asdf-compatible format):
-```
-elixir 1.15.7
-erlang 26.2.1
-nodejs 20.11.0
-```
+### Signaling Server
+- Default: `0.peerjs.com` (free cloud, port 443)
+- Limitation: Shared server, ID collisions possible with manual IDs
+- For production: Can self-host peerjs-server, but free cloud is fine for MVP
+- Note: After WebRTC connection established, all game traffic is pure P2P (no server)
 
-**What NOT to use:**
-- ❌ asdf - project specifies mise
-- ❌ kerl/kiex/nvm separately - mise handles all
-- ❌ System package managers (apt/brew) - version conflicts
+### Browser Support
+- Chrome, Edge, Firefox, Safari (tested via BrowserStack)
+- Firefox 102+ required for CBOR/MessagePack support
 
-**Migration Path:**
-1. Install mise: `curl https://mise.run | sh`
-2. Create `.mise.toml` or `.tool-versions`
-3. Run `mise install` in project directory
-4. Verify with `mise current`
+### Why PeerJS
+1. **Mature**: 10+ years of development, widely used
+2. **Simple API**: Hides ICE/STUN/TURN complexity
+3. **DataChannel focus**: Perfect for game state sync (not media streaming)
+4. **Free signaling**: 0.peerjs.com eliminates server costs for MVP
+5. **TypeScript**: Good type definitions available
 
----
-
-## 3. Build Tools & Asset Pipeline
-
-### JavaScript Build Tool
-**Recommended:** `esbuild`
-**Confidence:** HIGH (Phoenix 1.7 default)
-
-**Rationale:**
-- Phoenix 1.7 replaced Brunch with esbuild
-- Much faster than Brunch or Webpack
-- Simpler configuration
-- Better tree-shaking and modern JS support
-
-**Configuration:**
-Phoenix 1.7 uses Mix tasks to invoke esbuild:
-- `mix assets.deploy` - production build
-- `mix assets.build` - development build
-- Configured in `config/config.exs`
-
-**What NOT to use:**
-- ❌ Brunch - deprecated in Phoenix ecosystem
-- ❌ Webpack - overkill for Phoenix, slower than esbuild
-- ⚠️ Vite - possible but not Phoenix default, less documented
-
-**Migration Impact:** MODERATE
-- Remove `brunch-config.js`
-- Remove Brunch npm dependencies
-- Add esbuild config in Phoenix config files
-- Update npm scripts
+### Sources
+- [PeerJS npm](https://www.npmjs.com/package/peerjs) - Version verification
+- [PeerJS Documentation](https://peerjs.com/docs/) - API reference
+- [PeerJS GitHub](https://github.com/peers/peerjs) - Source and releases
+- [Best of JS - PeerJS](https://bestofjs.org/projects/peerjs) - Bundle size
 
 ---
 
-### Elm Build Integration
-**Recommended:** Custom Mix task or npm script calling `elm make`
-**Confidence:** MEDIUM-HIGH
+## QR Code Generation
 
-**Rationale:**
-- `elm-brunch` is obsolete (Brunch is deprecated)
-- Modern approach: invoke `elm make` directly
-- Options:
-  1. npm script that runs `elm make`, then esbuild imports output
-  2. Custom Mix task to compile Elm before assets
-  3. Use esbuild plugin for Elm
+### Recommendation: `qr` by Paul Miller
 
-**Example npm script approach:**
-```json
-{
-  "scripts": {
-    "build:elm": "elm make src/Main.elm --output=../priv/static/assets/elm.js",
-    "build": "npm run build:elm && esbuild js/app.js --bundle --outdir=../priv/static/assets"
-  }
-}
+| Criteria | qr | qrcode (node-qrcode) |
+|----------|----|--------------------|
+| Version | 0.5.4 | 1.5.4 |
+| Bundle | 9 KB (encode) | ~15 KB |
+| Dependencies | 0 | Multiple |
+| SVG Support | Yes | Yes |
+| Maintained | Active (Jan 2026) | Active |
+
+### Why `qr` over `qrcode`
+1. **Zero dependencies**: No supply chain risk, fully auditable
+2. **Smaller**: 9 KB vs ~15 KB for encode-only use case
+3. **Modern**: ESM native, recent TypeScript rewrite
+4. **Performance**: Faster benchmarks than alternatives
+
+### API Usage
+
+```typescript
+import encodeQR from 'qr';
+
+// Generate SVG string for room URL
+const roomUrl = `https://snaker.app/join/${roomCode}`;
+const svgElement = encodeQR(roomUrl, 'svg');
+
+// Insert into DOM
+document.getElementById('qr-container').appendChild(svgElement);
 ```
 
-**What NOT to use:**
-- ❌ elm-brunch - incompatible with esbuild pipeline
-- ❌ elm-webpack-loader - if not using Webpack
+### Integration Note
+QR generation happens entirely in JavaScript. No Elm ports needed for QR - just render the SVG in a container that Elm creates, then populate via JS when room code changes.
+
+### Sources
+- [qr GitHub](https://github.com/paulmillr/qr) - API and bundle size
+- [qr npm](https://www.npmjs.com/package/qr) - Version verification
 
 ---
 
-## 4. WebSocket / Phoenix Channels for Elm 0.19
+## Elm Game Loop Timing
 
-### Critical Issue: fbonetti/elm-phoenix-socket
-**Status:** NOT COMPATIBLE with Elm 0.19
-**Confidence:** HIGH
+### For P2P Host: Use `Time.every` (NOT `onAnimationFrameDelta`)
 
-The `fbonetti/elm-phoenix-socket` package you're currently using (v2.2.0) only supports Elm 0.18. This is the BIGGEST migration blocker.
+The existing game uses server-side tick at fixed intervals. For P2P mode where Elm runs the game loop, use the same pattern:
 
----
-
-### Recommended Solutions (in order of preference)
-
-#### Option 1: saschatimme/elm-phoenix (RECOMMENDED)
-**Package:** `saschatimme/elm-phoenix`
-**Confidence:** MEDIUM-HIGH
-
-**Rationale:**
-- Port of elm-phoenix-socket to Elm 0.19
-- Maintained community fork
-- Similar API to fbonetti's original
-- Well-documented
-
-**Installation:**
-```bash
-elm install saschatimme/elm-phoenix
-```
-
-**Migration Notes:**
-- API is similar to fbonetti/elm-phoenix-socket
-- Some function signature changes for Elm 0.19
-- Will need to update Socket/Channel setup code
-
----
-
-#### Option 2: Custom Port-based WebSocket Implementation
-**Approach:** JavaScript Ports + Phoenix JavaScript client
-**Confidence:** HIGH (always works, more control)
-
-**Rationale:**
-- Maximum flexibility
-- Use official Phoenix JavaScript client
-- Elm Ports are the standard interop mechanism
-- More boilerplate but well-understood pattern
-
-**Architecture:**
-```
-Elm App <-- Ports --> JavaScript <-- phoenix.js --> Phoenix Channels
-```
-
-**Files needed:**
-1. Elm ports definitions
-2. JavaScript port handlers using `phoenix.js`
-3. Message encoders/decoders
-
-**Advantages:**
-- Uses official Phoenix client (most up-to-date)
-- Complete control over connection logic
-- No dependency on third-party Elm packages
-
-**Disadvantages:**
-- More code to write and maintain
-- Requires JavaScript knowledge
-- Type safety boundary at port interface
-
-**Example Elm Port:**
 ```elm
-port module Ports exposing (sendToChannel, receiveFromChannel)
-
--- Outgoing
-port sendToChannel : { topic : String, event : String, payload : Value } -> Cmd msg
-
--- Incoming
-port receiveFromChannel : ({ topic : String, event : String, payload : Value } -> msg) -> Sub msg
-```
-
----
-
-#### Option 3: Build Direct WebSocket Connection
-**Approach:** Elm's `WebSocket` module (if still available in 0.19)
-**Confidence:** LOW-MEDIUM (WebSocket module may be deprecated)
-
-**Rationale:**
-- Bypass Phoenix Channels abstraction
-- Direct WebSocket connection
-- Handle Phoenix protocol manually
-
-**What NOT to use:**
-- ❌ elm-lang/websocket - deprecated in Elm 0.19
-- ❌ Any Elm 0.18 package - incompatible
-
-**Issues:**
-- Elm 0.19 removed the WebSocket module
-- Would need ports anyway
-- Lose Phoenix Channels features (presence, etc.)
-
----
-
-### Recommendation for Snaker-Elm
-
-**Primary:** Try `saschatimme/elm-phoenix` first
-**Fallback:** Implement custom Ports + phoenix.js
-
-**Reasoning:**
-- Your app already uses Phoenix Channels patterns
-- Minimal refactoring with saschatimme/elm-phoenix
-- Ports approach gives you escape hatch if package issues arise
-
-**Migration Complexity:** MODERATE to HIGH
-- Must rewrite all Socket/Channel code
-- Encoder/decoder changes for Elm 0.19
-- Test thoroughly - this is critical for multiplayer sync
-
----
-
-## 5. Supporting Libraries
-
-### Phoenix JavaScript Client
-**Package:** `phoenix` (npm)
-**Version:** `~> 1.7.0` (match Phoenix version)
-**Confidence:** HIGH
-
-**Usage:** If using Ports approach for Elm ↔ Phoenix communication
-
-```bash
-npm install phoenix
-```
-
----
-
-### Elm Core Libraries (Elm 0.19)
-**Confidence:** HIGH
-
-Elm 0.19 reorganized standard libraries:
-
-**Install via elm.json:**
-```json
-{
-  "dependencies": {
-    "direct": {
-      "elm/core": "1.0.5",
-      "elm/html": "1.0.0",
-      "elm/browser": "1.0.2",
-      "elm/json": "1.1.3",
-      "elm/time": "1.0.0",
-      "elm/http": "2.0.0"
-    }
-  }
-}
-```
-
-**Migration Notes:**
-- `elm-lang/core` → `elm/core`
-- `elm-lang/html` → `elm/html`
-- `elm-lang/keyboard` → REMOVED in 0.19 (use Browser.Events.onKeyDown)
-- All `elm-lang/*` packages renamed to `elm/*`
-
----
-
-### Keyboard Input (Elm 0.19)
-**Approach:** `Browser.Events` module
-**Confidence:** HIGH
-
-**Rationale:**
-- `elm-lang/keyboard` was removed in Elm 0.19
-- Use `Browser.Events.onKeyDown` / `onKeyUp` subscriptions
-- More flexible but requires JSON decoders
-
-**Example:**
-```elm
-import Browser.Events exposing (onKeyDown)
-import Json.Decode as Decode
+import Time
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    onKeyDown (Decode.map KeyPressed keyDecoder)
+    if model.isHost && model.gameRunning then
+        Time.every tickIntervalMs Tick
+    else
+        Sub.none
 
-keyDecoder : Decode.Decoder String
-keyDecoder =
-    Decode.field "key" Decode.string
+-- Example: 100ms tick = 10 FPS (same as current server)
+tickIntervalMs : Float
+tickIntervalMs = 100
 ```
 
-**Migration Impact:** MODERATE - rewrite keyboard handling
+### Why `Time.every` Not `onAnimationFrameDelta`
+
+| Aspect | Time.every | onAnimationFrameDelta |
+|--------|------------|----------------------|
+| Purpose | Fixed interval logic | Smooth visual animation |
+| Rate | Configurable (e.g., 100ms) | ~60 FPS (16.67ms) |
+| Use case | Game tick, state updates | Rendering, interpolation |
+| Network sync | Predictable intervals | Variable, harder to sync |
+
+For snake game physics (grid-based movement at fixed rate), `Time.every` is correct. The current server ticks at ~100ms intervals - replicate this in Elm for P2P host.
+
+**Exception:** If adding smooth visual interpolation between ticks in the future, use `onAnimationFrameDelta` for rendering while keeping `Time.every` for game logic.
+
+### Existing Elm Packages (No additions needed)
+
+The project already has:
+- `elm/time 1.0.0` - Provides `Time.every`
+- `elm/browser 1.0.2` - Provides `onAnimationFrameDelta` if needed
+
+### Sources
+- [Elm Time Guide](https://guide.elm-lang.org/effects/time.html) - Time.every usage
+- [Browser.Events](https://package.elm-lang.org/packages/elm/browser/latest/Browser.Events) - Animation frame APIs
+- [Elm Game Loop Tutorial](https://sbaechler.gitbooks.io/elm-hexagon/doc/gameloop.html) - Patterns
 
 ---
 
-## 6. Dependencies Summary Table
+## Elm Ports for WebRTC
 
-| Category | Current | Target | Package/Tool | Confidence |
-|----------|---------|--------|--------------|------------|
-| Elm | 0.18.0 | 0.19.1 | elm binary | HIGH |
-| Phoenix | 1.3.0 | 1.7.14 | phoenix (hex) | MEDIUM-HIGH |
-| Elixir | 1.4.x | 1.15.7 | elixir | MEDIUM-HIGH |
-| Erlang | (old) | OTP 26.2 | erlang | MEDIUM |
-| Build Tool | Brunch | esbuild | esbuild (npm) | HIGH |
-| Version Mgmt | (none) | mise | mise | HIGH |
-| Elm-Phoenix | fbonetti 2.2.0 | saschatimme/elm-phoenix OR Ports | elm package | MEDIUM |
-| Keyboard | elm-lang/keyboard | Browser.Events | elm/browser | HIGH |
-| Node.js | unknown | 20.x LTS | nodejs | HIGH |
+### Existing Pattern (Leverage It)
 
----
+The current codebase has a clean TypeScript <-> Elm ports pattern:
 
-## 7. What NOT to Use (Anti-Patterns)
+**Elm side (`Ports.elm`):**
+```elm
+port module Ports exposing (...)
 
-### Avoid These:
-1. ❌ **Elm 0.18 packages** - Incompatible, deprecated ecosystem
-2. ❌ **Brunch** - Deprecated, removed from Phoenix 1.7
-3. ❌ **elm-brunch** - Obsolete build plugin
-4. ❌ **asdf** - Project specifies mise instead
-5. ❌ **fbonetti/elm-phoenix-socket** - Only works with Elm 0.18
-6. ❌ **Native modules in Elm** - Removed in 0.19
-7. ❌ **Phoenix 1.3-1.6** - Skip to 1.7 for modern patterns
-8. ❌ **Cowboy 1.x** - Phoenix 1.7 uses Cowboy 2.x (handled automatically)
-9. ❌ **System-installed Elixir/Erlang** - Use mise for version control
-10. ❌ **elm-lang/* packages** - Renamed to elm/* in 0.19
+-- Commands (Elm -> JS)
+port joinGame : JE.Value -> Cmd msg
+port sendDirection : JE.Value -> Cmd msg
 
----
+-- Subscriptions (JS -> Elm)
+port receiveGameState : (JD.Value -> msg) -> Sub msg
+port receiveError : (String -> msg) -> Sub msg
+```
 
-## 8. Recommended Migration Path
+**JS side (`socket.ts`):**
+```typescript
+app.ports.joinGame.subscribe((payload) => { ... });
+app.ports.receiveGameState.send(gameState);
+```
 
-### Phase 1: Environment Setup
-1. Install mise
-2. Create `.mise.toml` with Elixir 1.15, Erlang 26, Node 20
-3. Run `mise install`
-4. Verify versions with `mise current`
+### New Ports for P2P Mode
 
-**Risk:** LOW
-**Confidence:** HIGH
+Add to `Ports.elm`:
 
----
+```elm
+-- P2P Commands (Elm -> JS)
+port createRoom : () -> Cmd msg
+port joinRoom : String -> Cmd msg  -- Room code
+port sendP2PState : JE.Value -> Cmd msg  -- Host broadcasts state
+port sendP2PInput : JE.Value -> Cmd msg  -- Client sends input
 
-### Phase 2: Phoenix Upgrade
-1. Update `mix.exs` to Phoenix 1.7.x
-2. Run `mix deps.get`
-3. Run `mix phx.gen.release --docker` to see new structure
-4. Migrate config files (config/runtime.exs pattern)
-5. Update directory structure if needed
-6. Remove Brunch, add esbuild config
+-- P2P Subscriptions (JS -> Elm)
+port roomCreated : (String -> msg) -> Sub msg  -- Receive room code
+port peerConnected : (JE.Value -> msg) -> Sub msg
+port peerDisconnected : (String -> msg) -> Sub msg
+port receiveP2PState : (JD.Value -> msg) -> Sub msg  -- Clients receive state
+port receiveP2PInput : (JD.Value -> msg) -> Sub msg  -- Host receives input
+port p2pError : (String -> msg) -> Sub msg
+```
 
-**Risk:** MODERATE
-**Confidence:** MEDIUM-HIGH
-**Note:** Phoenix has good upgrade guides; follow official docs
+### New TypeScript Module (`p2p.ts`)
 
----
+```typescript
+import Peer, { DataConnection } from 'peerjs';
 
-### Phase 3: Asset Pipeline
-1. Remove `brunch-config.js`
-2. Remove Brunch from `package.json`
-3. Add esbuild configuration
-4. Test asset compilation
-5. Update deployment scripts
+interface ElmP2PPorts {
+  createRoom: { subscribe: (cb: () => void) => void };
+  joinRoom: { subscribe: (cb: (code: string) => void) => void };
+  sendP2PState: { subscribe: (cb: (data: unknown) => void) => void };
+  sendP2PInput: { subscribe: (cb: (data: unknown) => void) => void };
+  roomCreated: { send: (code: string) => void };
+  peerConnected: { send: (data: unknown) => void };
+  peerDisconnected: { send: (peerId: string) => void };
+  receiveP2PState: { send: (data: unknown) => void };
+  receiveP2PInput: { send: (data: unknown) => void };
+  p2pError: { send: (msg: string) => void };
+}
 
-**Risk:** MODERATE
-**Confidence:** HIGH
+export function initP2P(app: { ports: ElmP2PPorts }) {
+  let peer: Peer | null = null;
+  const connections: Map<string, DataConnection> = new Map();
 
----
+  // Implementation follows existing socket.ts pattern
+  // ...
+}
+```
 
-### Phase 4: Elm Upgrade (CRITICAL)
-1. Install Elm 0.19.1
-2. Run `elm init` in new elm directory
-3. Manually port code file-by-file:
-   - Update imports (elm-lang → elm)
-   - Fix Browser.* API changes
-   - Rewrite keyboard handling
-   - Update JSON decoders
-4. Fix all compiler errors (Elm compiler is helpful)
+### Port Design Principles
 
-**Risk:** HIGH
-**Confidence:** MEDIUM-HIGH
-**Time Estimate:** SIGNIFICANT - Elm 0.18 → 0.19 is major
+1. **Separate P2P ports from Phoenix ports**: Don't mix concerns; game mode determines which ports are active
+2. **Use `JE.Value`/`JD.Value` for complex data**: Matches existing pattern, allows flexible JSON
+3. **Keep ports thin**: Business logic in Elm, transport logic in TypeScript
+4. **Error ports for each subsystem**: `receiveError` (Phoenix) vs `p2pError` (WebRTC)
 
----
-
-### Phase 5: Phoenix Channels Integration
-1. Choose: saschatimme/elm-phoenix OR Ports
-2. If Ports: Write JavaScript channel handlers
-3. If Package: Install and configure elm-phoenix
-4. Rewrite Socket/Channel code
-5. Test WebSocket connection thoroughly
-
-**Risk:** HIGH
-**Confidence:** MEDIUM
-**Critical:** This is where multiplayer sync happens
+### Sources
+- [Elm Ports Guide](https://guide.elm-lang.org/interop/ports.html) - Official documentation
+- [Bridging Elm and JavaScript with Ports](https://thoughtbot.com/blog/bridging-elm-and-javascript-with-ports) - Best practices
+- Existing `socket.ts` in project - Proven pattern to follow
 
 ---
 
-### Phase 6: Fix Multiplayer Sync Bug
-1. Add state broadcast on player join
-2. Send full game state to new connections
-3. Test multi-client scenarios
+## What NOT to Add
 
-**Risk:** MODERATE
-**Confidence:** HIGH
-**Note:** Easier to fix after upgrade complete
+### Do NOT Add: simple-peer
+- **Why suggested**: Another WebRTC abstraction
+- **Why skip**: PeerJS is more mature, has built-in signaling server, better docs
+- **Bundle**: Similar size but less ecosystem support
 
----
+### Do NOT Add: elm-webrtc or WebRTC Elm packages
+- **Why suggested**: Native Elm WebRTC
+- **Why skip**: No maintained Elm 0.19 WebRTC packages exist; ports are the correct pattern
+- **Evidence**: [webrtc-elm-play](https://github.com/TheOddler/webrtc-elm-play) project archived 2018, used JS+ports approach
 
-## 9. Confidence Levels Explanation
+### Do NOT Add: qrcode-generator or qrcodejs
+- **Why suggested**: Older QR libraries
+- **Why skip**: `qr` is smaller, zero-dep, actively maintained
 
-**HIGH:** Information confirmed from official sources or widely known as of Jan 2025
-**MEDIUM-HIGH:** Strong likelihood based on ecosystem trends
-**MEDIUM:** Reasonable assumption, but verify with live docs
-**LOW-MEDIUM:** Speculative, needs verification
+### Do NOT Add: Additional signaling servers
+- **Why suggested**: Custom signaling for reliability
+- **Why skip for MVP**: PeerJS cloud (0.peerjs.com) is free and sufficient; add self-hosted later if needed
 
-**Verification Needed (no live access):**
-- Exact Phoenix 1.7.x patch version
-- Exact Elixir 1.15.x patch version
-- Current saschatimme/elm-phoenix status and API
-- Erlang OTP 26 vs 27 recommendation for 2026
+### Do NOT Add: TURN server
+- **Why suggested**: NAT traversal fallback
+- **Why skip for MVP**: WebRTC DataChannels usually work peer-to-peer; add TURN only if users report connection issues in symmetric NAT scenarios
 
----
-
-## 10. Open Questions for Verification
-
-When you have web access, verify:
-
-1. **Latest Phoenix version** - Check hexdocs.pm/phoenix
-2. **Latest Elixir version** - Check elixir-lang.org
-3. **Erlang OTP current** - Check erlang.org
-4. **saschatimme/elm-phoenix status** - Check package.elm-lang.org
-5. **Alternative Elm-Phoenix packages** - Search Elm package repository
-6. **Phoenix 1.7 asset pipeline** - Confirm esbuild is still default
-7. **mise vs asdf 2026** - Confirm mise is stable and recommended
+### Do NOT Add: Elm animation packages
+- **Why suggested**: Game rendering
+- **Why skip**: Existing SVG rendering works; `elm/time` and `elm/browser` provide all needed timing
 
 ---
 
-## 11. Additional Resources
+## Integration Points with Existing Code
 
-**Official Documentation** (verify these URLs):
-- Phoenix: https://hexdocs.pm/phoenix
-- Elm: https://guide.elm-lang.org/
-- Elixir: https://elixir-lang.org/
-- mise: https://mise.jdx.dev/
+### Existing Files to Modify
 
-**Elm 0.18 → 0.19 Migration:**
-- Official upgrade guide: https://github.com/elm/compiler/blob/master/upgrade-docs/0.19.md
+| File | Changes |
+|------|---------|
+| `assets/package.json` | Add `peerjs`, `qr` dependencies |
+| `assets/src/Ports.elm` | Add P2P port definitions |
+| `assets/src/Main.elm` | Add P2P mode state, subscriptions |
+| `assets/js/app.ts` | Conditional init of socket vs P2P |
 
-**Phoenix 1.3 → 1.7 Migration:**
-- Check Phoenix CHANGELOG and upgrade guides on hexdocs
+### New Files to Create
 
----
+| File | Purpose |
+|------|---------|
+| `assets/js/p2p.ts` | PeerJS integration, P2P port handlers |
+| `assets/js/qr.ts` | QR code rendering helper |
+| `assets/src/P2P.elm` | P2P-specific types, encoders/decoders |
+| `assets/src/GameLogic.elm` | Pure game logic (tick, collision, scoring) ported from Elixir |
 
-## 12. Risk Assessment
+### Mode Architecture
 
-| Component | Migration Risk | Complexity | Impact if Wrong |
-|-----------|---------------|------------|-----------------|
-| Elm 0.18→0.19 | HIGH | HIGH | App won't compile |
-| Phoenix Channels | HIGH | MODERATE | Multiplayer broken |
-| Phoenix 1.3→1.7 | MODERATE | MODERATE | Deploy issues |
-| Brunch→esbuild | MODERATE | LOW | Assets won't build |
-| Keyboard handling | MODERATE | LOW | Controls broken |
-| mise setup | LOW | LOW | Version mismatch |
-| Elixir upgrade | LOW | LOW | Minor compatibility |
+```
+                    [UI Layer - Elm]
+                          |
+            +-------------+-------------+
+            |                           |
+      [Phoenix Mode]              [P2P Mode]
+            |                           |
+      socket.ts                    p2p.ts
+            |                           |
+      Phoenix Channels            PeerJS
+            |                           |
+      [Server GameServer]         [Host Elm]
+```
 
----
+Both modes share:
+- Elm UI components (Board, Scoreboard, etc.)
+- JSON decoders for game state
+- Direction input handling
 
-## 13. Success Criteria
-
-You'll know the stack is correct when:
-
-✅ `elm make` compiles Elm 0.19.1 code without errors
-✅ `mix phx.server` starts Phoenix without warnings
-✅ `mise current` shows correct Elixir/Erlang/Node versions
-✅ Asset pipeline builds JS and CSS correctly
-✅ WebSocket connects to Phoenix Channels
-✅ Multiplayer sync works (after bug fix)
-✅ No deprecated dependency warnings
-✅ Modern browser testing passes
-
----
-
-## 14. Next Steps for Roadmap
-
-Based on this research:
-
-1. **Set up mise** - Quick win, low risk
-2. **Upgrade Phoenix first** - Easier without Elm changes
-3. **Replace Brunch with esbuild** - While Phoenix works
-4. **Tackle Elm 0.19 migration** - Biggest effort
-5. **Fix WebSocket/Channels** - After Elm works
-6. **Fix multiplayer sync bug** - Final goal
-
-**Estimated Total Effort:** 3-5 weeks for experienced developer
-**Biggest Unknowns:** Elm-Phoenix WebSocket integration, state sync fix
+P2P mode adds:
+- Game logic in Elm (currently in Elixir GameServer)
+- Host tick loop via `Time.every`
+- QR code display for room sharing
 
 ---
 
-**Document Status:** DRAFT - Needs verification with live documentation
-**Confidence Overall:** MEDIUM-HIGH for general direction, specific versions need confirmation
-**Last Updated:** 2026-01-30
-**Researched By:** Claude (Sonnet 4.5) - Knowledge cutoff January 2025
+## Installation Commands
+
+```bash
+cd assets
+
+# Add new dependencies
+npm install peerjs@1.5.5 qr@0.5.4
+
+# TypeScript types (peerjs includes its own)
+# qr has TypeScript support built-in
+```
+
+### Updated package.json
+
+```json
+{
+  "dependencies": {
+    "phoenix": "file:../deps/phoenix",
+    "phoenix_html": "file:../deps/phoenix_html",
+    "peerjs": "^1.5.5",
+    "qr": "^0.5.4"
+  }
+}
+```
+
+---
+
+## Risk Assessment
+
+| Risk | Likelihood | Impact | Mitigation |
+|------|------------|--------|------------|
+| PeerJS cloud downtime | Low | High | Monitor status.peerjs.com; fallback to self-hosted if needed |
+| NAT traversal failures | Medium | Medium | Most modern networks work; defer TURN until user reports |
+| Game logic port accuracy | Low | High | Port Elixir tests to Elm; fuzz test collision detection |
+| Browser compatibility | Low | Low | PeerJS handles; stick to DataChannel (not media) |
+
+---
+
+## Confidence Assessment
+
+| Area | Confidence | Reasoning |
+|------|------------|-----------|
+| PeerJS selection | HIGH | Verified npm, docs, active maintenance |
+| QR library selection | HIGH | Verified npm, zero-dep, recent release |
+| Elm timing approach | HIGH | Official docs confirm Time.every for fixed intervals |
+| Ports pattern | HIGH | Existing codebase proves pattern works |
+| Bundle impact | HIGH | Verified sizes via npm/bundlephobia sources |

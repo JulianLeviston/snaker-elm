@@ -1,337 +1,188 @@
 # Project Research Summary
 
-**Project:** Snaker-Elm Multiplayer Game Upgrade
-**Domain:** Real-time multiplayer web game (Elm + Phoenix Channels)
-**Researched:** 2026-01-30
-**Confidence:** MEDIUM-HIGH
+**Project:** Snaker Elm v2 - P2P WebRTC Mode
+**Domain:** Browser-based P2P multiplayer game
+**Researched:** 2026-02-03
+**Confidence:** HIGH
 
 ## Executive Summary
 
-This project requires upgrading a multiplayer snake game from Elm 0.18 + Phoenix 1.3 (2017 stack) to Elm 0.19.1 + Phoenix 1.7 (2025/2026 stack) while simultaneously fixing a critical multiplayer state synchronization bug. The upgrade path involves major breaking changes across both frontend and backend, with the WebSocket communication layer requiring complete reimplementation due to Elm 0.19's removal of Native modules.
+Adding P2P WebRTC multiplayer to Snaker Elm is a well-scoped extension that leverages the existing architecture. The current Elm + Phoenix setup already separates rendering (Elm) from game logic (Elixir) via TypeScript ports. For P2P mode, game logic moves to Elm while TypeScript swaps Phoenix sockets for PeerJS DataChannels. This is a proven pattern with minimal new dependencies: PeerJS (31.9 KB) for WebRTC abstraction and qr (9 KB) for room sharing.
 
-The recommended approach is to migrate the game from its current event-driven client-side simulation model to a server-authoritative architecture where the server maintains canonical game state and broadcasts full state snapshots. This architectural shift, combined with the stack upgrade, will fix the state sync bug that currently prevents new players from seeing existing snakes at correct positions. The migration must be atomic—both Elm and Phoenix upgrades are coupled through the WebSocket protocol and cannot be deployed independently.
+The recommended approach uses a **host-authoritative star topology**. One peer runs the game loop (porting the existing Elixir GameServer logic to pure Elm) and broadcasts state to all clients. This mirrors the current Phoenix architecture, making state synchronization trivial and avoiding the complexity of full-mesh networking or consensus protocols. Deterministic host election (lowest peer ID wins) enables seamless host migration without signaling.
 
-The critical risk is the WebSocket communication rewrite (elm-phoenix-socket → ports-based implementation), which represents the highest-complexity component with no direct migration path. Secondary risks include asset pipeline replacement (Brunch → esbuild) and timing-sensitive multiplayer state synchronization. Success requires sequential migration: environment setup → Phoenix backend → asset pipeline → Elm frontend → WebSocket integration → state sync implementation, with full integration testing at each phase boundary.
+Key risks center on NAT traversal (20-30% of users may have connectivity issues without TURN fallback) and Safari compatibility (requires JSON serialization, not binary). For MVP, accept PeerJS cloud signaling and defer TURN servers until user reports indicate need. The existing ports pattern and TypeScript infrastructure reduce integration risk significantly.
 
 ## Key Findings
 
 ### Recommended Stack
 
-The modern 2025/2026 Elm + Phoenix stack has evolved significantly from the 2017 implementation, with breaking changes across every layer of the stack.
+**Total new bundle cost:** ~41 KB gzipped. No new Elm packages required.
 
 **Core technologies:**
-- **Elm 0.19.1**: Latest stable release; major breaking changes from 0.18 (package format, core libraries, no Native modules)
-- **Phoenix 1.7.14**: Current stable version; replaced Brunch with esbuild, improved WebSocket performance, modernized directory structure
-- **Elixir 1.15.7 + Erlang/OTP 26**: Required for Phoenix 1.7 compatibility, modern language features
-- **esbuild**: Asset bundling (replaced Brunch); faster, simpler, but no native Elm support
-- **mise**: Version management (project requirement); replaces asdf with better performance
-- **Ports-based WebSocket**: Required for Elm 0.19 since elm-phoenix-socket uses forbidden Native modules
+- **PeerJS 1.5.5**: WebRTC DataChannel abstraction with free cloud signaling -- mature (10+ years), hides ICE/STUN complexity, TypeScript support
+- **qr 0.5.4**: QR code generation for room sharing -- zero dependencies, 9 KB, SVG output
+- **Elm Time.every**: Host game tick loop -- 100ms intervals match current Phoenix server tick
 
-**Critical breaking change:**
-The `fbonetti/elm-phoenix-socket` package (currently v2.2.0) is incompatible with Elm 0.19 due to Native module removal. Must migrate to either ports + Phoenix JavaScript client (recommended) or `saschatimme/elm-phoenix` package (if 0.19 compatible). This is the highest-risk component of the migration.
+**Not adding:**
+- TURN server (defer until user reports indicate need)
+- simple-peer (PeerJS has built-in signaling)
+- elm-webrtc packages (none maintained for 0.19; ports are correct pattern)
 
 ### Expected Features
 
-The multiplayer state sync bug fix requires implementing server-authoritative game state, which changes feature behavior significantly.
-
 **Must have (table stakes):**
-- Server maintains authoritative game state (snake positions, apples, tick timing)
-- Full state broadcast on player join (existing players visible at correct positions)
-- Real-time direction changes via Phoenix Channels (existing functionality preserved)
-- Client-side prediction for responsive input (optional optimization)
-- Consistent apple spawning across all clients (server-generated, not client RNG)
+- Peer connection via PeerJS DataChannels
+- Room codes (use PeerJS peer IDs)
+- Host game loop with state broadcasting
+- Client input forwarding to host
+- Player join/leave handling
+- Connection status display
 
 **Should have (competitive):**
-- State reconciliation on client (handle network latency gracefully)
-- Reconnection handling (Phoenix Channels provides this, must wire up in Elm)
-- Smooth visual interpolation (CSS transitions or Elm-based, low priority)
+- Host migration (deterministic election, lowest ID wins)
+- Shareable links with embedded room code
+- QR code for room sharing (local play UX)
+- Reconnection handling (ICE restart)
 
 **Defer (v2+):**
-- Multiple game rooms (architecture supports via DynamicSupervisor, but implement later)
-- Spectator mode (not required for fix)
-- Replay/recording (not essential for launch)
-- Mobile controls (current game is keyboard-only)
+- TURN server fallback
+- Custom signaling server (use PeerJS cloud for MVP)
+- Rollback netcode (overkill for snake game)
+- Voice/video chat
+- Persistent rooms
 
-**Anti-features (explicitly avoid):**
-- Client-side game simulation (root cause of current bug)
-- Event-only synchronization (leads to timing drift)
-- Native modules in Elm (forbidden in 0.19)
+**Anti-features (do not build):**
+- Full mesh topology (use star; O(n) vs O(n^2) connections)
+- Server-side room discovery (defeats P2P purpose)
+- Input prediction (snake game doesn't need it)
+- Anti-cheat (P2P is inherently trust-based)
 
 ### Architecture Approach
 
-The fix requires migrating from event-driven client simulation to server-authoritative state synchronization with optional client prediction.
+The architecture extends the existing dual-layer pattern: Elm handles view/input/game-logic, TypeScript handles networking via ports. For P2P mode, a new `p2p.ts` module manages PeerJS connections while `GameEngine.elm` contains the ported game logic (currently in Elixir). Host runs `Time.every 100` for tick loop; non-hosts render received state. Both modes share view components, decoders, and input handling.
 
 **Major components:**
+1. **GameEngine.elm** -- Pure game logic (tick, collision, apple spawn) ported from Elixir
+2. **P2PPorts.elm** -- WebRTC port definitions (createRoom, joinRoom, sendInput, receiveState)
+3. **p2p.ts** -- PeerJS connection manager, message routing
+4. **hostElection.ts** -- Deterministic host election (lowest peer ID)
 
-1. **GameServer (GenServer)** — NEW: Authoritative game loop running 100ms ticks; maintains snakes, apples, collision detection; broadcasts state via PubSub
-2. **GameChannel (Phoenix.Channel)** — MODIFIED: WebSocket lifecycle management; forwards inputs to GameServer; receives PubSub broadcasts and pushes to clients
-3. **Elm Ports Module** — NEW: Bidirectional communication with Phoenix JavaScript client (replaces elm-phoenix-socket)
-4. **Board Reconciliation (Elm)** — MODIFIED: Receive server state snapshots; optional prediction/reconciliation for responsive input
-5. **GameSupervisor (Supervisor)** — NEW: Supervise GameServer instances (future-proofs for multiple game rooms)
-
-**Data flow (authoritative server pattern):**
-```
-Client Input → Port → JavaScript → Channel → GameServer
-GameServer Tick (100ms) → PubSub Broadcast → Channel → JavaScript → Port → Elm Update
-Elm renders server state (authoritative), optionally predicts next frame
-```
-
-**Build order rationale:**
-Backend must be authoritative before client can reconcile. Phoenix upgrade enables esbuild. esbuild enables Elm 0.19 compilation. Elm 0.19 enables ports. Ports enable WebSocket. WebSocket enables state sync fix. This creates a strict sequential dependency chain.
+**Data flow (P2P host):**
+1. Host receives inputs from peers via DataChannel
+2. Host runs tick every 100ms using Time.every
+3. Host broadcasts full game state to all peers
+4. Peers render received state directly
 
 ### Critical Pitfalls
 
-1. **Native modules forbidden (Elm 0.19)** — elm-phoenix-socket cannot be used; must rewrite WebSocket layer with ports + Phoenix JavaScript client; complete rewrite of socket initialization, message passing, subscriptions; highest risk component.
+1. **NAT Traversal Failures** -- Configure STUN servers, accept 20-30% may need TURN (defer TURN for MVP). Use `chrome://webrtc-internals/` for debugging.
 
-2. **Brunch removed from Phoenix 1.7** — Asset pipeline completely changed; must configure esbuild + separate Elm compilation step; no automated migration; elm-brunch plugin incompatible; requires custom build scripts.
+2. **Host Disconnect Without Migration** -- Implement deterministic election (smallest peer ID wins). All peers independently compute same result. New host broadcasts full state immediately.
 
-3. **Client tick timing divergence** — Current bug: clients tick independently at 100ms, positions drift; migration amplifies this if not fixed; MUST implement server-authoritative tick during upgrade, not defer to later phase.
+3. **Safari Compatibility** -- Use `serialization: 'json'` in PeerJS config. Safari cannot use binary serialization. Test on Safari/iOS early.
 
-4. **Apple generation on client** — Currently Random.generate per client; each player sees different apples; must move to server-side RNG with broadcast; blocking bug for playability.
+4. **State Desynchronization** -- Host is sole authority. Non-hosts send inputs only. Full state broadcast each tick self-heals missed messages.
 
-5. **Player join without full state** — New players only receive metadata, not snake positions; must implement full state snapshot on join; affects GameChannel.join/3 and GameServer.get_state/0.
-
-6. **Version lock-step requirement** — Cannot upgrade Elm and Phoenix independently; WebSocket protocol couples them; big-bang cutover required; no incremental migration path; must branch and test full stack before merge.
-
-7. **Keyboard module removed (Elm 0.19)** — elm-lang/keyboard deleted; must migrate to Browser.Events.onKeyDown with custom JSON decoders; affects game controls; moderate impact but straightforward fix.
+5. **Elm Port Race Conditions** -- Never assume message order. Use state machine in TypeScript. Add handshake protocol (Elm sends "ready", JS responds "initialized").
 
 ## Implications for Roadmap
 
-Based on research, the migration has a strict dependency chain with minimal parallelization opportunities. Suggested phase structure follows the critical path through breaking changes.
+Based on research, suggested phase structure follows a risk-reduction sequence: establish reliable connections before adding game logic complexity.
 
-### Phase 1: Environment & Phoenix Backend Upgrade
-**Rationale:** Foundation work; Phoenix upgrade is less risky than Elm and enables asset pipeline modernization; establishes server-authoritative architecture before client changes.
+### Phase 1: P2P Connection Layer
+**Rationale:** Foundation must be solid. NAT traversal and Safari compatibility issues will manifest here. Get connections working before adding game logic.
+**Delivers:** PeerJS integration, room creation/joining, basic peer messaging
+**Addresses:** Peer connection establishment, room codes, connection status display
+**Avoids:** NAT traversal failures, Safari compatibility gaps, port race conditions
+**Stack:** PeerJS 1.5.5 with `serialization: 'json'`
 
-**Delivers:**
-- mise environment configured (Elixir 1.15, Erlang 26, Node 20)
-- Phoenix 1.7.x dependencies updated (mix.exs)
-- WebSocket transport configuration migrated (Phoenix.Transports → endpoint socket config)
-- Cowboy 1.x → 2.x upgrade
-- Poison → Jason JSON library swap
-- GameServer GenServer implemented (authoritative game loop)
-- GameSupervisor supervision tree
-- PubSub integration for state broadcast
+### Phase 2: Game Engine Port
+**Rationale:** Isolate game logic from networking. Test locally before networked play. This is the largest new code and highest risk for logic bugs.
+**Delivers:** Pure Elm game logic (tick, collision, apple spawn, snake movement)
+**Addresses:** Host game loop (running locally first)
+**Avoids:** State desynchronization (by testing logic in isolation)
+**Notes:** Port Elixir tests to Elm. Single-player mode using Time.every for validation.
 
-**Addresses features:**
-- Server-authoritative game state (must-have)
-- Full state broadcast infrastructure
+### Phase 3: Host Mode Integration
+**Rationale:** Connect game engine to P2P layer. Host runs tick loop, broadcasts state. Simpler than client mode (no input relay complexity).
+**Delivers:** Working host that runs game and broadcasts to connected peers
+**Addresses:** Host game loop, state broadcasting
+**Avoids:** Tick drift (host is sole timing authority)
 
-**Avoids pitfalls:**
-- PITFALL 9: Phoenix.Transports removed (fixed in this phase)
-- PITFALL 10: Cowboy 2.x required (fixed in this phase)
-- PITFALL 22: GenServer race conditions (addressed during GameServer implementation)
+### Phase 4: Client Mode Integration
+**Rationale:** Depends on host working correctly. Clients receive state and send inputs.
+**Delivers:** Full P2P gameplay (host + clients)
+**Addresses:** Client input forwarding, state rendering
 
-**Testing gate:** Phoenix server runs; GameServer ticks and broadcasts to iex console; channel tests pass.
+### Phase 5: Host Migration
+**Rationale:** Most complex feature. Requires all prior phases working. Deterministic election simplifies but still has edge cases.
+**Delivers:** Game continues when host disconnects
+**Addresses:** Host migration, peer disconnect handling
+**Avoids:** Session loss, split-brain scenarios
 
-### Phase 2: Asset Pipeline Migration (Brunch → esbuild)
-**Rationale:** Enables Elm 0.19 compilation; decoupled from Phoenix runtime (can test in parallel with Phase 1); required before frontend changes.
-
-**Delivers:**
-- Brunch removed (brunch-config.js deleted, npm deps cleaned)
-- esbuild configured in config/config.exs
-- Elm compilation script (elm make → assets/js/elm.js)
-- npm scripts for build:elm + build:js
-- Development watcher configured
-- Production build tested (mix assets.deploy)
-
-**Addresses features:**
-- Build system for Elm 0.19 (prerequisite)
-
-**Avoids pitfalls:**
-- PITFALL 11: Brunch deprecated (removed in this phase)
-- PITFALL 16: esbuild lacks native Elm support (custom script created)
-- PITFALL 17: esbuild explicit imports (app.js updated)
-- PITFALL 18: output path conventions (priv/static/assets configured)
-- PITFALL 30: npm vs mix workflows (updated for Phoenix 1.7)
-
-**Testing gate:** Assets compile in dev and prod; static files served correctly; no compilation errors.
-
-### Phase 3: Elm 0.19 Core Migration
-**Rationale:** Upgrade Elm language and standard library before tackling WebSocket (most complex part); get compiler working with simpler changes first.
-
-**Delivers:**
-- elm-package.json → elm.json conversion
-- Package namespace updates (elm-lang/* → elm/*)
-- Html.program → Browser.element migration
-- Keyboard.ups → Browser.Events.onKeyUp migration
-- Time.every API updates (Posix-based)
-- toString → custom Direction.toString
-- JSON decoder updates for Elm 0.19
-- Compilation succeeds (elm make runs without errors)
-
-**Addresses features:**
-- Keyboard input (table stakes for snake control)
-
-**Avoids pitfalls:**
-- PITFALL 1: Package format changed (elm.json created)
-- PITFALL 2: Keyboard module removed (Browser.Events implemented)
-- PITFALL 3: Html.program removed (Browser.element adopted)
-- PITFALL 4: Time.every API changed (Float milliseconds)
-- PITFALL 5: toString removed (custom function created)
-- PITFALL 7: JSON decoder refinements (tested)
-
-**Testing gate:** Elm compiles; app initializes in browser (even without WebSocket); keyboard events logged.
-
-### Phase 4: WebSocket Layer Replacement (Ports)
-**Rationale:** Highest-risk component; requires both frontend and backend working; dependencies on Phase 1 (GameChannel) and Phase 3 (Elm 0.19).
-
-**Delivers:**
-- Phoenix JavaScript client integrated (assets/js/socket.js)
-- Elm Ports module (sendInput, gameStateReceived, etc.)
-- Main.elm refactored to use ports instead of elm-phoenix-socket
-- Socket initialization in JavaScript (connection lifecycle)
-- Channel join/push/on handlers in JavaScript
-- Port subscription handlers in Elm
-- Connection state management (Connecting/Connected/Disconnected)
-- WebSocket URL parameterized via flags (not hard-coded localhost)
-
-**Addresses features:**
-- Real-time communication (table stakes for multiplayer)
-- Reconnection handling (should-have)
-
-**Avoids pitfalls:**
-- PITFALL 6: Native modules forbidden (ports used instead)
-- PITFALL 13: elm-phoenix-socket incompatible (replaced with ports)
-- PITFALL 14: Socket initialization pattern changed (ports-based)
-- PITFALL 15: Channel join timing race (connection state managed)
-- PITFALL 26: Hard-coded localhost (flags-based configuration)
-
-**Testing gate:** Browser connects to Phoenix Channel; JavaScript console shows join success; port messages flow bidirectionally.
-
-### Phase 5: State Sync Implementation
-**Rationale:** Core bug fix; requires all infrastructure complete (server authoritative, WebSocket working); final integration phase.
-
-**Delivers:**
-- GameChannel.join/3 sends full game state to new player
-- Board.fromServerState decoder (server snapshot → Elm model)
-- Client removes local apple generation (server-driven)
-- Client removes local tick-based position updates for remote players
-- Server broadcasts full state every 100ms tick
-- Client reconciliation logic (optional prediction + server truth)
-- Apple spawn/despawn server events
-- Player join/leave with full state synchronization
-
-**Addresses features:**
-- Full state on join (must-have, fixes core bug)
-- Consistent apple spawning (must-have)
-- State reconciliation (should-have for latency handling)
-
-**Avoids pitfalls:**
-- PITFALL 19: Client tick timing divergence (server tick authoritative)
-- PITFALL 20: Apple generation client-side (moved to server)
-- PITFALL 21: Player join without full state (full snapshot sent)
-- PITFALL 24: Missing error handling (validation added)
-- PITFALL 27: No rollback strategy (message versioning considered)
-
-**Testing gate:** Two browser windows show identical snake positions; new player sees existing players correctly; apples consistent across clients; no position drift over time.
-
-### Phase 6: Integration Testing & Polish
-**Rationale:** End-to-end validation; edge case handling; production readiness.
-
-**Delivers:**
-- Multi-client integration tests (2+ browsers)
-- Network latency testing (Chrome DevTools throttling)
-- Rapid join/leave scenario testing
-- Error handling for malformed messages
-- Graceful disconnect/reconnect
-- Production deployment configuration
-- Performance validation (asset size, load time)
-
-**Avoids pitfalls:**
-- PITFALL 23: broadcast! vs broadcast_from! (refactored if needed)
-- PITFALL 25: Version lock-step requirement (deployment strategy)
-- PITFALL 28: Testing multiplayer in dev (comprehensive multi-client tests)
-- PITFALL 29: Mix deps cache (clean build verified)
-
-**Testing gate:** All multiplayer scenarios pass; no regressions; production build succeeds; deployment tested.
+### Phase 6: Room Sharing and Polish
+**Rationale:** UX improvements after core functionality works. Lower risk, independent of game logic.
+**Delivers:** QR codes, shareable links, mode selection UI
+**Addresses:** Shareable links, QR code sharing
+**Stack:** qr 0.5.4 for QR generation
 
 ### Phase Ordering Rationale
 
-- **Phases 1-2 can partially overlap:** Phoenix backend and asset pipeline are independent; can develop in parallel and integrate.
-- **Phase 3 blocks Phase 4:** Must have Elm 0.19 compiling before implementing ports (language syntax changes).
-- **Phase 4 blocks Phase 5:** Cannot fix state sync without working WebSocket layer.
-- **Sequential critical path:** 1 → 3 → 4 → 5 → 6 (backend, Elm core, WebSocket, state sync, testing).
-- **Parallelization opportunity:** Phase 2 can run alongside Phase 1 since asset builds don't affect Phoenix runtime.
-
-This ordering minimizes risk by:
-1. Establishing stable backend foundation first (easier to debug)
-2. Deferring highest-risk WebSocket rewrite until prerequisites complete
-3. Enabling incremental testing at each phase boundary
-4. Avoiding big-bang integration (each phase has independent testing gate)
+- **Connections before logic:** NAT traversal failures are the #1 risk. Validate P2P infrastructure works before building features on it.
+- **Isolated game engine:** Testing game logic without networking eliminates a variable. Match current Phoenix behavior before adding network layer.
+- **Host before client:** Host is simpler (just run loop and broadcast). Client depends on host being correct.
+- **Migration last:** Highest complexity, requires all other pieces working.
+- **Polish last:** QR codes and UI polish don't affect core functionality.
 
 ### Research Flags
 
-**Phases needing deeper research during planning:**
-- **Phase 4 (WebSocket):** Complex ports patterns; Phoenix JavaScript client API specifics; connection lifecycle edge cases; may need `/gsd:research-phase` for ports architecture patterns.
-- **Phase 5 (State Sync):** Prediction/reconciliation algorithms; client-server timing synchronization; latency compensation techniques; Game Networking research may be helpful.
+Phases likely needing deeper research during planning:
+- **Phase 1 (P2P Connection):** May need STUN server configuration research if PeerJS defaults prove unreliable
+- **Phase 5 (Host Migration):** Edge cases around state transfer timing may surface during implementation
 
-**Phases with standard patterns (skip research-phase):**
-- **Phase 1 (Phoenix):** Well-documented upgrade path; Phoenix 1.3→1.7 changelog comprehensive; GenServer patterns established.
-- **Phase 2 (Asset Pipeline):** esbuild configuration straightforward; Elm compilation simple (elm make); community examples abundant.
-- **Phase 3 (Elm Core):** Official Elm 0.18→0.19 upgrade guide covers all changes; compiler errors are helpful; migration well-trodden.
+Phases with standard patterns (skip research-phase):
+- **Phase 2 (Game Engine):** Straightforward port of existing Elixir logic, well-defined behavior
+- **Phase 3-4 (Host/Client Integration):** Standard PeerJS patterns, documented in ARCHITECTURE.md
+- **Phase 6 (Room Sharing):** Simple QR library, URL manipulation
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | MEDIUM-HIGH | Elm 0.19.1 and Phoenix 1.7 versions confirmed from official sources; specific patch versions (1.7.14, 1.15.7) inferred from ecosystem trends; mise adoption verified from project requirements |
-| Features | HIGH | State sync bug root cause clearly identified from codebase analysis; server-authoritative pattern is industry-standard solution; feature requirements derived from existing game behavior |
-| Architecture | MEDIUM-HIGH | Server-authoritative pattern well-documented in game networking literature; ports-based WebSocket approach is standard Elm 0.19 practice; build order dependencies validated through breaking change analysis |
-| Pitfalls | HIGH | Breaking changes identified from official Elm 0.19 upgrade docs and Phoenix changelog; elm-phoenix-socket incompatibility confirmed; Brunch deprecation verified; pitfall severity ratings based on impact analysis |
+| Stack | HIGH | PeerJS verified on npm, qr library confirmed, Elm timing patterns documented |
+| Features | MEDIUM | Based on community patterns and WebRTC docs, not production P2P games |
+| Architecture | HIGH | Existing codebase analyzed, clear integration points identified |
+| Pitfalls | MEDIUM | WebSearch findings cross-verified with MDN and official docs |
 
-**Overall confidence:** MEDIUM-HIGH
-
-The general migration path is well-established (Elm 0.19 upgrades and Phoenix 1.7 upgrades are common in 2025/2026). The specific combination of simultaneous stack upgrade + architecture refactoring + bug fix adds complexity, but each individual component has proven solutions. The main uncertainty is in timing estimation and integration testing effort.
+**Overall confidence:** HIGH
 
 ### Gaps to Address
 
-**Stack verification (low priority):**
-- Exact Phoenix 1.7.x patch version (1.7.14 assumed, but check hexdocs.pm for latest stable)
-- Elixir 1.15.x vs 1.16.x (1.15.7 assumed based on compatibility, but could use newer)
-- Erlang OTP 26 vs 27 availability (26.2.1 assumed, but OTP 27 may be current in 2026)
-- Node.js LTS version (20.x assumed, but could verify current LTS)
-
-**Resolution:** Run `mise use` with latest stable versions during Phase 1; minor version differences unlikely to cause issues.
-
-**WebSocket library validation (medium priority):**
-- Verify `saschatimme/elm-phoenix` package exists and supports Elm 0.19
-- Check if it's actively maintained (commit history, issue tracker)
-- Compare API surface to `fbonetti/elm-phoenix-socket` to estimate migration effort
-- If package is abandoned, ports approach becomes mandatory (not optional)
-
-**Resolution:** Research during Phase 4 planning; ports approach is fallback and is always viable.
-
-**State sync algorithm details (medium priority):**
-- Client prediction implementation specifics (store pending inputs, reapply on reconciliation)
-- Server tick rate tuning (100ms may be too slow/fast depending on gameplay feel)
-- Interpolation vs CSS transitions for smooth movement (affects visual quality)
-
-**Resolution:** Implement simplest version first (no prediction, just render server state); add prediction in Phase 6 if input feels laggy; CSS transitions likely sufficient for snake game's grid-based movement.
-
-**Production deployment (low priority during migration):**
-- Asset CDN configuration (if using)
-- WebSocket SSL termination (wss:// in production)
-- Database persistence for game state (not in current version, defer to v2)
-- Horizontal scaling (single GameServer instance sufficient for MVP)
-
-**Resolution:** Address during Phase 6 deployment configuration; not blocking for development.
+- **TURN server necessity:** Cannot determine until real-world testing with diverse networks. Plan to add if >10% of users report connection issues.
+- **Game logic parity:** Elixir to Elm port needs thorough testing. Consider porting Elixir tests as first step of Phase 2.
+- **Tab backgrounding:** Browser throttles timers when tab is backgrounded. For casual snake game, "game pauses" is acceptable. Document this behavior.
+- **PeerJS cloud reliability:** Using free signaling for MVP. Monitor for issues and be prepared to self-host PeerServer if needed.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- **Elm 0.19 Upgrade Guide** (https://github.com/elm/compiler/blob/master/upgrade-docs/0.19.md) — Breaking changes, migration patterns
-- **Phoenix 1.7 CHANGELOG** (https://github.com/phoenixframework/phoenix/blob/v1.7/CHANGELOG.md) — Deprecations, new features
-- **Codebase Analysis** (.planning/codebase/ARCHITECTURE.md, .planning/codebase/CONCERNS.md) — Current implementation details, known bugs
+- [PeerJS npm](https://www.npmjs.com/package/peerjs) -- Version 1.5.5, bundle size
+- [PeerJS Documentation](https://peerjs.com/docs/) -- API reference, connection patterns
+- [Elm Time Guide](https://guide.elm-lang.org/effects/time.html) -- Time.every for game loop
+- [MDN WebRTC Data Channels](https://developer.mozilla.org/en-US/docs/Games/Techniques/WebRTC_data_channels) -- DataChannel best practices
+- [qr npm](https://www.npmjs.com/package/qr) -- Version 0.5.4, zero dependencies
 
 ### Secondary (MEDIUM confidence)
-- **Elm Package Repository** (package.elm-lang.org) — Package compatibility, available alternatives to elm-phoenix-socket
-- **Phoenix Guides** (hexdocs.pm/phoenix) — Channel patterns, WebSocket configuration, asset management
-- **Game Networking Patterns** (Gaffer on Games, Source Multiplayer Networking) — Client prediction, server reconciliation
+- [Building P2P Multiplayer Games](https://medium.com/@aguiran/building-real-time-p2p-multiplayer-games-in-the-browser) -- Host election, state sync patterns
+- [Host Migration in P2P Games](https://edgegap.com/blog/host-migration-in-peer-to-peer-or-relay-based-multiplayer-games) -- Migration strategies
+- [WebRTC Browser Support 2025](https://antmedia.io/webrtc-browser-support/) -- Safari limitations
+- [Elm Ports Guide](https://guide.elm-lang.org/interop/ports.html) -- Port patterns, race conditions
 
-### Tertiary (LOW confidence, needs validation)
-- **Community forum posts** — elm-phoenix-socket alternatives, migration experiences
-- **Stack version inference** — Latest stable versions based on release cadence, needs verification with live docs
+### Tertiary (LOW confidence)
+- [WebRTC Topology Comparison (KTH)](https://www.kth.se/social/files/56143db5f2765422ae79942c/WebRTC.pdf) -- Star vs mesh bandwidth (academic, dated but principles hold)
+- [PeerJS GitHub Issues](https://github.com/peers/peerjs/issues) -- Reconnection, serialization edge cases
 
 ---
-*Research completed: 2026-01-30*
+*Research completed: 2026-02-03*
 *Ready for roadmap: yes*

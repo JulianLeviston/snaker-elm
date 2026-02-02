@@ -1,698 +1,301 @@
-# Feature/API Changes: Elm 0.18→0.19 & Phoenix 1.3→1.7
+# Features Research: P2P WebRTC Multiplayer
+
+**Domain:** P2P browser-based multiplayer games (snake game)
+**Researched:** 2026-02-03
+**Confidence:** MEDIUM (based on community patterns and official WebRTC docs, verified across multiple sources)
 
 ## Executive Summary
 
-This document identifies breaking changes and migration paths for upgrading the snaker-elm project from Elm 0.18 to 0.19 and Phoenix 1.3 to 1.7. Both upgrades involve significant breaking changes that MUST be addressed.
+P2P WebRTC multiplayer games require a core set of features to be playable, with host management being the critical differentiator from server-authoritative models. The existing Snaker Elm codebase already handles game state rendering, player input, and connection status - the P2P layer needs to replicate these patterns while adding peer connection management, host election, and room joining.
 
-**Impact Level**: HIGH - Multiple critical breaking changes across both frontend and backend.
-
----
-
-## Elm 0.18 → 0.19 Migration
-
-### 1. Html.program → Browser.* [BREAKING]
-
-**Current State** (Main.elm:299):
-```elm
-main =
-    Html.program
-        { init = init
-        , view = view
-        , update = update
-        , subscriptions = subscriptions
-        }
-```
-
-**Required Change**:
-- `Html.program` removed in Elm 0.19
-- Must migrate to `Browser.element`, `Browser.document`, or `Browser.application`
-
-**Migration Path**:
-```elm
--- New import required
-import Browser
-
--- Replace Html.program with Browser.element
-main : Program () Model Msg
-main =
-    Browser.element
-        { init = \_ -> init
-        , view = view
-        , update = update
-        , subscriptions = subscriptions
-        }
-```
-
-**Notes**:
-- `Browser.element` is simplest replacement for apps embedded in HTML
-- `init` now receives flags parameter (use `\_ ->` if no flags needed)
-- Must add explicit type annotation for `main`
+Star topology (host-relays-to-clients) is the correct choice for this project given the planned host-runs-game-loop architecture. This simplifies state synchronization since only the host maintains authoritative state.
 
 ---
 
-### 2. Native Modules Removed [BREAKING]
+## Table Stakes (Must Have)
 
-**Current State**:
-- Using `fbonetti/elm-phoenix-socket` 2.2.0 which contains Native JavaScript code
-- Package depends on `elm-lang/websocket` 1.0.2 (also uses Native code)
+Features required for a playable P2P experience. Missing any of these results in a broken or unusable game.
 
-**The Problem**:
-- ALL Native modules removed from Elm 0.19
-- Cannot use packages that contain Native code
-- `fbonetti/elm-phoenix-socket` is NOT compatible with Elm 0.19
+| Feature | Description | Complexity | Dependencies | Why Required |
+|---------|-------------|------------|--------------|--------------|
+| **Peer Connection Establishment** | Ability to connect peers via WebRTC DataChannels using PeerJS | Medium | PeerJS library | No connections = no multiplayer |
+| **Host Selection (Initial)** | First joiner becomes host automatically | Low | Peer connection | Someone must run the game loop |
+| **Room Codes** | Shareable alphanumeric codes to join specific games | Low | PeerJS peer IDs | Players need a way to find each other |
+| **Host Game Loop** | Host runs tick loop, broadcasts state to clients | Medium | Existing game logic | Game needs authoritative state source |
+| **Client Input Forwarding** | Clients send direction inputs to host | Low | DataChannel, existing input handling | Players need to control their snakes |
+| **State Broadcasting** | Host sends game state updates to all clients | Medium | DataChannel, existing state format | Clients need to render current game |
+| **Connection State Display** | Show connecting/connected/disconnected status | Low | Existing ConnectionStatus type | Players need feedback on connection |
+| **Player Join Handling** | New players can join mid-game | Medium | Peer events, game state | Multi-player games need joining |
+| **Player Leave Handling** | Graceful handling when players disconnect | Medium | Peer events | Players will disconnect |
+| **Basic Error Display** | Show connection/join errors to user | Low | Existing error port | Users need to know when things fail |
 
-**Migration Path**:
-1. **Option A**: Use ports to communicate with Phoenix Channels via JavaScript
-   - Write JavaScript to handle Phoenix Socket connection
-   - Use Elm ports for bidirectional communication
-   - More boilerplate but full control
+### Feature Details
 
-2. **Option B**: Use compatible package
-   - `saschatimme/elm-phoenix` - Pure Elm 0.19 implementation
-   - Actively maintained alternative
-   - Different API, requires refactoring
+#### Peer Connection Establishment
+- Use PeerJS cloud for signaling (no server needed)
+- DataChannels for game data (not media streams)
+- Configure for unreliable/unordered delivery for low latency (acceptable for snake game ticks)
+- Handle ICE connection failures gracefully
 
-**Recommended**: Option B (saschatimme/elm-phoenix)
-- Less boilerplate than ports
-- Type-safe Phoenix Channel communication
-- Maintained package with Elm 0.19 support
+**Existing asset to leverage:** `ConnectionStatus` type and display in Main.elm
 
-**Example with saschatimme/elm-phoenix**:
-```elm
-import Phoenix.Socket as Socket
-import Phoenix.Channel as Channel
-import Phoenix.Push as Push
+#### Host Selection (Initial)
+- Deterministic: first peer to create room is host
+- Host's peer ID becomes the room code
+- No election needed for initial host - just whoever creates the room
 
--- Socket initialization changes slightly but remains similar
-socket =
-    Socket.init "ws://localhost:4000/socket/websocket"
-        |> Socket.withDebug
-```
+**Implementation note:** Simple boolean `isHost` flag in model
 
----
+#### Room Codes
+- Use PeerJS-generated peer IDs as room codes
+- Keep them reasonably short (PeerJS IDs are already usable)
+- Allow custom room codes if user provides one
 
-### 3. Ports API Changes [BREAKING]
+#### Host Game Loop
+- Host runs requestAnimationFrame or setInterval tick (existing Phoenix server does 100ms ticks)
+- Host maintains authoritative game state
+- Host processes all collision detection, apple spawning, etc.
 
-**Current State**:
-- No ports currently in use (Main.elm)
-- May be used internally by elm-phoenix-socket package
+**Existing asset to leverage:** Game.elm state structure, existing tick handling
 
-**Changes in 0.19**:
-- Port syntax unchanged but type restrictions tightened
-- Cannot send/receive Functions, Json.Decode.Value directly
-- Must use specific allowed types: String, Int, Float, Bool, Maybe, List, Array, tuples, records
+#### State Broadcasting
+- Reuse existing `GameState` JSON format from Phoenix mode
+- Send on every tick (same as Phoenix `tick` event)
+- Clients receive via `receiveTick` port (already exists)
 
-**Migration Path**:
-If implementing Phoenix connection via ports:
-```elm
--- Outgoing port (Elm → JavaScript)
-port sendToChannel : JE.Value -> Cmd msg
-
--- Incoming port (JavaScript → Elm)
-port receiveFromChannel : (JD.Value -> msg) -> Sub msg
-```
-
-**Impact**: Low (if using package), High (if implementing custom ports)
+**Existing asset to leverage:** `receiveTick` port, `tickDecoder` in Main.elm
 
 ---
 
-### 4. Core Library Changes [BREAKING]
+## Differentiators (Should Have)
 
-**Current Issues in Code**:
+Features that improve the experience but are not blocking for initial P2P functionality.
 
-#### 4.1. `toString` removed (Main.elm:196)
-```elm
--- BEFORE (0.18)
-stringDirection = toString direction
+| Feature | Value Proposition | Complexity | Dependencies | Notes |
+|---------|-------------------|------------|--------------|-------|
+| **Host Migration** | Game continues if host leaves | High | Deterministic host election | Critical for robustness |
+| **Shareable Links** | URL with room code embedded | Low | Room codes | Better UX than manual code entry |
+| **QR Code Sharing** | Scan to join from mobile | Low | Room codes, QR library | Nice for local play |
+| **Reconnection Handling** | Auto-reconnect on temporary disconnect | Medium | ICE restart, state sync | Handles network blips |
+| **Latency Indicators** | Show ping to host/peers | Medium | RTT measurement | Helps debug lag issues |
+| **Player Names** | Custom names instead of IDs | Low | Input field, state broadcast | More personal experience |
+| **Mode Switching** | Toggle between P2P and Phoenix modes | Medium | Conditional connection logic | Flexibility for users |
+| **Copy Room Code Button** | One-click copy to clipboard | Low | Browser clipboard API | Quality of life |
 
--- AFTER (0.19)
--- Must use custom function or String.fromInt/String.fromFloat
-stringDirection = directionToString direction
-```
+### Feature Details
 
-**Migration**: Implement type-specific string conversion functions.
+#### Host Migration
+This is the most complex differentiator but important for a polished experience.
 
-#### 4.2. `Keyboard` module removed
-**Current State** (Main.elm:6, 266-268):
-```elm
-import Keyboard
+**Implementation approach (from research):**
+1. All peers maintain sorted list of peer IDs
+2. When host disconnects, smallest remaining peer ID becomes new host
+3. New host broadcasts "I am now host" + full game state
+4. Other peers acknowledge and switch to client mode
 
-keyboardBoardControlSubscription : Sub Msg
-keyboardBoardControlSubscription =
-    Keyboard.ups keyCodeToChangeDirectionMsg
-```
+**Why deterministic election:** Avoids split-brain where multiple peers think they're host. All peers can independently compute who the new host should be.
 
-**Migration Path**:
-```elm
--- Use Browser.Events instead
-import Browser.Events as Events
-import Json.Decode as Decode
+**Complexity factors:**
+- State transfer during migration
+- Handling in-flight inputs during transition
+- Brief game pause during migration is acceptable
 
-keyboardBoardControlSubscription : Sub Msg
-keyboardBoardControlSubscription =
-    Events.onKeyUp (Decode.map keyCodeToChangeDirectionMsg keyDecoder)
+**Source:** Microsoft DirectPlay protocol uses "oldest peer becomes host" approach. p2play-js uses "smallest player ID becomes host".
 
-keyDecoder : Decode.Decoder Keyboard.KeyCode
-keyDecoder =
-    Decode.field "keyCode" Decode.int
-```
+#### Shareable Links
+Format: `https://yoursite.com/p2p?room=ROOMCODE`
 
-#### 4.3. `Time` API changes
-**Current State** (Main.elm:5, 263):
-```elm
-import Time
+**Implementation:**
+- Check URL params on load
+- If room code present, auto-join instead of create
+- Update URL when creating room (for easy sharing)
 
-tickBoardSubscription : Sub Msg
-tickBoardSubscription =
-    Time.every Board.tickDuration (BoardMsg << Board.tickBoardMsg)
-```
+#### QR Code Sharing
+Many P2P browser games (Playroom, MakeCode Arcade) use QR codes for easy mobile joining.
 
-**Migration Path**:
-```elm
--- Time.every signature changed
--- BEFORE: Time.every : Time -> (Time -> msg) -> Sub msg
--- AFTER:  Time.every : Float -> (Posix -> msg) -> Sub msg
+**Libraries:** qrcode.js or similar (generates QR from URL)
 
-tickBoardSubscription : Sub Msg
-tickBoardSubscription =
-    Time.every Board.tickDuration (BoardMsg << Board.tickBoardMsg)
-```
+**UX:** Display QR code in lobby/waiting screen for host
 
-**Note**: Duration now in milliseconds (Float), time values are `Time.Posix` instead of `Float`.
+#### Reconnection Handling
+WebRTC supports ICE restart for temporary connection issues.
 
----
+**When disconnected state detected:**
+1. Wait briefly (connection may self-heal)
+2. If still disconnected after ~3s, attempt ICE restart
+3. If ICE restart fails, show reconnection UI
 
-### 5. JSON Encoding/Decoding API Changes
+**Source:** MDN RTCPeerConnection.restartIce() documentation
 
-**Current State** (Main.elm:16-17):
-```elm
-import Json.Encode as JE
-import Json.Decode as JD
-```
+#### Latency Indicators
+Useful for debugging but not blocking.
 
-**Changes**:
-- `JD.andThen` argument order FLIPPED
-- Field access functions simplified
-
-**Migration Example** (Main.elm:234-244):
-```elm
--- BEFORE (0.18)
-(JD.string
-    |> JD.andThen
-        (\string ->
-            case Direction.fromString string of
-                Just direction -> JD.succeed direction
-                Nothing -> JD.fail "Direction not supplied"
-        )
-)
-
--- AFTER (0.19)
-(JD.string
-    |> JD.andThen
-        (\string ->
-            case Direction.fromString string of
-                Just direction -> JD.succeed direction
-                Nothing -> JD.fail "Direction not supplied"
-        )
-)
-```
-
-**Actually this specific code is fine** - but watch for places using old signature:
-- 0.18: `andThen : (a -> Decoder b) -> Decoder a -> Decoder b`
-- 0.19: `andThen : (a -> Decoder b) -> Decoder a -> Decoder b` (same!)
-
-**Real change**: `Decode.maybe` behavior - now succeeds with `Nothing` on null, fails on invalid JSON.
+**Implementation:**
+- Periodic ping/pong messages via DataChannel
+- Calculate RTT
+- Display in UI (optional, maybe debug mode only)
 
 ---
 
-### 6. Package Management [BREAKING]
+## Anti-Features (Do Not Build)
 
-**Current State**:
-- `elm-package.json` file
-- Package names like `elm-lang/core`
+Explicit exclusions with reasoning.
 
-**Required Changes**:
-- `elm-package.json` → `elm.json`
-- Different format and structure
-- Package names change: `elm-lang/core` → `elm/core`
-- Semantic versioning enforced
+| Anti-Feature | Why Avoid | What to Do Instead |
+|--------------|-----------|-------------------|
+| **Full Mesh Topology** | Doesn't scale, wastes bandwidth, complex state sync | Use star topology (host-to-clients) |
+| **Server-Side Room Discovery** | Defeats P2P purpose, requires infrastructure | Use direct room codes/links |
+| **Rollback Netcode** | Overkill for snake game, complex implementation | Simple state broadcast is sufficient |
+| **TURN Server Fallback** | Adds infrastructure cost/complexity | Accept that ~10-20% corporate users may have issues |
+| **Input Prediction** | Snake game is simple enough without it | Trust host state, accept small latency |
+| **Persistent Rooms** | Rooms exist only while host is connected | Clear expectation that rooms are ephemeral |
+| **Voice/Video Chat** | Out of scope, different use case | Keep it simple - game data only |
+| **Spectator Mode** | Additional complexity for minimal value | Players are players |
+| **Match History/Leaderboards** | Requires persistence, out of P2P scope | Phoenix mode can have this if needed |
+| **Anti-Cheat** | P2P inherently trust-based, host is authoritative | Accept that host could cheat (local play context) |
 
-**Migration**:
-```bash
-# Elm 0.19 provides migration command
-elm init  # Creates new elm.json
-```
+### Rationale Deep Dive
 
-**New elm.json structure**:
-```json
-{
-    "type": "application",
-    "source-directories": ["."],
-    "elm-version": "0.19.1",
-    "dependencies": {
-        "direct": {
-            "elm/browser": "1.0.2",
-            "elm/core": "1.0.5",
-            "elm/html": "1.0.0",
-            "elm/json": "1.1.3",
-            "elm/time": "1.0.0"
-        },
-        "indirect": {}
-    },
-    "test-dependencies": {
-        "direct": {},
-        "indirect": {}
-    }
-}
-```
+#### Why Star Topology, Not Full Mesh
+Full mesh requires every peer to send to every other peer. For n players:
+- Full mesh: n*(n-1) connections total
+- Star: n-1 connections (host to each client)
 
----
+For a 4-player game:
+- Full mesh: 12 directional connections
+- Star: 3 connections
 
-### 7. New Features & Improvements
+Additionally, state synchronization is trivial in star topology - host is authoritative, sends state, done. Full mesh requires consensus protocols.
 
-#### 7.1. Better Performance
-- Smaller asset sizes (typically 30-50% reduction)
-- Faster compilation
-- Better runtime performance
+**Research finding:** "The bit rate for the mesh network got higher than the star network after a 4th user joined" - WebRTC topology research
 
-#### 7.2. Improved Error Messages
-- More helpful compiler errors
-- Better type mismatch explanations
+#### Why No TURN Server
+TURN servers relay traffic when direct peer connections fail (corporate firewalls, symmetric NAT). However:
+- Adds infrastructure cost
+- Adds latency
+- Only ~10-20% of users need it
+- For a casual game, acceptable to say "doesn't work on some corporate networks"
 
-#### 7.3. Browser Package
-- Better separation of concerns
-- `Browser.element` for embedded apps
-- `Browser.document` for full document control
-- `Browser.application` for SPAs with routing
+If this becomes a pain point later, can add TURN, but don't build upfront.
+
+#### Why No Rollback Netcode
+Libraries like NetplayJS implement rollback netcode for fighting games where frame-perfect timing matters. Snake game:
+- 100ms tick rate (10 FPS effectively)
+- Latency up to 50ms is imperceptible
+- State is simple (snake positions, apple positions)
+- No frame-perfect inputs needed
+
+Simple state broadcast from host is sufficient and much simpler.
 
 ---
 
-## Phoenix 1.3 → 1.7 Migration
+## Feature Dependencies
 
-### 8. Directory Structure Changes [BREAKING]
+```
+Room Codes
+    |
+    v
+Peer Connection Establishment --> Host Selection (Initial)
+    |                                    |
+    |                                    v
+    |                             Host Game Loop --> State Broadcasting
+    |                                    |                |
+    v                                    v                v
+Player Join Handling <-----------  All clients receive state
+Player Leave Handling
+    |
+    v
+Host Migration (if built) <-- needs sorted peer list + state transfer
 
-**Current State**:
-```
-lib/
-  snaker/              # Business logic
-  snaker_web/          # Web interface
-    channels/
-    controllers/
-    views/
-assets/                # Frontend assets
-  css/
-  js/
-  elm/
-  brunch-config.js
-```
-
-**Phoenix 1.7 Structure**:
-```
-lib/
-  snaker/              # Business logic (same)
-  snaker_web/          # Web interface
-    channels/          # Same location
-    controllers/       # Same location
-    components/        # NEW: LiveView components
-assets/                # REMOVED - assets moved
-priv/
-  static/              # Compiled assets
+Shareable Links --> depends on Room Codes
+QR Code Sharing --> depends on Shareable Links
+Reconnection Handling --> depends on Peer Connection Establishment
 ```
 
-**NEW in 1.7**:
-```
-assets/                # Now at root level, not in repo
-  js/
-  css/
-  vendor/
-```
+### Critical Path for MVP
 
-**Migration Impact**: Medium
-- Most code stays in same locations
-- Asset pipeline completely changed
-- No structural changes to channels/controllers
+1. Peer Connection Establishment (PeerJS setup)
+2. Room Codes (host creates room, others join)
+3. Host Selection (creator is host)
+4. Host Game Loop (port game logic from Phoenix thinking)
+5. Client Input Forwarding
+6. State Broadcasting
+7. Player Join/Leave Handling
 
 ---
 
-### 9. Asset Pipeline: Brunch → esbuild [BREAKING]
+## Complexity Assessment
 
-**Current State** (brunch-config.js):
-```javascript
-plugins: {
-  babel: {
-    ignore: [/vendor/]
-  },
-  elmBrunch: {
-    elmFolder: 'elm',
-    mainModules: ['Main.elm'],
-    outputFolder: '../js'
-  }
-}
-```
-
-**Required Changes**:
-1. **Remove Brunch entirely**
-   - Delete `brunch-config.js`
-   - Remove from `package.json` dependencies
-
-2. **Adopt esbuild**
-   - Configured in `config/config.exs`
-   - Much faster build times
-   - Simpler configuration
-
-**New Configuration** (config/config.exs):
-```elixir
-config :esbuild,
-  version: "0.17.11",
-  default: [
-    args: ~w(js/app.js --bundle --target=es2017 --outdir=../priv/static/assets --external:/fonts/* --external:/images/*),
-    cd: Path.expand("../assets", __DIR__),
-    env: %{"NODE_PATH" => Path.expand("../deps", __DIR__)}
-  ]
-```
-
-**Elm Integration with esbuild**:
-```javascript
-// assets/js/app.js
-import { Elm } from "../elm/Main.elm"
-
-const app = Elm.Main.init({
-  node: document.getElementById("elm-main"),
-  flags: {}
-})
-```
-
-**Build Process**:
-- esbuild handles JS bundling
-- Separate Elm compilation step
-- Both triggered by mix tasks
+| Feature | Complexity | Rationale |
+|---------|------------|-----------|
+| Peer Connection Establishment | Medium | PeerJS handles WebRTC complexity, but still need error handling |
+| Host Selection (Initial) | Low | Just a flag - whoever creates is host |
+| Room Codes | Low | Use peer IDs directly |
+| Host Game Loop | Medium | Need to port game logic to JS, run tick loop |
+| Client Input Forwarding | Low | Simple message over DataChannel |
+| State Broadcasting | Medium | Need to serialize state, broadcast to all |
+| Connection State Display | Low | Already exists in Elm, just need to wire up |
+| Player Join Handling | Medium | State updates, UI notifications |
+| Player Leave Handling | Medium | Snake removal, state updates |
+| Basic Error Display | Low | Already exists in Elm |
+| Host Migration | High | State transfer, deterministic election, race conditions |
+| Shareable Links | Low | URL manipulation |
+| QR Code Sharing | Low | Third-party library |
+| Reconnection Handling | Medium | ICE restart, timing, state resync |
+| Latency Indicators | Medium | RTT measurement, UI display |
+| Player Names | Low | Input field, add to state |
+| Mode Switching | Medium | Conditional logic, UI for selection |
 
 ---
 
-### 10. Endpoint Configuration Changes
+## Integration with Existing Codebase
 
-**Current State** (endpoint.ex:28):
-```elixir
-plug Plug.Parsers,
-  parsers: [:urlencoded, :multipart, :json],
-  pass: ["*/*"],
-  json_decoder: Poison
-```
+The existing codebase provides strong foundations that P2P mode can leverage:
 
-**Required Change**:
-- Poison removed from Phoenix 1.7
-- Now uses built-in Jason
+### Elm Side (Reusable)
+| Existing | P2P Usage |
+|----------|-----------|
+| `GameState` type | Same state structure from host |
+| `ConnectionStatus` type | Extend with P2P-specific states |
+| `tickDecoder` | Decode state from host broadcasts |
+| `playerJoinedDecoder` | Adapt for P2P join events |
+| `View.Board`, `View.Scoreboard` | Unchanged - render whatever state we have |
+| `Input.keyDecoder` | Unchanged - capture inputs same way |
 
-```elixir
-plug Plug.Parsers,
-  parsers: [:urlencoded, :multipart, :json],
-  pass: ["*/*"],
-  json_decoder: Jason  # Changed from Poison
-```
+### Elm Side (New/Modified)
+| Need | Notes |
+|------|-------|
+| P2P-specific ports | `createRoom`, `joinRoom`, `sendInput`, `receiveState`, etc. |
+| Mode selection model | Track whether in P2P or Phoenix mode |
+| Host/client distinction | `isHost` flag determines behavior |
+| Peer list tracking | For UI and host migration |
 
-**Migration**: Update `mix.exs` to replace Poison with Jason (likely already done by Phoenix).
+### JavaScript Side (New)
+| Component | Purpose |
+|-----------|---------|
+| PeerJS connection manager | Handle peer connections, DataChannels |
+| Room management | Create/join room logic |
+| Host game loop | Run tick loop, maintain state |
+| Message protocol | Define message types for input, state, etc. |
 
----
-
-### 11. Socket/Transport Configuration [BREAKING]
-
-**Current State** (user_socket.ex:9):
-```elixir
-transport :websocket, Phoenix.Transports.WebSocket
-```
-
-**Changes in Phoenix 1.7**:
-- Transport configuration moved to endpoint
-- Socket file simplified
-
-**New Pattern** (endpoint.ex):
-```elixir
-socket "/socket", SnakerWeb.UserSocket,
-  websocket: true,
-  longpoll: false
-```
-
-**Updated UserSocket**:
-```elixir
-defmodule SnakerWeb.UserSocket do
-  use Phoenix.Socket
-
-  # Channel definitions stay the same
-  channel "game:*", SnakerWeb.GameChannel
-
-  # connect/3 stays the same
-  def connect(_params, socket, _connect_info) do
-    new_player = Worker.new_player()
-    socket = assign(socket, :player, new_player)
-    {:ok, socket}
-  end
-
-  def id(_socket), do: nil
-end
-```
-
-**Note**: `connect/2` becomes `connect/3` (adds `connect_info` parameter).
+### JavaScript Side (Existing to Modify)
+| Component | Changes |
+|-----------|---------|
+| `app.ts` | Add mode selection, conditional connection |
+| `socket.ts` | Keep for Phoenix mode, add parallel P2P module |
 
 ---
 
-### 12. Channel API Compatibility [GOOD NEWS]
+## Sources
 
-**Current Code** (game_channel.ex):
-```elixir
-def join("game:snake", message, socket)
-def handle_in("player:change_direction", %{"direction" => direction}, socket)
-def handle_out("player:join", %{player: %{id: id}} = msg, socket)
-broadcast!(socket, "player:join", %{player: socket.assigns.player})
-push(socket, "join", %{status: "connected"})
-```
-
-**Migration Impact**: MINIMAL
-- Core Channel API remains stable
-- `join/3`, `handle_in/3`, `handle_out/3` unchanged
-- `broadcast!/3`, `push/3` unchanged
-- Channel code requires minimal changes
-
-**Minor Changes**:
-- Better telemetry/instrumentation hooks available
-- Improved error handling options
-- New testing helpers
-
----
-
-### 13. Dependency Updates [BREAKING]
-
-**Current mix.exs**:
-```elixir
-{:phoenix, "~> 1.3.0"},
-{:phoenix_pubsub, "~> 1.0"},
-{:phoenix_html, "~> 2.10"},
-{:cowboy, "~> 1.0"}
-```
-
-**Required Updates**:
-```elixir
-{:phoenix, "~> 1.7.0"},
-{:phoenix_pubsub, "~> 2.1"},
-{:phoenix_html, "~> 3.3"},
-{:plug_cowboy, "~> 2.6"},    # Replaces standalone cowboy
-{:jason, "~> 1.4"},          # JSON encoder (replaces Poison)
-{:esbuild, "~> 0.7", runtime: Mix.env() == :dev}
-```
-
-**Additional for Elm**:
-```elixir
-# May need custom mix task or npm script for Elm compilation
-```
-
----
-
-### 14. GenServer/Worker Code [NO CHANGES]
-
-**Current State** (worker.ex):
-- Pure Elixir GenServer
-- No Phoenix-specific dependencies
-
-**Migration Impact**: NONE
-- GenServer API stable across versions
-- Worker code requires no changes
-- This is good news!
-
----
-
-### 15. Configuration Structure Changes
-
-**Current** (likely in `config/config.exs`):
-```elixir
-config :snaker, SnakerWeb.Endpoint,
-  url: [host: "localhost"],
-  secret_key_base: "...",
-  render_errors: [view: SnakerWeb.ErrorView, accepts: ~w(html json)]
-```
-
-**Phoenix 1.7 Additions**:
-```elixir
-config :snaker, SnakerWeb.Endpoint,
-  url: [host: "localhost"],
-  secret_key_base: "...",
-  render_errors: [
-    formats: [html: SnakerWeb.ErrorHTML, json: SnakerWeb.ErrorJSON],
-    layout: false
-  ],
-  pubsub_server: Snaker.PubSub,
-  # NEW: Asset watchers
-  watchers: [
-    esbuild: {Esbuild, :install_and_run, [:default, ~w(--sourcemap=inline --watch)]},
-    # Add Elm watcher
-    elm: {Path.expand("assets/node_modules/.bin/elm"), [
-      "make",
-      "assets/elm/Main.elm",
-      "--output=assets/js/elm.js",
-      "--debug"
-    ]}
-  ]
-```
-
----
-
-### 16. New Phoenix 1.7 Features (Optional Enhancements)
-
-#### 16.1. Verified Routes
-- Compile-time route verification
-- Type-safe route helpers
-- Better refactoring support
-
-#### 16.2. Improved LiveView Integration
-- Not currently using LiveView
-- Could migrate some real-time features from Channels to LiveView
-- Simpler for some use cases
-
-#### 16.3. Tailwind CSS Support
-- Default in Phoenix 1.7
-- Optional upgrade
-- Could simplify styling
-
-#### 16.4. CoreComponents
-- Reusable component library
-- Not applicable to Elm frontend
-- Could use for any server-rendered pages
-
----
-
-## Migration Checklist
-
-### Elm 0.18 → 0.19
-- [ ] Replace `Html.program` with `Browser.element`
-- [ ] Migrate from `fbonetti/elm-phoenix-socket` to `saschatimme/elm-phoenix` or ports
-- [ ] Replace `toString` with type-specific converters
-- [ ] Migrate `Keyboard` module to `Browser.Events`
-- [ ] Update `Time` API usage
-- [ ] Convert `elm-package.json` to `elm.json`
-- [ ] Update package names (elm-lang/* → elm/*)
-- [ ] Add type annotations to `main`
-- [ ] Test all JSON decoders
-- [ ] Update build configuration for Elm 0.19
-
-### Phoenix 1.3 → 1.7
-- [ ] Update dependencies in `mix.exs`
-- [ ] Replace Poison with Jason
-- [ ] Migrate Brunch to esbuild
-- [ ] Update socket transport configuration
-- [ ] Update `connect/2` to `connect/3` in UserSocket
-- [ ] Configure asset watchers in config.exs
-- [ ] Set up Elm compilation with esbuild
-- [ ] Test all Channel functionality
-- [ ] Update error view configuration
-- [ ] Test WebSocket connection
-- [ ] Verify GenServer worker still functions
-
-### Testing Requirements
-- [ ] Test multiplayer game connection
-- [ ] Verify player join/leave events
-- [ ] Test direction change broadcasts
-- [ ] Verify keyboard controls
-- [ ] Test game board rendering
-- [ ] Verify WebSocket reconnection
-- [ ] Performance test (asset size, load time)
-
----
-
-## Risk Assessment
-
-### High Risk
-1. **elm-phoenix-socket migration** - Complete rewrite of socket integration required
-2. **Keyboard module removal** - Game controls must be reimplemented
-3. **Asset pipeline change** - Build process completely different
-
-### Medium Risk
-1. **toString removal** - Multiple locations to update
-2. **Browser.* migration** - Core app structure changes
-3. **Socket transport config** - Endpoint configuration changes
-
-### Low Risk
-1. **Channel API** - Minimal changes required
-2. **GenServer code** - No changes needed
-3. **JSON decoder updates** - Minor syntax adjustments
-
----
-
-## Recommended Migration Order
-
-1. **Phase 1: Phoenix Backend** (Lower Risk First)
-   - Update mix.exs dependencies
-   - Replace Poison with Jason
-   - Update socket/transport configuration
-   - Test channels in isolation
-
-2. **Phase 2: Build System** (Enable Elm 0.19)
-   - Remove Brunch, add esbuild
-   - Configure Elm 0.19 compilation
-   - Set up asset watchers
-   - Verify build pipeline works
-
-3. **Phase 3: Elm Core Migration** (Incremental Updates)
-   - Update elm.json
-   - Migrate to Browser.element
-   - Fix toString usage
-   - Update Time/Keyboard modules
-
-4. **Phase 4: Phoenix Socket Integration** (Highest Risk Last)
-   - Choose ports vs. elm-phoenix package
-   - Implement new socket connection
-   - Migrate all channel subscriptions
-   - Update message handling
-
-5. **Phase 5: Integration Testing**
-   - End-to-end multiplayer testing
-   - Performance verification
-   - Browser compatibility testing
-
----
-
-## Additional Resources
-
-### Elm Migration
-- Official Elm 0.19 upgrade guide: https://github.com/elm/compiler/blob/master/upgrade-docs/0.19.md
-- saschatimme/elm-phoenix package: https://package.elm-lang.org/packages/saschatimme/elm-phoenix/latest/
-
-### Phoenix Migration
-- Phoenix 1.7 release notes: https://github.com/phoenixframework/phoenix/blob/v1.7/CHANGELOG.md
-- Asset pipeline guide: https://hexdocs.pm/phoenix/asset_management.html
-- Channel testing: https://hexdocs.pm/phoenix/testing_channels.html
-
----
-
-## Summary
-
-Both migrations involve significant breaking changes, but they are well-documented and manageable:
-
-**Elm 0.18 → 0.19**: Primarily affects application structure (Html.program), package ecosystem (Native modules), and standard library (Keyboard, toString). The Phoenix socket integration is the highest-risk item requiring careful planning.
-
-**Phoenix 1.3 → 1.7**: Mainly impacts build tooling (Brunch → esbuild) and configuration. The core Channel API remains stable, which is excellent news for this real-time multiplayer game.
-
-**Total Estimated Effort**: 3-5 days
-- Phoenix migration: 1-2 days
-- Elm core migration: 1-2 days
-- Socket integration: 1 day
-- Testing/debugging: 1 day
-
-The incremental approach outlined above minimizes risk by tackling stable components first and leaving the highest-risk socket integration for last when everything else is working.
+- [Building Real-Time P2P Multiplayer Games in the Browser](https://medium.com/@aguiran/building-real-time-p2p-multiplayer-games-in-the-browser-why-i-eliminated-the-server-d9f4ea7d4099) - p2play-js author on host election, state sync
+- [Host Migration in P2P Games](https://edgegap.com/blog/host-migration-in-peer-to-peer-or-relay-based-multiplayer-games) - Host migration patterns
+- [Microsoft DirectPlay Host Migration Protocol](https://learn.microsoft.com/en-us/openspecs/windows_protocols/mc-dpl8cs/c188116b-228c-4c39-9959-381845f3d1af) - Deterministic host election specification
+- [WebRTC Data Channels - MDN](https://developer.mozilla.org/en-US/docs/Games/Techniques/WebRTC_data_channels) - DataChannel for games
+- [RTCPeerConnection.restartIce() - MDN](https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/restartIce) - Reconnection mechanism
+- [PeerJS Documentation](https://peerjs.com/examples) - PeerJS usage patterns
+- [Toptal: Taming WebRTC with PeerJS](https://www.toptal.com/webrtc/taming-webrtc-with-peerjs) - PeerJS game development
+- [GitHub flackr/lobby](https://github.com/flackr/lobby) - Lobby system for WebRTC games
+- [Playroom Kit Lobby UI](https://docs.joinplayroom.com/components/lobby) - QR code and room code patterns
+- [WebRTC Topology Comparison (KTH Research)](https://www.kth.se/social/files/56143db5f2765422ae79942c/WebRTC.pdf) - Star vs mesh bandwidth analysis
+- [NetplayJS](https://github.com/rameshvarun/netplayjs) - Rollback netcode reference (noted as overkill for snake)

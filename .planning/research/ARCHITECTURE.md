@@ -1,1071 +1,810 @@
-# Phoenix Channels + Elm Architecture for Real-Time Multiplayer
-
-**Research Date:** 2026-01-30
-**Context:** Fixing multiplayer state sync bug in Elm/Phoenix snake game upgrade (0.18→0.19, Phoenix 1.3→1.7)
-
-## Executive Summary
-
-The current multiplayer bug stems from an **event-only synchronization pattern** where clients independently compute game state based on local timing. The fix requires adopting an **authoritative server pattern** where the server maintains canonical game state and broadcasts full state updates. This research defines the architecture, component boundaries, data flow, and build order for implementing proper real-time state synchronization.
-
-## Problem Analysis
-
-### Current Architecture (Broken)
-
-**Pattern:** Event-driven synchronization with client-side simulation
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│ CLIENT A                      CLIENT B                       │
-├───────────────────────────────┼─────────────────────────────┤
-│ Local tick: 100ms             │ Local tick: 100ms            │
-│ Snake positions: computed     │ Snake positions: computed    │
-│ Apple spawn: random           │ Apple spawn: random          │
-│                               │                              │
-│ Sends: direction changes only │ Sends: direction changes only│
-│ Receives: direction changes   │ Receives: direction changes  │
-└───────────────┬───────────────┴────────────────┬─────────────┘
-                │                                │
-                └────────────┐   ┐───────────────┘
-                             │   │
-                     ┌───────▼───▼────────┐
-                     │ PHOENIX CHANNEL     │
-                     │ (No game state)     │
-                     │                     │
-                     │ - Broadcasts events │
-                     │ - Manages players   │
-                     └─────────────────────┘
-```
-
-**Why this fails:**
-1. **Timing drift**: Each client ticks independently (100ms intervals never align)
-2. **Position divergence**: Snakes move based on local time, not synchronized time
-3. **No initial state**: New players only receive directions, not positions
-4. **Apple inconsistency**: Each client spawns different apples at different times
-
-### Required Architecture (Authoritative Server)
-
-**Pattern:** Server-authoritative with client prediction and reconciliation
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│ CLIENT A                      CLIENT B                       │
-├───────────────────────────────┼─────────────────────────────┤
-│ Predicted state (smooth)      │ Predicted state (smooth)     │
-│ Local tick: 100ms             │ Local tick: 100ms            │
-│                               │                              │
-│ Sends: input (direction)      │ Sends: input (direction)     │
-│ Receives: state snapshots     │ Receives: state snapshots    │
-│ Reconciles: server truth      │ Reconciles: server truth     │
-└───────────────┬───────────────┴────────────────┬─────────────┘
-                │                                │
-                │    State updates (broadcast)   │
-                │  ◄─────────────────────────────┤
-                │                                │
-                └────────────┐   ┐───────────────┘
-                             │   │
-                     ┌───────▼───▼────────┐
-                     │ SERVER (GenServer)  │
-                     │ Authoritative state │
-                     │                     │
-                     │ - Tick: 100ms       │
-                     │ - Snakes: positions │
-                     │ - Apples: spawning  │
-                     │ - Collision: detect │
-                     │ - Broadcast: state  │
-                     └─────────────────────┘
-```
-
-## Component Boundaries
-
-### 1. Server Components (Phoenix/Elixir)
-
-#### GameServer (GenServer) - NEW
-**Responsibility:** Authoritative game loop and state
-
-**Location:** `lib/snaker/game_server.ex`
-
-**State:**
-```elixir
-%{
-  game_id: String.t(),
-  tick_count: non_neg_integer(),
-  last_tick: DateTime.t(),
-  snakes: %{player_id => Snake.t()},
-  apples: [Apple.t()],
-  grid_dimensions: %{x: integer(), y: integer()}
-}
-```
-
-**Operations:**
-- `start_link(game_id)` - Start game loop
-- `handle_info(:tick)` - Execute game tick (100ms interval)
-- `handle_call(:get_state)` - Return full game state
-- `handle_cast({:player_input, player_id, direction})` - Process input
-- `handle_cast({:add_player, player_id, player_data})` - Add snake
-- `handle_cast({:remove_player, player_id})` - Remove snake
-
-**Tick Logic:**
-1. Process queued inputs (direction changes)
-2. Move all snakes one step
-3. Check apple collisions → grow snakes
-4. Spawn new apples if needed
-5. Expire old apples
-6. Broadcast state snapshot via PubSub
-
-#### GameChannel (Phoenix.Channel) - MODIFIED
-**Responsibility:** WebSocket communication and player connection lifecycle
-
-**Location:** `lib/snaker_web/channels/game_channel.ex`
-
-**Changes from current:**
-- `join/3`: Request full game state from GameServer, send to joining client
-- `handle_in("player:input")`: Forward input to GameServer, do NOT broadcast
-- `handle_info({:game_tick, state})`: Receive from PubSub, broadcast to all clients
-- Remove `handle_out` filtering (server is authoritative, no echo prevention needed)
-
-**Events:**
-- Incoming: `"player:input"` (direction changes)
-- Outgoing: `"game:state"` (full state snapshot), `"player:joined"`, `"player:left"`
-
-#### Worker (GenServer) - UNCHANGED
-**Responsibility:** Player registry (name, color generation)
-
-**Location:** `lib/snaker/worker.ex`
-
-**No changes required** - continues to generate player metadata
-
-#### GameSupervisor (Supervisor) - NEW
-**Responsibility:** Supervise GameServer instances (one per game room)
-
-**Location:** `lib/snaker/game_supervisor.ex`
-
-**Pattern:** DynamicSupervisor for multiple game rooms (future-proofing)
-
-### 2. Client Components (Elm 0.19)
-
-#### Main Module - MODIFIED
-**Responsibility:** WebSocket integration and message routing
-
-**Location:** `assets/elm/src/Main.elm`
-
-**Changes:**
-- Upgrade to `Browser.element` (Elm 0.19 API)
-- Use ports for WebSocket (elm-phoenix-socket not compatible with 0.19)
-- Handle `"game:state"` messages → full board reconciliation
-- Send `"player:input"` instead of `"player:change_direction"`
-- Remove local tick-based position updates for remote players
-
-**Subscriptions:**
-- `gameStateReceived` port (from JavaScript)
-- `Time.every 100` (for smooth client-side prediction)
-- `Browser.Events.onKeyDown` (keyboard input)
-
-#### Board Module - MODIFIED
-**Responsibility:** Game state and rendering logic
-
-**Location:** `assets/elm/src/Data/Board.elm`
-
-**Changes:**
-- Add `serverTick` field to track server's tick count
-- `reconcileState : ServerState -> Board -> Board` function
-- Remove apple generation logic (server handles this)
-- Keep local tick for smooth interpolation between server updates
-- Add prediction logic: apply local input immediately, wait for server confirmation
-
-**State:**
-```elm
-type alias Board =
-    { currentPlayerId : PlayerId
-    , serverTick : Int  -- NEW: server's tick count
-    , localTick : Int   -- NEW: client's interpolation tick
-    , snakes : Dict PlayerId Snake
-    , apples : List Apple
-    , pendingInputs : List (Int, Direction)  -- NEW: for reconciliation
-    }
-```
-
-#### WebSocket Integration (Ports) - NEW
-**Responsibility:** Phoenix Channels connection via JavaScript
-
-**Location:**
-- `assets/elm/src/Ports.elm` (Elm side)
-- `assets/js/socket.js` (JavaScript side)
-
-**Elm Ports:**
-```elm
-port sendInput : InputMsg -> Cmd msg
-port gameStateReceived : (ServerState -> msg) -> Sub msg
-```
-
-**JavaScript:**
-- Use official Phoenix JavaScript client
-- Handle channel join, leave, message sending
-- Decode JSON to Elm-compatible format
-- Send to Elm via port subscriptions
-
-### 3. Data Models (Shared Understanding)
-
-#### Snake Position State
-**Server format (JSON):**
-```json
-{
-  "player_id": 1,
-  "direction": "North",
-  "body": [
-    {"x": 15, "y": 20},
-    {"x": 15, "y": 21},
-    {"x": 15, "y": 22}
-  ],
-  "colour": "67a387"
-}
-```
-
-**Elm type:**
-```elm
-type alias Snake =
-    { playerId : PlayerId
-    , direction : Direction
-    , body : List Position
-    , colour : String
-    }
-```
-
-#### Game State Snapshot
-**Server broadcasts every tick (100ms):**
-```json
-{
-  "tick": 1234,
-  "snakes": { "1": {...}, "2": {...} },
-  "apples": [
-    {"position": {"x": 10, "y": 10}, "spawn_time": 1234, "expire_time": 1264}
-  ]
-}
-```
-
-## Data Flow Diagrams
-
-### Player Join Flow
-
-```
-┌──────────┐                  ┌─────────────┐                ┌────────────┐
-│ Client   │                  │ GameChannel │                │ GameServer │
-└────┬─────┘                  └──────┬──────┘                └─────┬──────┘
-     │                               │                              │
-     │ WebSocket connect             │                              │
-     ├──────────────────────────────►│                              │
-     │                               │                              │
-     │                               │ create player (Worker)       │
-     │                               ├──────────────────────┐       │
-     │                               │                      │       │
-     │                               │◄─────────────────────┘       │
-     │                               │                              │
-     │ join "game:snake"             │                              │
-     ├──────────────────────────────►│                              │
-     │                               │                              │
-     │                               │ add_player(id, data)         │
-     │                               ├─────────────────────────────►│
-     │                               │                              │
-     │                               │                              │◄─┐ Add snake
-     │                               │                              │  │ at random pos
-     │                               │                              ├──┘
-     │                               │                              │
-     │                               │ :ok, game_state              │
-     │                               │◄─────────────────────────────┤
-     │                               │                              │
-     │ "player:joined" (to others)   │                              │
-     │◄──────────────────────────────┤                              │
-     │                               │                              │
-     │ "game:state" (full state)     │                              │
-     │◄──────────────────────────────┤                              │
-     │                               │                              │
-     │◄─┐ Render all snakes          │                              │
-     │  │ with correct positions     │                              │
-     ├──┘                            │                              │
-     │                               │                              │
-```
-
-### Input → State Update Flow
-
-```
-┌──────────┐                  ┌─────────────┐                ┌────────────┐
-│ Client   │                  │ GameChannel │                │ GameServer │
-└────┬─────┘                  └──────┬──────┘                └─────┬──────┘
-     │                               │                              │
-     │◄─┐ User presses ↑             │                              │
-     │  │ (arrow key)                │                              │
-     ├──┘                            │                              │
-     │                               │                              │
-     │◄─┐ Apply locally              │                              │
-     │  │ (prediction)               │                              │
-     │  │ Store pending input        │                              │
-     ├──┘                            │                              │
-     │                               │                              │
-     │ "player:input" {dir: "North"} │                              │
-     ├──────────────────────────────►│                              │
-     │                               │                              │
-     │                               │ player_input(id, North)      │
-     │                               ├─────────────────────────────►│
-     │                               │                              │
-     │                               │                              │◄─┐ Queue input
-     │                               │                              │  │ for next tick
-     │                               │                              ├──┘
-     │                               │                              │
-     │                      ... 100ms tick interval ...             │
-     │                               │                              │
-     │                               │                              │◄─┐ Process tick:
-     │                               │                              │  │ - Apply inputs
-     │                               │                              │  │ - Move snakes
-     │                               │                              │  │ - Check apples
-     │                               │                              ├──┘
-     │                               │                              │
-     │                               │ broadcast via PubSub         │
-     │                               │ :game_tick, state            │
-     │                               │◄─────────────────────────────┤
-     │                               │                              │
-     │ "game:state" {tick: 1235, ...}│                              │
-     │◄──────────────────────────────┤                              │
-     │                               │                              │
-     │◄─┐ Reconcile:                 │                              │
-     │  │ - Clear pending inputs     │                              │
-     │  │ - Update positions         │                              │
-     │  │ - Re-render                │                              │
-     ├──┘                            │                              │
-     │                               │                              │
-```
-
-### Game Tick Flow (Server-Driven)
-
-```
-                  ┌────────────────────────────────┐
-                  │ GameServer (every 100ms)       │
-                  │                                │
-                  │ 1. Process input queue         │
-                  │    └─ Apply direction changes  │
-                  │                                │
-                  │ 2. Move all snakes             │
-                  │    └─ nextPosition(dir, head)  │
-                  │                                │
-                  │ 3. Check apple collisions      │
-                  │    └─ If eaten: grow snake     │
-                  │                                │
-                  │ 4. Expire apples (timeout)     │
-                  │                                │
-                  │ 5. Spawn new apples (random)   │
-                  │    └─ If count < 3             │
-                  │                                │
-                  │ 6. Broadcast state snapshot    │
-                  │    └─ Phoenix.PubSub.broadcast │
-                  └────────────┬───────────────────┘
-                               │
-                               ▼
-                  ┌────────────────────────────────┐
-                  │ PubSub: "game:snake:tick"      │
-                  └────────────┬───────────────────┘
-                               │
-               ┌───────────────┼───────────────┐
-               │               │               │
-               ▼               ▼               ▼
-        ┌───────────┐   ┌───────────┐   ┌───────────┐
-        │ Channel 1 │   │ Channel 2 │   │ Channel N │
-        │ (Player A)│   │ (Player B)│   │ (Player N)│
-        └─────┬─────┘   └─────┬─────┘   └─────┬─────┘
-              │               │               │
-              │ push          │ push          │ push
-              │ "game:state"  │ "game:state"  │ "game:state"
-              │               │               │
-              ▼               ▼               ▼
-        ┌───────────┐   ┌───────────┐   ┌───────────┐
-        │ Client A  │   │ Client B  │   │ Client N  │
-        └───────────┘   └───────────┘   └───────────┘
-```
-
-## Specific Answers to Research Questions
-
-### 1. Should the server be authoritative for snake positions, or just events?
-
-**Answer:** Server must be authoritative for positions.
-
-**Reasoning:**
-- **Event-only synchronization fails** because clients with different tick timing compute different positions even with identical direction histories
-- **Authoritative positions** ensure all clients see the same game state
-- **Trade-off:** Higher bandwidth (full state vs events) but guaranteed consistency
-
-**Implementation:**
-- Server: Compute positions every tick, broadcast full snake bodies
-- Client: Accept server positions as truth, use for rendering
-- Client prediction: Optional optimization (see question 4)
-
-### 2. How to broadcast full game state on player join?
-
-**Answer:** Two-tier approach: initial state + ongoing updates
-
-**Join Protocol:**
-1. **Player joins channel** → `GameChannel.join/3` triggered
-2. **Server queries GameServer** → `GameServer.get_state()` returns full state
-3. **Send to joining client only** → `push(socket, "game:state", state)`
-4. **Broadcast to others** → `broadcast!(socket, "player:joined", %{player: ...})`
-5. **Subscribe to tick broadcasts** → Already subscribed via channel membership
-
-**State format:**
-```json
-{
-  "tick": 1234,
-  "snakes": {
-    "1": {
-      "player_id": 1,
-      "direction": "East",
-      "body": [{"x": 15, "y": 20}, {"x": 14, "y": 20}, {"x": 13, "y": 20}],
-      "colour": "67a387",
-      "name": "Jesse the Platonic Kitten"
-    },
-    "2": { ... }
-  },
-  "apples": [
-    {"position": {"x": 10, "y": 10}, "spawn_time": 1230, "expire_time": 1260}
-  ],
-  "grid_dimensions": {"x": 40, "y": 30}
-}
-```
-
-**Elm handling:**
-```elm
-updateFromServer : ServerMsg -> JE.Value -> Model -> ( Model, Cmd Msg )
-updateFromServer msg raw model =
-    case msg of
-        GameState ->
-            case JD.decodeValue gameStateDecoder raw of
-                Ok fullState ->
-                    ( { model | board = Board.fromServerState fullState }
-                    , Cmd.none
-                    )
-                -- ...
-```
-
-### 3. How do Phoenix Presence and Channels differ for state tracking?
-
-**Answer:** Use Channels for game state, Presence for player metadata only.
-
-**Phoenix.Presence:**
-- **Purpose:** Track which users are online, with metadata (name, color, status)
-- **Use case:** Lobby system, player list, "who's connected"
-- **Not suitable for:** Fast-changing game state (positions, apples)
-- **Limitation:** Designed for slowly-changing metadata, not 10Hz updates
-
-**Phoenix.Channel:**
-- **Purpose:** Real-time message passing
-- **Use case:** Game state broadcasts, input handling
-- **Suitable for:** High-frequency updates (100ms tick = 10 Hz)
-
-**Recommended architecture:**
-```
-Phoenix.Presence
-  └─ Track: player online/offline, metadata (name, color)
-  └─ Update rate: On join/leave only
-
-Phoenix.Channel + PubSub
-  └─ Track: snake positions, apples, game state
-  └─ Update rate: Every 100ms (game tick)
-```
-
-**Phoenix 1.7 changes from 1.3:**
-- Presence API unchanged (stable since Phoenix 1.2)
-- Channel API largely unchanged (few deprecations)
-- **New:** `Phoenix.PubSub` now separate from channels (cleaner separation)
-- **Migration:** Replace `Phoenix.PubSub.PG2` with `Phoenix.PubSub` (automatic in Phoenix 1.7)
-
-### 4. What's the recommended Elm architecture for real-time games in 0.19?
-
-**Answer:** Ports-based architecture with prediction/reconciliation pattern
-
-**Elm 0.19 changes affecting architecture:**
-- **Removed:** Native modules (no more direct JavaScript interop)
-- **Changed:** `elm-lang/*` → `elm/*` package namespace
-- **New:** Must use ports for all JavaScript integration (including WebSocket)
-- **Removed:** `elm-lang/websocket` package (must use JavaScript client)
-
-**Recommended architecture:**
-
-```
-┌─────────────────────────────────────────────────┐
-│ ELM APPLICATION                                 │
-│                                                 │
-│  ┌──────────────────────────────────────────┐  │
-│  │ Main.elm                                 │  │
-│  │  - Browser.element                       │  │
-│  │  - Model: Board + pending inputs         │  │
-│  │  - Update: handle ports + local tick     │  │
-│  │  - Subscriptions: ports + Time.every     │  │
-│  └────────┬───────────────────────┬─────────┘  │
-│           │                       │             │
-│           │ Cmd                   │ Sub         │
-│           │                       │             │
-│  ┌────────▼───────────┐  ┌────────▼─────────┐  │
-│  │ Ports.elm          │  │ Ports.elm        │  │
-│  │ - sendInput        │  │ - gameStateRecv  │  │
-│  │ - joinGame         │  │ - playerJoined   │  │
-│  │ - leaveGame        │  │ - playerLeft     │  │
-│  └────────┬───────────┘  └────────▲─────────┘  │
-└───────────┼──────────────────────┼─────────────┘
-            │                      │
-    ════════╪══════════════════════╪══════════════
-            │   JavaScript         │
-            │                      │
-┌───────────▼──────────────────────┴─────────────┐
-│ assets/js/socket.js                            │
-│                                                 │
-│ - Phoenix.Socket connection                    │
-│ - Channel join/push/on                         │
-│ - JSON encode/decode                           │
-│ - Port subscriptions                           │
-└───────────┬─────────────────────────────────────┘
-            │
-            │ WebSocket (wss://)
-            │
-┌───────────▼─────────────────────────────────────┐
-│ Phoenix Channel                                 │
-└─────────────────────────────────────────────────┘
-```
-
-**Files structure:**
-```
-assets/
-├── elm/
-│   ├── src/
-│   │   ├── Main.elm           # Browser.element, main app
-│   │   ├── Ports.elm          # Port definitions
-│   │   ├── Data/
-│   │   │   ├── Board.elm      # Game state + reconciliation
-│   │   │   ├── Snake.elm
-│   │   │   ├── Player.elm
-│   │   │   └── ...
-│   │   └── View/
-│   │       └── Board.elm      # Rendering (SVG or Canvas)
-│   └── elm.json               # Elm 0.19 package format
-└── js/
-    ├── app.js                 # Entry point
-    └── socket.js              # Phoenix Socket + Elm ports
-```
-
-**Prediction/Reconciliation pattern:**
-
-```elm
--- Client applies input immediately (feels responsive)
-update msg model =
-    case msg of
-        KeyPressed direction ->
-            let
-                predictedBoard =
-                    Board.applyDirection model.currentPlayerId direction model.board
-
-                pendingInputs =
-                    (model.serverTick, direction) :: model.pendingInputs
-            in
-            ( { model
-                | board = predictedBoard
-                , pendingInputs = pendingInputs
-              }
-            , sendInput { direction = direction }
-            )
-
-        -- Server state arrives (authoritative)
-        GameStateReceived serverState ->
-            let
-                reconciledBoard =
-                    Board.fromServerState serverState
-
-                -- Reapply pending inputs not yet confirmed by server
-                finalBoard =
-                    List.foldl
-                        (\(tick, dir) board ->
-                            if tick > serverState.tick then
-                                Board.applyDirection model.currentPlayerId dir board
-                            else
-                                board
-                        )
-                        reconciledBoard
-                        model.pendingInputs
-
-                cleanedInputs =
-                    List.filter (\(tick, _) -> tick > serverState.tick) model.pendingInputs
-            in
-            ( { model
-                | board = finalBoard
-                , serverTick = serverState.tick
-                , pendingInputs = cleanedInputs
-              }
-            , Cmd.none
-            )
-```
-
-**Key packages for Elm 0.19:**
-- `elm/core` - Core language
-- `elm/json` - JSON encoding/decoding
-- `elm/time` - Time and subscriptions
-- `elm/browser` - Browser.element
-- `elm/html` or `elm/svg` - Rendering
-
-**No Phoenix-specific package needed** - use ports instead
-
-### 5. How to handle the timing of ticks across clients?
-
-**Answer:** Server-authoritative tick with client interpolation
-
-**Problem:**
-- Network latency varies (20-200ms typical)
-- State updates arrive at different times per client
-- Clients need smooth 60fps rendering, server sends 10Hz updates
-
-**Solution: Server tick + client interpolation**
-
-**Server side:**
-```elixir
-defmodule Snaker.GameServer do
-  use GenServer
-
-  @tick_interval 100  # 100ms = 10 Hz
-
-  def init(game_id) do
-    schedule_tick()
-    {:ok, %{
-      game_id: game_id,
-      tick_count: 0,
-      snakes: %{},
-      apples: [],
-      input_queue: []
-    }}
-  end
-
-  def handle_info(:tick, state) do
-    # 1. Process queued inputs
-    new_state = process_inputs(state)
-
-    # 2. Simulate game (move snakes, check apples, etc.)
-    new_state = simulate_tick(new_state)
-
-    # 3. Increment tick counter
-    new_state = %{new_state | tick_count: state.tick_count + 1}
-
-    # 4. Broadcast state with tick number
-    Phoenix.PubSub.broadcast(
-      Snaker.PubSub,
-      "game:#{state.game_id}",
-      {:game_tick, serialize_state(new_state)}
-    )
-
-    # 5. Schedule next tick
-    schedule_tick()
-
-    {:noreply, new_state}
-  end
-
-  defp schedule_tick do
-    Process.send_after(self(), :tick, @tick_interval)
-  end
-end
-```
-
-**Client side (Elm):**
-```elm
--- Client maintains two timelines:
--- 1. Server tick (discrete, 100ms) - authoritative
--- 2. Render tick (continuous, 16ms for 60fps) - interpolated
-
-type alias Model =
-    { serverState : Board      -- Last confirmed state from server
-    , renderState : Board      -- Interpolated state for rendering
-    , serverTick : Int         -- Server's tick number
-    , timeSinceUpdate : Float  -- For interpolation
-    }
-
-subscriptions : Model -> Sub Msg
-subscriptions model =
-    Sub.batch
-        [ gameStateReceived GameStateReceived  -- From server (100ms)
-        , Time.every 16 RenderTick             -- 60fps rendering
-        ]
-
-update : Msg -> Model -> (Model, Cmd Msg)
-update msg model =
-    case msg of
-        -- Server state arrives (authoritative, 10Hz)
-        GameStateReceived serverState ->
-            ( { model
-                | serverState = serverState.board
-                , serverTick = serverState.tick
-                , timeSinceUpdate = 0
-              }
-            , Cmd.none
-            )
-
-        -- Render tick (smooth animation, 60fps)
-        RenderTick delta ->
-            let
-                -- Interpolate between last server state and predicted next state
-                interpolationFactor =
-                    min 1.0 (model.timeSinceUpdate / 100)  -- 100ms server tick
-
-                renderState =
-                    Board.interpolate
-                        model.serverState
-                        interpolationFactor
-            in
-            ( { model
-                | renderState = renderState
-                , timeSinceUpdate = model.timeSinceUpdate + delta
-              }
-            , Cmd.none
-            )
-```
-
-**Interpolation strategy:**
-For snake game, simple approach:
-```elm
--- Don't interpolate positions (discrete grid movement)
--- Just use latest server state directly
--- Smooth movement comes from CSS transitions on rendered tiles
-
-view : Model -> Html Msg
-view model =
-    -- Render serverState, not interpolated state
-    -- CSS transition: transform 100ms ease-out
-    Board.view model.serverState
-```
-
-**Why this works:**
-- Snake movement is discrete (grid-based), not continuous
-- 100ms server tick matches snake move speed
-- CSS transitions provide smooth visual movement
-- No complex interpolation needed
-
-**Alternative (if implementing smooth movement):**
-```elm
--- For sub-tile smooth movement:
-interpolate : Board -> Float -> Board
-interpolate board factor =
-    { board
-        | snakes =
-            Dict.map
-                (\_ snake ->
-                    { snake
-                        | renderPosition =
-                            lerp
-                                snake.previousPosition
-                                snake.currentPosition
-                                factor
-                    }
-                )
-                board.snakes
-    }
-```
-
-**Handling latency:**
-- **High latency (>200ms):** Server state arrives late, client sees stutter
-  - **Mitigation:** Prediction (apply local inputs immediately)
-  - **Recovery:** Reconciliation (when server state arrives, correct if needed)
-- **Low latency (<50ms):** Minimal prediction needed
-  - **Simple:** Just render server state directly
-
-## Build Order and Dependencies
-
-### Phase 1: Server Authoritative State (Backend)
-
-**Objective:** Server maintains and broadcasts game state
-
-**Components (build in order):**
-
-1. **GameServer GenServer** (`lib/snaker/game_server.ex`)
-   - Start with basic state structure (snakes, apples, tick)
-   - Implement tick loop (100ms interval)
-   - Add snake movement logic (ported from Elm)
-   - Add apple spawning/expiry logic
-   - **Test:** Unit test state transitions
-   - **Dependencies:** None (can build standalone)
-
-2. **Game state serialization** (`lib/snaker/game_state.ex`)
-   - JSON encoding for state snapshot
-   - Match Elm decoder expectations
-   - **Test:** Encoding matches Elm decoders
-   - **Dependencies:** GameServer state structure
-
-3. **GameSupervisor** (`lib/snaker/game_supervisor.ex`)
-   - DynamicSupervisor for game instances
-   - Start one game on application start (hardcode ID for now)
-   - **Test:** Supervisor restarts crashed games
-   - **Dependencies:** GameServer
-
-4. **Update Application supervisor** (`lib/snaker/application.ex`)
-   - Add GameSupervisor to supervision tree
-   - **Dependencies:** GameSupervisor
-
-**Deliverable:** Server runs game loop, can be inspected via `iex`
-
-### Phase 2: Server Broadcast (Backend)
-
-**Objective:** Broadcast state to connected clients
-
-**Components:**
-
-5. **PubSub integration** (in `GameServer`)
-   - `Phoenix.PubSub.broadcast` on each tick
-   - Topic: `"game:#{game_id}:tick"`
-   - **Test:** Multiple subscribers receive messages
-   - **Dependencies:** Phase 1 complete
-
-6. **GameChannel modifications** (`lib/snaker_web/channels/game_channel.ex`)
-   - `join/3`: Add player to GameServer, send initial state
-   - `handle_info({:game_tick, state})`: Broadcast to socket
-   - `handle_in("player:input")`: Forward to GameServer
-   - `terminate/2`: Remove player from GameServer
-   - **Test:** Channel test (join, receive state, send input)
-   - **Dependencies:** GameServer, PubSub
-
-**Deliverable:** Backend can accept WebSocket connections and broadcasts state
-
-### Phase 3: Client WebSocket (Frontend - JavaScript)
-
-**Objective:** Elm can communicate with Phoenix Channels
-
-**Components:**
-
-7. **Phoenix JavaScript client** (`assets/js/socket.js`)
-   - Install `phoenix` npm package
-   - Connect to socket
-   - Join channel
-   - Set up port integration
-   - **Test:** Manual connection test (browser console)
-   - **Dependencies:** None (standalone JavaScript)
-
-8. **Elm ports** (`assets/elm/src/Ports.elm`)
-   - Define outgoing ports (sendInput, joinGame, leaveGame)
-   - Define incoming ports (gameStateReceived, playerJoined, playerLeft)
-   - **Test:** Type-check only (no runtime test needed)
-   - **Dependencies:** None
-
-**Deliverable:** JavaScript can connect and communicate with backend
-
-### Phase 4: Client State Handling (Frontend - Elm)
-
-**Objective:** Elm receives and renders server state
-
-**Components:**
-
-9. **Elm 0.19 upgrade** (all `assets/elm/src/*.elm`)
-   - Migrate to `elm/core`, `elm/json`, `elm/browser`, `elm/html`, `elm/time`
-   - Update syntax (`<|` spacing, `andThen` signature changes)
-   - Remove `elm-lang/keyboard` (use `Browser.Events.onKeyDown`)
-   - **Test:** `elm make` compiles successfully
-   - **Dependencies:** Elm 0.19 installed
-
-10. **Main.elm refactor** (`assets/elm/src/Main.elm`)
-    - Change `Html.program` → `Browser.element`
-    - Add port subscriptions
-    - Remove old Phoenix Socket code
-    - Add `gameStateReceived` handler
-    - **Test:** Compiles and initializes
-    - **Dependencies:** Elm 0.19 upgrade, Ports
-
-11. **Board.elm state reconciliation** (`assets/elm/src/Data/Board.elm`)
-    - Add `fromServerState : ServerState -> Board` function
-    - Remove local apple generation (now server-driven)
-    - Add `serverTick` field to model
-    - **Test:** Decoder test (mock JSON → Board)
-    - **Dependencies:** Server state format defined
-
-**Deliverable:** Elm app renders server-sent state
-
-### Phase 5: Client Input Handling (Frontend)
-
-**Objective:** User input sent to server, prediction applied locally
-
-**Components:**
-
-12. **Input handling** (`assets/elm/src/Main.elm` + `Ports.elm`)
-    - Keyboard event → sendInput port
-    - Apply direction change locally (prediction)
-    - Track pending inputs
-    - **Test:** Keypress sends message (check browser console)
-    - **Dependencies:** Ports, Board.elm
-
-13. **Reconciliation logic** (`assets/elm/src/Data/Board.elm`)
-    - When server state arrives, reconcile with pending inputs
-    - Clear confirmed inputs
-    - Reapply unconfirmed inputs
-    - **Test:** Unit test reconciliation function
-    - **Dependencies:** Board state structure
-
-**Deliverable:** User can control snake with immediate feedback
-
-### Phase 6: Integration and Polish
-
-**Objective:** End-to-end multiplayer working correctly
-
-**Components:**
-
-14. **Integration testing**
-    - Two browser windows connect
-    - Both see same snake positions
-    - Direction changes propagate correctly
-    - Player join/leave handled
-    - **Test:** Manual testing + automated channel test
-    - **Dependencies:** All previous phases
-
-15. **Bug fixes and polish**
-    - Fix any desync issues
-    - Tune tick rate if needed
-    - Add error handling (disconnect, reconnect)
-    - **Test:** Stress test (multiple players, poor network)
-    - **Dependencies:** Integration testing complete
-
-**Deliverable:** Multiplayer state sync bug fixed
-
-### Dependency Graph
-
-```
-Phase 1 (Server State)
-  ├─ 1. GameServer
-  ├─ 2. State serialization (depends on 1)
-  ├─ 3. GameSupervisor (depends on 1)
-  └─ 4. Application supervisor (depends on 3)
-
-Phase 2 (Server Broadcast)
-  ├─ 5. PubSub integration (depends on Phase 1)
-  └─ 6. GameChannel (depends on 5)
-
-Phase 3 (Client WebSocket)
-  ├─ 7. Phoenix JS client (independent)
-  └─ 8. Elm ports (independent)
-
-Phase 4 (Client State)
-  ├─ 9. Elm 0.19 upgrade (independent)
-  ├─ 10. Main.elm refactor (depends on 8, 9)
-  └─ 11. Board.elm reconciliation (depends on 2, 9)
-
-Phase 5 (Client Input)
-  ├─ 12. Input handling (depends on Phase 4)
-  └─ 13. Reconciliation (depends on 11, 12)
-
-Phase 6 (Integration)
-  ├─ 14. Integration testing (depends on Phase 2, 5)
-  └─ 15. Bug fixes (depends on 14)
-```
-
-**Critical path:** 1 → 2 → 3 → 4 → 5 → 6 → 9 → 10 → 11 → 12 → 14 → 15
-**Parallel work:** Phase 1-2 (backend) can progress while Phase 3 (JS) is being built
-
-## Specific Recommendations for State Sync Bug
-
-### Root Cause
-- Clients compute positions independently
-- No synchronization of initial state
-- Apple spawning is client-side random (inconsistent)
-
-### Fix Approach
-
-**High-level strategy:**
-Move game simulation to server, broadcast authoritative state.
-
-**Detailed steps:**
-
-1. **Server becomes authoritative** (Phase 1-2)
-   - GameServer runs game loop
-   - Snakes move on server
-   - Apples spawn on server
-   - State broadcasted every 100ms
-
-2. **Clients receive state snapshots** (Phase 4)
-   - On join: receive full current state
-   - Every tick: receive state update
-   - Render based on server state
-
-3. **Client prediction (optional optimization)** (Phase 5)
-   - Apply own input immediately
-   - Reconcile when server confirms
-   - Prevents input lag feeling
-
-**Minimal fix (if time-constrained):**
-- Skip client prediction (Phase 5)
-- Just render server state directly
-- Acceptable for 100ms tick rate
-- Can add prediction later if input feels laggy
-
-**Testing criteria:**
-- [ ] Two players join at different times
-- [ ] Both players see identical snake positions
-- [ ] Both players see identical apples
-- [ ] Direction changes apply to correct snake
-- [ ] Snake positions don't drift over time
-- [ ] New player sees existing players in correct positions
-
-### Migration Gotchas
-
-**Phoenix 1.3 → 1.7:**
-- `Phoenix.PubSub.PG2` → `Phoenix.PubSub` (config change)
-- Directory structure changes (optional, can keep old structure)
-- `use Phoenix.Channel` unchanged (stable API)
-- WebSocket transport: unchanged
-
-**Elm 0.18 → 0.19:**
-- `Html.program` → `Browser.element`
-- `elm-lang/*` → `elm/*` packages
-- Keyboard: `Keyboard.ups` → `Browser.Events.onKeyDown`
-- Time: `Time.every` signature changed (same concept)
-- No `elm-phoenix-socket` equivalent (use ports)
-
-**Assets pipeline (Brunch → esbuild):**
-- Phoenix 1.7 uses `esbuild` instead of Brunch
-- Elm compilation: separate step via `elm make`
-- Add to `mix.exs` assets setup
-
-## Quality Gate Checklist
-
-- [x] State sync fix approach clearly documented
-  - Authoritative server pattern with full state broadcast
-  - Client reconciliation with optional prediction
-
-- [x] Server vs client responsibilities defined
-  - **Server:** Game loop, snake movement, apple spawning, collision detection, state broadcast
-  - **Client:** Input capture, state rendering, optional prediction, reconciliation
-
-- [x] Data flow diagram or description included
-  - Player join flow (3 diagrams)
-  - Input → state update flow
-  - Game tick flow (server-driven)
-  - Component architecture diagrams
-
-- [x] Specific questions answered
-  1. Server authoritative for positions: YES
-  2. Broadcast full state on join: Two-tier (initial + ongoing)
-  3. Presence vs Channels: Channels for game state, Presence for metadata
-  4. Elm 0.19 architecture: Ports-based with prediction/reconciliation
-  5. Tick timing: Server tick + client interpolation (or CSS transitions)
-
-- [x] Build order with dependencies
-  - 6 phases, 15 components
-  - Dependency graph included
-  - Critical path identified
-  - Parallel work opportunities noted
-
-## References
-
-**Phoenix Channels (1.7):**
-- Official docs: https://hexdocs.pm/phoenix/channels.html
-- PubSub: https://hexdocs.pm/phoenix_pubsub/Phoenix.PubSub.html
-- Presence: https://hexdocs.pm/phoenix/presence.html
-
-**Elm 0.19:**
-- Guide: https://guide.elm-lang.org/
-- Browser package: https://package.elm-lang.org/packages/elm/browser/latest/
-- Ports: https://guide.elm-lang.org/interop/ports.html
-
-**Game Architecture Patterns:**
-- Client-Server Game Architecture (Gaffer on Games): Fast-paced multiplayer patterns
-- Source Multiplayer Networking (Valve): Prediction and lag compensation
-- Phoenix Presence Guide: Distributed user tracking
-
-**Existing codebase analysis:**
-- `.planning/codebase/ARCHITECTURE.md` - Current architecture documented 2026-01-30
-- `.planning/codebase/CONCERNS.md` - Known bugs and tech debt documented 2026-01-30
+# Architecture Research: P2P WebRTC Mode
+
+**Domain:** P2P multiplayer integration for existing Elm + Phoenix snake game
+**Researched:** 2026-02-03
+**Overall Confidence:** HIGH (existing codebase analyzed, WebRTC patterns well-documented)
 
 ---
 
-*Architecture research completed: 2026-01-30*
+## Executive Summary
+
+This document details how to integrate P2P WebRTC multiplayer mode alongside the existing Phoenix-based multiplayer. The architecture uses a **host-authoritative model** where one peer runs the game loop and broadcasts state, mirroring the current Phoenix GenServer pattern but running entirely client-side.
+
+Key insight: The existing architecture already separates concerns well - Elm handles rendering and input, TypeScript handles networking, Elixir handles game logic. For P2P mode, we port the game logic to Elm and swap the TypeScript networking layer.
+
+---
+
+## High-Level Architecture
+
+### Current Phoenix Mode Architecture
+
+```
++------------------+      Phoenix Socket      +------------------+
+|   Elm App        |<------------------------>|   TypeScript     |
+|  (View/Input)    |         Ports            |  (socket.ts)     |
++------------------+                          +------------------+
+                                                      |
+                                              Phoenix Channel
+                                                      |
+                                                      v
+                                              +------------------+
+                                              | Phoenix          |
+                                              | GameServer       |
+                                              | (game_server.ex) |
+                                              +------------------+
+                                              | - Tick loop 100ms|
+                                              | - Snake movement |
+                                              | - Collision      |
+                                              | - Apple spawn    |
+                                              +------------------+
+```
+
+### Proposed P2P Mode Architecture
+
+```
++------------------+                          +------------------+
+|   Elm App        |<------------------------>|   TypeScript     |
+|  (View/Input +   |         Ports            |  (p2p.ts)        |
+|   GAME LOGIC*)   |                          +------------------+
++------------------+                                  |
+        ^                                     PeerJS DataChannel
+        |                                             |
+        | *Host only runs                             v
+        |  game loop                          +------------------+
+        |                                     | Other Peers      |
+        +------------------------------------>| (receive state)  |
+                                              +------------------+
+```
+
+### Dual-Mode Architecture
+
+```
++------------------+         +------------------+
+|   Elm App        |-------->|   TypeScript     |
+|                  |  Ports  |   Networking     |
++------------------+         +------------------+
+                                    |
+                      +-------------+-------------+
+                      |                           |
+                      v                           v
+              +---------------+           +---------------+
+              | Phoenix Mode  |           | P2P Mode      |
+              | (socket.ts)   |           | (p2p.ts)      |
+              +---------------+           +---------------+
+```
+
+---
+
+## Component Breakdown
+
+### New Components
+
+| Component | Location | Purpose | Confidence |
+|-----------|----------|---------|------------|
+| `GameEngine.elm` | `assets/src/GameEngine.elm` | Pure game logic (tick, collision, apple) | HIGH |
+| `P2P.elm` | `assets/src/P2P.elm` | P2P-specific state types and encoders | HIGH |
+| `P2PPorts.elm` | `assets/src/P2PPorts.elm` | WebRTC port definitions | HIGH |
+| `p2p.ts` | `assets/js/p2p.ts` | PeerJS connection management | HIGH |
+| `hostElection.ts` | `assets/js/hostElection.ts` | Deterministic host election logic | HIGH |
+
+### Modified Components
+
+| Component | Changes | Reason |
+|-----------|---------|--------|
+| `Main.elm` | Add mode switching, P2P subscriptions | Support both modes |
+| `Ports.elm` | Add P2P port declarations | WebRTC communication |
+| `app.ts` | Mode selection, conditional loading | Switch between Phoenix/P2P |
+| `Game.elm` | Minor: ensure decoders work for P2P format | Share types between modes |
+
+### Components Unchanged
+
+| Component | Reason |
+|-----------|--------|
+| `Snake.elm` | Already has Position, Direction, Snake types |
+| `View/Board.elm` | Renders from GameState - mode agnostic |
+| `View/Scoreboard.elm` | Renders from snakes list - mode agnostic |
+| `socket.ts` | Phoenix mode continues to work as-is |
+| `game_server.ex` | Phoenix mode continues to work as-is |
+
+---
+
+## Data Flow
+
+### Phoenix Mode (Current)
+
+```
+1. Player presses arrow key
+2. Elm: KeyPressed -> sendDirection port
+3. TypeScript: channel.push("player:change_direction", {...})
+4. Phoenix: GameServer.change_direction() buffers input
+5. Phoenix: Tick fires every 100ms
+6. Phoenix: GameServer broadcasts delta via PubSub
+7. TypeScript: channel.on("tick") -> receiveTick port
+8. Elm: GotTick updates model.gameState
+9. Elm: View re-renders
+```
+
+### P2P Mode (Proposed)
+
+**As Host:**
+```
+1. Player presses arrow key
+2. Elm: KeyPressed -> buffer direction locally
+3. Elm: Tick subscription fires (Time.every 100ms)
+4. Elm: GameEngine.tick() computes new state
+5. Elm: broadcastState port sends state to peers
+6. TypeScript: p2p.broadcast(gameState) via DataChannel
+7. Remote peers receive and render
+```
+
+**As Non-Host:**
+```
+1. Player presses arrow key
+2. Elm: KeyPressed -> sendP2PInput port
+3. TypeScript: p2p.sendToHost({direction: ...})
+4. Host receives, buffers input
+5. Host tick includes this player's input
+6. Host broadcasts new state
+7. TypeScript: receiveP2PState port
+8. Elm: GotP2PState updates model.gameState
+9. Elm: View re-renders
+```
+
+---
+
+## Host Election Algorithm
+
+### Requirements
+- Deterministic: All peers compute same result independently
+- No signaling needed: Works with only peer list
+- Handles joins/leaves: Re-elects when topology changes
+- Migration: New host receives/reconstructs state
+
+### Algorithm: Lowest Peer ID Wins
+
+```typescript
+// hostElection.ts
+
+export interface Peer {
+  id: string;  // PeerJS assigns UUID-like IDs
+  connectedAt: number;  // Timestamp for tiebreaker
+}
+
+export function electHost(peers: Peer[], selfId: string): string {
+  // Include self in peer list
+  const allPeers = [...peers, { id: selfId, connectedAt: Date.now() }];
+
+  // Sort by ID (string comparison, deterministic)
+  const sorted = allPeers.sort((a, b) => a.id.localeCompare(b.id));
+
+  // Lowest ID is host
+  return sorted[0].id;
+}
+
+export function amIHost(peers: Peer[], selfId: string): boolean {
+  return electHost(peers, selfId) === selfId;
+}
+```
+
+### Host Migration Protocol
+
+```
+1. Peer disconnects
+2. All remaining peers remove disconnected peer from list
+3. All peers re-run electHost() independently
+4. Same result because deterministic algorithm
+5. New host (if changed):
+   a. Had local copy of last received state
+   b. Broadcasts "i_am_host" with current state
+   c. Starts tick loop
+6. Non-hosts:
+   a. Stop tick loop if they were running it
+   b. Wait for state from new host
+```
+
+### Edge Cases
+
+| Scenario | Handling |
+|----------|----------|
+| Original host disconnects | Next lowest ID becomes host, broadcasts state |
+| Non-host disconnects | Host removes from player list, continues |
+| Network partition | Each partition elects own host (eventually inconsistent) |
+| Rejoining peer | Gets fresh state from current host |
+
+---
+
+## State Synchronization
+
+### Message Types
+
+```typescript
+// p2p.ts - Message protocol
+
+interface P2PMessage {
+  type: 'game_state' | 'player_input' | 'host_announcement' | 'peer_list' | 'ping';
+  payload: unknown;
+  timestamp: number;
+  senderId: string;
+}
+
+interface GameStateMessage {
+  type: 'game_state';
+  payload: {
+    snakes: Snake[];
+    apples: Apple[];
+    gridWidth: number;
+    gridHeight: number;
+    tickNumber: number;  // For ordering/debugging
+  };
+  timestamp: number;
+  senderId: string;
+}
+
+interface PlayerInputMessage {
+  type: 'player_input';
+  payload: {
+    direction: 'up' | 'down' | 'left' | 'right';
+    playerId: string;
+  };
+  timestamp: number;
+  senderId: string;
+}
+
+interface HostAnnouncementMessage {
+  type: 'host_announcement';
+  payload: {
+    hostId: string;
+    gameState: GameStatePayload;
+  };
+  timestamp: number;
+  senderId: string;
+}
+```
+
+### Synchronization Strategy: Full State Broadcast
+
+For a game with ~2-10 players, ~100 body segments max per snake, and 100ms tick rate:
+
+**State size estimate:**
+- 10 snakes * 100 segments * 8 bytes (x,y) = 8KB max
+- Plus metadata: ~1KB
+- Total: ~10KB per tick
+
+**Bandwidth:** 10KB * 10 ticks/sec = 100KB/sec per connection
+- Acceptable for WebRTC DataChannel
+- PeerJS handles serialization automatically with `reliable: true`
+
+**Why full state (not delta):**
+- Simpler implementation
+- Self-healing (missed message = one bad frame, next tick fixes)
+- Current Phoenix mode already sends "full" snake positions each tick
+- Matches existing `tickDecoder` in Elm
+
+### Channel Configuration
+
+```typescript
+// PeerJS connection options
+const conn = peer.connect(hostId, {
+  reliable: true,    // Ordered, guaranteed delivery
+  serialization: 'json',  // Easy debugging, compatible with Elm
+  metadata: {
+    playerId: myId,
+    playerName: myName
+  }
+});
+```
+
+---
+
+## Elm Ports Structure
+
+### Current Ports (Phoenix Mode)
+
+```elm
+-- Outgoing (Elm -> JS)
+port joinGame : JE.Value -> Cmd msg
+port leaveGame : () -> Cmd msg
+port sendDirection : JE.Value -> Cmd msg
+
+-- Incoming (JS -> Elm)
+port receiveGameState : (JD.Value -> msg) -> Sub msg
+port receiveError : (String -> msg) -> Sub msg
+port playerJoined : (JD.Value -> msg) -> Sub msg
+port playerLeft : (JD.Value -> msg) -> Sub msg
+port receiveTick : (JD.Value -> msg) -> Sub msg
+```
+
+### New Ports (P2P Mode)
+
+```elm
+-- assets/src/P2PPorts.elm
+
+port module P2PPorts exposing (..)
+
+import Json.Decode as JD
+import Json.Encode as JE
+
+
+-- ============================================================
+-- Outgoing Ports (Elm -> JS)
+-- ============================================================
+
+-- Initialize P2P peer with optional room ID
+port p2pInit : JE.Value -> Cmd msg
+-- { roomId : Maybe String }
+
+-- Create room (become host)
+port p2pCreateRoom : () -> Cmd msg
+
+-- Join existing room
+port p2pJoinRoom : String -> Cmd msg
+-- roomId (host's peer ID)
+
+-- Leave P2P session
+port p2pLeave : () -> Cmd msg
+
+-- Send direction input (non-host sends to host)
+port p2pSendInput : JE.Value -> Cmd msg
+-- { direction : String }
+
+-- Broadcast game state (host only)
+port p2pBroadcastState : JE.Value -> Cmd msg
+-- Full GameState JSON
+
+
+-- ============================================================
+-- Incoming Ports (JS -> Elm)
+-- ============================================================
+
+-- P2P initialized with our peer ID
+port p2pReady : (JE.Value -> msg) -> Sub msg
+-- { peerId : String }
+
+-- Room created (we are host)
+port p2pRoomCreated : (JE.Value -> msg) -> Sub msg
+-- { roomId : String }
+
+-- Joined room successfully
+port p2pJoinedRoom : (JE.Value -> msg) -> Sub msg
+-- { hostId : String, gameState : GameState, playerId : String }
+
+-- Another peer connected (host receives)
+port p2pPeerConnected : (JE.Value -> msg) -> Sub msg
+-- { peerId : String, metadata : { playerName : String } }
+
+-- Peer disconnected
+port p2pPeerDisconnected : (JE.Value -> msg) -> Sub msg
+-- { peerId : String }
+
+-- Receive input from peer (host receives)
+port p2pReceiveInput : (JE.Value -> msg) -> Sub msg
+-- { peerId : String, direction : String }
+
+-- Receive state update (non-host receives)
+port p2pReceiveState : (JE.Value -> msg) -> Sub msg
+-- Full GameState JSON
+
+-- Host migration occurred
+port p2pHostMigrated : (JE.Value -> msg) -> Sub msg
+-- { newHostId : String, amIHost : Bool, gameState : GameState }
+
+-- Error
+port p2pError : (String -> msg) -> Sub msg
+```
+
+### Port Wiring in TypeScript
+
+```typescript
+// assets/js/p2p.ts
+
+interface P2PElmPorts {
+  // Outgoing (subscribe)
+  p2pInit: { subscribe: (callback: (data: { roomId?: string }) => void) => void };
+  p2pCreateRoom: { subscribe: (callback: () => void) => void };
+  p2pJoinRoom: { subscribe: (callback: (roomId: string) => void) => void };
+  p2pLeave: { subscribe: (callback: () => void) => void };
+  p2pSendInput: { subscribe: (callback: (data: { direction: string }) => void) => void };
+  p2pBroadcastState: { subscribe: (callback: (state: unknown) => void) => void };
+
+  // Incoming (send)
+  p2pReady: { send: (data: { peerId: string }) => void };
+  p2pRoomCreated: { send: (data: { roomId: string }) => void };
+  p2pJoinedRoom: { send: (data: unknown) => void };
+  p2pPeerConnected: { send: (data: { peerId: string; metadata: unknown }) => void };
+  p2pPeerDisconnected: { send: (data: { peerId: string }) => void };
+  p2pReceiveInput: { send: (data: { peerId: string; direction: string }) => void };
+  p2pReceiveState: { send: (state: unknown) => void };
+  p2pHostMigrated: { send: (data: unknown) => void };
+  p2pError: { send: (message: string) => void };
+}
+```
+
+---
+
+## Game Loop Ownership
+
+### Host-Authoritative Model
+
+Only the host runs the game tick loop. This mirrors the Phoenix GenServer pattern:
+
+**Phoenix Mode:**
+- `GameServer` GenServer runs `Process.send_after(self(), :tick, 100)`
+- All clients receive state, none compute it
+
+**P2P Mode:**
+- Host's Elm app subscribes to `Time.every 100`
+- Host runs `GameEngine.tick` on each interval
+- Non-hosts receive state via DataChannel, ignore local tick
+
+### Elm Implementation
+
+```elm
+-- Main.elm (simplified)
+
+type GameMode
+    = PhoenixMode PhoenixState
+    | P2PMode P2PState
+
+
+type alias P2PState =
+    { isHost : Bool
+    , peers : List PeerId
+    , inputBuffer : Dict PeerId Direction  -- Host only
+    }
+
+
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    case model.mode of
+        PhoenixMode _ ->
+            phoenixSubscriptions model
+
+        P2PMode p2pState ->
+            Sub.batch
+                [ p2pSubscriptions
+                , if p2pState.isHost then
+                    Time.every 100 P2PTick
+                  else
+                    Sub.none
+                ]
+
+
+update : Msg -> Model -> ( Model, Cmd Msg )
+update msg model =
+    case ( msg, model.mode ) of
+        ( P2PTick _, P2PMode p2pState ) ->
+            if p2pState.isHost then
+                let
+                    newState = GameEngine.tick model.gameState p2pState.inputBuffer
+                in
+                ( { model | gameState = Just newState }
+                , P2PPorts.p2pBroadcastState (GameEngine.encode newState)
+                )
+            else
+                ( model, Cmd.none )
+
+        ( GotP2PState stateJson, P2PMode _ ) ->
+            case JD.decodeValue Game.decoder stateJson of
+                Ok state ->
+                    ( { model | gameState = Just state }, Cmd.none )
+                Err _ ->
+                    ( model, Cmd.none )
+
+        -- ... other cases
+```
+
+### Tick Rate Considerations
+
+Current Phoenix tick: 100ms (10 Hz)
+
+For P2P mode, same rate recommended because:
+- Matches existing game feel
+- Reasonable bandwidth (see synchronization section)
+- `Time.every 100` is reliable in Elm
+- Browser tab backgrounding: Game pauses (acceptable for casual game)
+
+**Note:** `Time.every` uses `setInterval` under the hood. For a snake game at 10 Hz, this is fine. Higher tick rates (60+ Hz) would need `requestAnimationFrame` via ports.
+
+---
+
+## Mode Selection
+
+### UI Approach
+
+```
++------------------------+
+|        Snaker          |
++------------------------+
+|                        |
+|  [Join Server Game]    |  <- Phoenix mode (current)
+|                        |
+|  -- or --              |
+|                        |
+|  [Create P2P Room]     |  <- P2P host
+|  [Join P2P Room: ____] |  <- P2P join (enter room ID)
+|                        |
++------------------------+
+```
+
+### Elm Model
+
+```elm
+type Screen
+    = ModeSelection
+    | PlayingPhoenix PhoenixState
+    | PlayingP2P P2PState
+    | P2PLobby LobbyState  -- Waiting for peers
+
+
+type LobbyState
+    = CreatingRoom
+    | WaitingInRoom { roomId : String, players : List Player }
+    | JoiningRoom { roomId : String }
+```
+
+### Mode Initialization
+
+```elm
+-- User clicks "Join Server Game"
+update (SelectPhoenixMode) model =
+    ( { model | screen = PlayingPhoenix initialPhoenixState }
+    , Ports.joinGame (JE.object [])
+    )
+
+-- User clicks "Create P2P Room"
+update (SelectP2PHost) model =
+    ( { model | screen = P2PLobby CreatingRoom }
+    , P2PPorts.p2pCreateRoom ()
+    )
+
+-- User enters room ID and clicks "Join P2P Room"
+update (SelectP2PJoin roomId) model =
+    ( { model | screen = P2PLobby (JoiningRoom { roomId = roomId }) }
+    , P2PPorts.p2pJoinRoom roomId
+    )
+```
+
+---
+
+## GameEngine Module (Elm)
+
+Port of `game_server.ex` logic to pure Elm.
+
+### Module Structure
+
+```elm
+-- assets/src/GameEngine.elm
+
+module GameEngine exposing
+    ( tick
+    , applyInputs
+    , moveSnakes
+    , checkCollisions
+    , checkAppleEating
+    , spawnApplesIfNeeded
+    , addPlayer
+    , removePlayer
+    , encode
+    )
+
+import Game exposing (GameState, Apple)
+import Snake exposing (Snake, Position, Direction)
+import Random
+
+
+-- Core tick function (host only)
+tick : GameState -> Dict PlayerId Direction -> Random.Seed -> ( GameState, Random.Seed )
+tick state inputBuffer seed =
+    state
+        |> applyInputs inputBuffer
+        |> moveSnakes
+        |> checkCollisions seed
+        |> checkAppleEating
+        |> spawnApplesIfNeeded
+
+
+-- Apply buffered direction changes
+applyInputs : Dict PlayerId Direction -> GameState -> GameState
+applyInputs buffer state =
+    { state
+        | snakes =
+            List.map
+                (\snake ->
+                    case Dict.get snake.id buffer of
+                        Just newDir ->
+                            if validDirectionChange snake.direction newDir then
+                                { snake | direction = newDir }
+                            else
+                                snake
+                        Nothing ->
+                            snake
+                )
+                state.snakes
+    }
+
+
+-- Move each snake one step
+moveSnakes : GameState -> GameState
+moveSnakes state =
+    { state
+        | snakes = List.map (moveSnake state.gridWidth state.gridHeight) state.snakes
+    }
+
+
+moveSnake : Int -> Int -> Snake -> Snake
+moveSnake width height snake =
+    let
+        ( dx, dy ) =
+            directionDelta snake.direction
+
+        head =
+            List.head snake.body |> Maybe.withDefault { x = 0, y = 0 }
+
+        newHead =
+            { x = modBy width (head.x + dx)
+            , y = modBy height (head.y + dy)
+            }
+
+        newBody =
+            if snake.pendingGrowth > 0 then
+                newHead :: snake.body
+            else
+                newHead :: List.take (List.length snake.body - 1) snake.body
+    in
+    { snake
+        | body = newBody
+        , pendingGrowth = max 0 (snake.pendingGrowth - 1)
+    }
+
+
+-- Check self-collision and collision with other snakes
+checkCollisions : Random.Seed -> GameState -> ( GameState, Random.Seed )
+checkCollisions seed state =
+    -- Implementation: respawn collided snakes at safe positions
+    -- Use seed for random spawn position
+    ...
+
+
+-- Check if any snake head is on an apple
+checkAppleEating : GameState -> GameState
+checkAppleEating state =
+    -- Implementation: grow snake, remove apple
+    ...
+
+
+-- Ensure minimum apple count
+spawnApplesIfNeeded : ( GameState, Random.Seed ) -> ( GameState, Random.Seed )
+spawnApplesIfNeeded ( state, seed ) =
+    -- Implementation: spawn apples if below minimum
+    ...
+```
+
+### Random Number Handling
+
+Elm requires explicit `Random.Seed` threading. The host maintains the seed:
+
+```elm
+type alias P2PHostState =
+    { gameState : GameState
+    , inputBuffer : Dict PlayerId Direction
+    , randomSeed : Random.Seed
+    , tickCount : Int
+    }
+```
+
+Initialize seed from JavaScript for true randomness:
+
+```elm
+-- Port
+port initRandomSeed : (Int -> msg) -> Sub msg
+
+-- Update
+update (GotRandomSeed seedInt) model =
+    ( { model | randomSeed = Random.initialSeed seedInt }, Cmd.none )
+```
+
+---
+
+## Suggested Build Order
+
+Based on dependencies and risk, build in this order:
+
+### Phase 1: Game Engine in Elm (No Network)
+
+1. **GameEngine.elm** - Port snake movement, collision from Elixir
+2. **Test locally** - Single-player mode using `Time.every`
+3. **Validate** - Confirm game logic matches Phoenix behavior
+
+**Why first:** This is the largest new code. Get it right before adding network complexity.
+
+### Phase 2: P2P Infrastructure
+
+4. **p2p.ts** - PeerJS wrapper, connection management
+5. **hostElection.ts** - Deterministic election algorithm
+6. **P2PPorts.elm** - Port definitions
+7. **Test connections** - Two browser tabs can connect
+
+**Why second:** Infrastructure before integration. Test peer connections independently.
+
+### Phase 3: Host Mode
+
+8. **Host tick loop** - Elm `Time.every` + `broadcastState`
+9. **Input handling** - Host receives inputs from peers via port
+10. **Test** - Host tab runs game, other tabs see updates
+
+**Why third:** Host is simpler (just run loop, broadcast). Get this working first.
+
+### Phase 4: Client Mode
+
+11. **Receive state** - Non-host receives and renders
+12. **Send input** - Non-host sends direction to host
+13. **Test** - Full P2P game works
+
+**Why fourth:** Depends on host working correctly.
+
+### Phase 5: Host Migration
+
+14. **Detect disconnect** - PeerJS events
+15. **Re-election** - All peers compute new host
+16. **State handoff** - New host broadcasts state
+17. **Test** - Kill host tab, game continues
+
+**Why last:** Most complex feature, depends on everything else working.
+
+### Phase 6: Mode Selection UI
+
+18. **Lobby screen** - Create/join room UI
+19. **Mode switching** - Phoenix vs P2P selection
+20. **Polish** - Error handling, reconnection
+
+**Why last:** UI polish after core functionality.
+
+---
+
+## Integration Points Summary
+
+| Existing Component | Integration Point | Change Required |
+|-------------------|-------------------|-----------------|
+| `Main.elm` | Add `GameMode` type, mode-specific subscriptions | Moderate |
+| `Ports.elm` | Add P2P ports (or create `P2PPorts.elm`) | Small |
+| `Game.elm` | Reuse types, ensure decoders work for both modes | Minimal |
+| `Snake.elm` | Reuse types, add `pendingGrowth` field if missing | Minimal |
+| `app.ts` | Add mode selection, load P2P module conditionally | Moderate |
+| `socket.ts` | No changes, Phoenix mode unchanged | None |
+| Views | No changes, render from `GameState` regardless of mode | None |
+| Phoenix backend | No changes for P2P mode | None |
+
+---
+
+## Risk Assessment
+
+| Risk | Likelihood | Impact | Mitigation |
+|------|------------|--------|------------|
+| GameEngine logic bugs | Medium | High | Port tests from Elixir, extensive manual testing |
+| Host migration race conditions | Medium | Medium | Clear state machine, timeout on re-election |
+| WebRTC connection failures | Medium | Low | PeerJS handles retries, fallback to Phoenix mode |
+| Tick timing inconsistency | Low | Medium | Use fixed tick rate, accept minor drift |
+| State desync between peers | Low | High | Full state broadcast self-heals, add tick numbers |
+
+---
+
+## Sources
+
+### PeerJS Documentation
+- [PeerJS Official Docs](https://peerjs.com/docs/) - API reference for Peer, DataConnection
+
+### WebRTC Architecture
+- [PlayPeerJS](https://github.com/therealPaulPlay/PlayPeerJS) - Host migration patterns
+- [WebRTC DataChannel Guide](https://webrtc.link/en/articles/rtcdatachannel-usage-and-message-size-limits/) - Reliability options
+- [MDN WebRTC Data Channels](https://developer.mozilla.org/en-US/docs/Games/Techniques/WebRTC_data_channels) - Game development patterns
+
+### Elm + WebRTC Integration
+- [Elm WebRTC with Custom Elements](https://marc-walter.info/posts/2020-06-30_elm-conf/) - Port patterns
+- [elm-community/js-integration-examples](https://github.com/elm-community/js-integration-examples) - Port best practices
+
+### Host Migration
+- [Edgegap: Host Migration in P2P Games](https://edgegap.com/blog/host-migration-in-peer-to-peer-or-relay-based-multiplayer-games) - Industry patterns
+
+### Game Loop Timing
+- [MDN: Anatomy of a Video Game](https://developer.mozilla.org/en-US/docs/Games/Anatomy) - requestAnimationFrame vs setInterval
+- [JavaScript Game Loops](https://isaacsukin.com/news/2015/01/detailed-explanation-javascript-game-loops-and-timing) - Timing patterns
