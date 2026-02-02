@@ -1,46 +1,70 @@
 defmodule SnakerWeb.GameChannel do
   use Phoenix.Channel
   require Logger
-  alias Snaker.Worker
+  alias Snaker.GameServer
 
-  def join("game:snake", message, socket) do
-    send(self(), {:after_join, message})
-    {:ok, socket}
-  end
+  # Intercept these events to handle via handle_out/3
+  intercept ["player:join"]
 
-  def handle_info({:after_join, message}, socket) do
-    broadcast!(socket, "player:join", %{player: socket.assigns.player})
-    push(socket, "join", %{status: "connected", player: socket.assigns.player, players: Worker.players()})
-    # TODO: push the entire board to the new client, along with a period, and a list of apples
-    # and players. Whenever a new apple is added, we must send a broadcast message
-    # to the client, and whenever a movement happens from the client, likewise.
-    # the clients must maintain their own time, but also be aware of the global time
-    # Obviously to do that we have to have the board... :)
-    {:noreply, socket}
-  end
+  def join("game:snake", _message, socket) do
+    # Subscribe to game tick broadcasts from GameServer
+    Phoenix.PubSub.subscribe(Snaker.PubSub, "game:snake")
 
-  def terminate(reason, socket) do
-    Worker.delete_player(socket.assigns.player.id)
-    broadcast!(socket, "player:leave", %{player: socket.assigns.player})
-    Logger.debug("> #{inspect(socket.assigns.player)} leaving because of #{inspect(reason)}")
-  end
-
-  def handle_in("player:change_direction", %{"direction" => direction, "player_id" => player_id} = msg, socket) do
-    broadcast!(socket, "player:change_direction", %{player_id: player_id, direction: direction})
-    {:reply, {:ok, %{player_id: player_id}}, socket}
-  end
-
-  def handle_out("player:join", %{player: %{id: id}} = msg, socket) do
-    if socket.assigns.player.id != id do
-      push(socket, "player:join", Map.take(msg, [:player]))
+    # Join game and get initial state
+    case GameServer.join_game(socket.id || :rand.uniform(1_000_000)) do
+      {:ok, player_data, full_state} ->
+        socket = assign(socket, :player, player_data)
+        send(self(), :after_join)
+        {:ok, %{player: player_data, game_state: full_state}, socket}
+      {:error, reason} ->
+        {:error, %{reason: reason}}
     end
+  end
+
+  def handle_info(:after_join, socket) do
+    # Broadcast player:join to all OTHER clients (not the joining player)
+    # The joining player already has their info from the join response
+    broadcast_from!(socket, "player:join", %{player: socket.assigns.player})
     {:noreply, socket}
   end
 
-  def handle_out("player:change_direction", %{direction: _, player_id: player_id} = msg, socket) do
-    if socket.assigns.player.id != player_id do
-      push(socket, "player:change_direction", Map.take(msg, [:direction, :player_id]))
-    end
+  # Handle outgoing broadcasts - push to client
+  def handle_out("player:join", payload, socket) do
+    push(socket, "player:join", payload)
     {:noreply, socket}
+  end
+
+  def handle_info({:tick, delta}, socket) do
+    Logger.debug("[GameChannel] Pushing tick to client")
+    push(socket, "tick", delta)
+    {:noreply, socket}
+  end
+
+  def handle_info({:player_left, player_id}, socket) do
+    push(socket, "player:leave", %{player_id: player_id})
+    {:noreply, socket}
+  end
+
+  # Handle PubSub broadcasts received by this process
+  def handle_info(%Phoenix.Socket.Broadcast{event: _event, payload: _payload}, socket) do
+    # Ignore broadcasts from other channels (we handle ticks via :tick tuple)
+    {:noreply, socket}
+  end
+
+  def terminate(_reason, socket) do
+    if socket.assigns[:player] do
+      GameServer.leave_game(socket.assigns.player.id)
+      # Player leave is broadcast via PubSub from GameServer
+    end
+    :ok
+  end
+
+  def handle_in("player:change_direction", %{"direction" => direction}, socket) do
+    player_id = socket.assigns.player.id
+
+    case GameServer.change_direction(player_id, direction) do
+      :ok -> {:reply, :ok, socket}
+      {:error, reason} -> {:reply, {:error, %{reason: reason}}, socket}
+    end
   end
 end

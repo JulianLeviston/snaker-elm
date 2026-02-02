@@ -19,10 +19,10 @@
       </header>
 
       <main role="main">
-        <%= render @view_module, @view_template, assigns %>
+        <%= @inner_content %>
       </main>
 
     </div> <!-- /container -->
-    <script src="<%= static_path(@conn, "/js/app.js") %>"></script>
+    <script src="<%= static_path(@conn, "/assets/app.js") %>"></script>
   </body>
 </html>

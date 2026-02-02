@@ -1,7 +1,9 @@
 defmodule SnakerWeb.Endpoint do
   use Phoenix.Endpoint, otp_app: :snaker
 
-  socket "/socket", SnakerWeb.UserSocket
+  socket "/socket", SnakerWeb.UserSocket,
+    websocket: true,
+    longpoll: false
 
   # Serve at "/" the static files from "priv/static" directory.
   #
@@ -9,7 +11,7 @@ defmodule SnakerWeb.Endpoint do
   # when deploying your static files in production.
   plug Plug.Static,
     at: "/", from: :snaker, gzip: false,
-    only: ~w(css fonts images js favicon.ico robots.txt)
+    only: ~w(assets css fonts images js favicon.ico robots.txt)
 
   # Code reloading can be explicitly enabled under the
   # :code_reloader configuration of your endpoint.
@@ -25,7 +27,7 @@ defmodule SnakerWeb.Endpoint do
   plug Plug.Parsers,
     parsers: [:urlencoded, :multipart, :json],
     pass: ["*/*"],
-    json_decoder: Poison
+    json_decoder: Jason
 
   plug Plug.MethodOverride
   plug Plug.Head

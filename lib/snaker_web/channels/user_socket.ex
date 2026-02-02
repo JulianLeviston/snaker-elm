@@ -5,10 +5,6 @@ defmodule SnakerWeb.UserSocket do
   ## Channels
   channel "game:*", SnakerWeb.GameChannel
 
-  ## Transports
-  transport :websocket, Phoenix.Transports.WebSocket
-  # transport :longpoll, Phoenix.Transports.LongPoll
-
   # Socket params are passed from the client and can
   # be used to verify and authenticate a user. After
   # verification, you can put default assigns into
@@ -20,9 +16,7 @@ defmodule SnakerWeb.UserSocket do
   #
   # See `Phoenix.Token` documentation for examples in
   # performing token verification on connect.
-  def connect(_params, old_socket) do
-    new_player = Worker.new_player()
-    socket = assign(old_socket, :player, new_player)
+  def connect(_params, socket, _connect_info) do
     {:ok, socket}
   end
 
