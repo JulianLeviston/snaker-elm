@@ -79,10 +79,6 @@ update msg model =
         GotGameState value ->
             case JD.decodeValue Game.decoder value of
                 Ok state ->
-                    let
-                        _ = Debug.log "GotGameState OK, snakes" (List.length state.snakes)
-                        _ = Debug.log "First snake" (List.head state.snakes)
-                    in
                     ( { model
                         | gameState = Just state
                         , connectionStatus = Connected
@@ -90,10 +86,7 @@ update msg model =
                     , Cmd.none
                     )
 
-                Err err ->
-                    let
-                        _ = Debug.log "GotGameState DECODE ERROR" (JD.errorToString err)
-                    in
+                Err _ ->
                     ( model, Cmd.none )
 
         GotError errorMsg ->
@@ -142,9 +135,6 @@ update msg model =
             -- Grid dimensions come from initial game_state, tick only has entity updates
             case JD.decodeValue tickDecoder value of
                 Ok tickData ->
-                    let
-                        _ = Debug.log "GotTick OK, snakes" (List.length tickData.snakes)
-                    in
                     ( { model
                         | gameState =
                             Maybe.map
@@ -154,10 +144,7 @@ update msg model =
                     , Cmd.none
                     )
 
-                Err err ->
-                    let
-                        _ = Debug.log "GotTick DECODE ERROR" (JD.errorToString err)
-                    in
+                Err _ ->
                     ( model, Cmd.none )
 
         ClearNotification ->

@@ -30,9 +30,6 @@ view gameState maybePlayerId =
 
         height =
             gameState.gridHeight * cellSize
-
-        _ =
-            Debug.log "Board.view" { gridW = gameState.gridWidth, gridH = gameState.gridHeight, snakeCount = List.length gameState.snakes }
     in
     svg
         [ SA.width (String.fromInt width)
