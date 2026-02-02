@@ -2,7 +2,7 @@
 A new and adjusted version of the classic Snake game, written in Elm and Phoenix.
 Multiplayer is working, and state is now synchronised properly!
 
-![](https://raw.githubusercontent.com/JulianLeviston/snaker-elm/master/images/snaker-elm.png)
+![](https://raw.githubusercontent.com/JulianLeviston/snaker-elm/main/images/snaker-elm.png)
 
 ## Background
 
