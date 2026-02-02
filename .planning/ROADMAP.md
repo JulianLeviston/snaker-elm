@@ -46,11 +46,11 @@ Plans:
   2. Player can enter a room code and connect to the room creator
   3. Connection status (connecting/connected/disconnected) is visible
   4. Clear error message appears when connection fails
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 05-01: TBD
-- [ ] 05-02: TBD
+- [ ] 05-01-PLAN.md - P2P infrastructure: PeerJS install, ports, connection state machine
+- [ ] 05-02-PLAN.md - Connection UI: Create/Join buttons, room code display, status, errors
 
 ### Phase 6: Host/Client Integration
 **Goal**: Full P2P multiplayer game works between connected peers
@@ -97,4 +97,4 @@ Plans:
 
 ---
 *Roadmap created: 2026-02-03*
-*Last updated: 2026-02-03 (Phase 4 complete)*
+*Last updated: 2026-02-03 (Phase 5 planned)*
