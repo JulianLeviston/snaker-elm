@@ -6,6 +6,9 @@ module Snake exposing
     , decoder
     , positionDecoder
     , head
+    , isOppositeDirection
+    , validDirectionChange
+    , defaultSnake
     )
 
 import Json.Decode as JD
@@ -32,7 +35,51 @@ type alias Snake =
     , name : String
     , isInvincible : Bool
     , state : String
+    , pendingGrowth : Int
     }
+
+
+{-| Create a default snake for local game initialization.
+-}
+defaultSnake : Position -> Snake
+defaultSnake startPos =
+    { id = "local"
+    , body = [ startPos ]
+    , direction = Right
+    , color = "67a387"
+    , name = "Player"
+    , isInvincible = False
+    , state = "alive"
+    , pendingGrowth = 0
+    }
+
+
+{-| Check if two directions are opposites.
+-}
+isOppositeDirection : Direction -> Direction -> Bool
+isOppositeDirection dir1 dir2 =
+    case ( dir1, dir2 ) of
+        ( Up, Down ) ->
+            True
+
+        ( Down, Up ) ->
+            True
+
+        ( Left, Right ) ->
+            True
+
+        ( Right, Left ) ->
+            True
+
+        _ ->
+            False
+
+
+{-| Check if a direction change is valid (not reversing).
+-}
+validDirectionChange : Direction -> Direction -> Bool
+validDirectionChange current new =
+    not (isOppositeDirection current new)
 
 
 directionToString : Direction -> String
@@ -83,7 +130,7 @@ directionDecoder =
 
 decoder : JD.Decoder Snake
 decoder =
-    JD.map7 Snake
+    JD.map8 Snake
         (JD.field "id" JD.string)
         (JD.field "body" (JD.list positionDecoder))
         (JD.field "direction" directionDecoder)
@@ -93,6 +140,11 @@ decoder =
         (JD.oneOf
             [ JD.field "state" JD.string
             , JD.succeed "alive"
+            ]
+        )
+        (JD.oneOf
+            [ JD.field "pending_growth" JD.int
+            , JD.succeed 0
             ]
         )
 
