@@ -5,7 +5,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Svg.Keyed
 import Snake exposing (Position, Snake)
-import Svg exposing (Svg, circle, g, path, rect, svg, text_)
+import Svg exposing (Svg, circle, g, rect, svg, text_)
 import Svg.Attributes as SA
 
 
@@ -212,77 +212,37 @@ renderSnakeHead snake pos isHost =
                 Snake.Right ->
                     ( cx_ + eyeOffset, cy_ + eyeOffset )
 
-        headElements =
-            [ circle
-                [ SA.cx (String.fromInt cx_)
-                , SA.cy (String.fromInt cy_)
-                , SA.r (String.fromInt headRadius)
-                , SA.fill ("#" ++ snake.color)
-                ]
-                []
-            , circle
-                [ SA.cx (String.fromInt eyeX1)
-                , SA.cy (String.fromInt eyeY1)
-                , SA.r (String.fromInt eyeRadius)
-                , SA.fill "#ffffff"
-                ]
-                []
-            , circle
-                [ SA.cx (String.fromInt eyeX2)
-                , SA.cy (String.fromInt eyeY2)
-                , SA.r (String.fromInt eyeRadius)
-                , SA.fill "#ffffff"
-                ]
-                []
-            ]
-
-        -- Add crown if this is the host
-        elementsWithCrown =
+        -- Add host-head class if this is the host for pulsing animation
+        headClass =
             if isHost then
-                headElements ++ [ renderHostCrown cx_ cy_ ]
+                "snake-head host-head"
 
             else
-                headElements
+                "snake-head"
     in
-    g [ svgClass "snake-head" ] elementsWithCrown
-
-
-{-| Render a small crown icon to indicate the host's snake.
-    Crown is positioned above and to the right of the snake head.
--}
-renderHostCrown : Int -> Int -> Svg msg
-renderHostCrown headCx headCy =
-    let
-        -- Position crown above and to the right of head
-        crownX =
-            headCx + 8
-
-        crownY =
-            headCy - 12
-
-        -- Scale factor for the crown (make it small)
-        scale =
-            0.8
-
-        -- Crown path: M 0 8 L 4 0 L 8 8 L 6.5 5 L 4 7 L 1.5 5 Z
-        -- Scaled and translated
-        crownPath =
-            "M " ++ String.fromFloat (toFloat crownX - 4 * scale) ++ " " ++ String.fromFloat (toFloat crownY + 8 * scale)
-                ++ " L " ++ String.fromFloat (toFloat crownX) ++ " " ++ String.fromFloat (toFloat crownY)
-                ++ " L " ++ String.fromFloat (toFloat crownX + 4 * scale) ++ " " ++ String.fromFloat (toFloat crownY + 8 * scale)
-                ++ " L " ++ String.fromFloat (toFloat crownX + 2.5 * scale) ++ " " ++ String.fromFloat (toFloat crownY + 5 * scale)
-                ++ " L " ++ String.fromFloat (toFloat crownX) ++ " " ++ String.fromFloat (toFloat crownY + 7 * scale)
-                ++ " L " ++ String.fromFloat (toFloat crownX - 2.5 * scale) ++ " " ++ String.fromFloat (toFloat crownY + 5 * scale)
-                ++ " Z"
-    in
-    Svg.path
-        [ SA.d crownPath
-        , SA.fill "#FFD700"
-        , SA.stroke "#000000"
-        , SA.strokeWidth "0.5"
-        , svgClass "host-indicator"
+    g [ svgClass headClass ]
+        [ circle
+            [ SA.cx (String.fromInt cx_)
+            , SA.cy (String.fromInt cy_)
+            , SA.r (String.fromInt headRadius)
+            , SA.fill ("#" ++ snake.color)
+            ]
+            []
+        , circle
+            [ SA.cx (String.fromInt eyeX1)
+            , SA.cy (String.fromInt eyeY1)
+            , SA.r (String.fromInt eyeRadius)
+            , SA.fill "#ffffff"
+            ]
+            []
+        , circle
+            [ SA.cx (String.fromInt eyeX2)
+            , SA.cy (String.fromInt eyeY2)
+            , SA.r (String.fromInt eyeRadius)
+            , SA.fill "#ffffff"
+            ]
+            []
         ]
-        []
 
 
 renderBodySegment : Snake -> Int -> Position -> Svg msg

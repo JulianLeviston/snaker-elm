@@ -931,6 +931,13 @@ update msg model =
                                                 clientState.snakes
                                                 clientState.apples
                                                 clientState.scores
+
+                                        -- Generate QR code for new host's room
+                                        joinUrl =
+                                            model.baseUrl ++ "?room=" ++ myPeerId
+
+                                        qrCmd =
+                                            Ports.generateQRCode joinUrl
                                     in
                                     ( { model
                                         | hostGame = Just hostState
@@ -938,8 +945,12 @@ update msg model =
                                         , p2pState = P2PConnected Host myPeerId
                                         , myPeerId = Just myPeerId
                                         , notification = Just "You are now the host"
+                                        , qrCodeDataUrl = Nothing -- Reset to show loading while generating
                                       }
-                                    , Process.sleep 3000 |> Task.perform (\_ -> ClearNotification)
+                                    , Cmd.batch
+                                        [ qrCmd
+                                        , Process.sleep 3000 |> Task.perform (\_ -> ClearNotification)
+                                        ]
                                     )
 
                                 Nothing ->
