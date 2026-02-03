@@ -18,11 +18,15 @@ Responsibilities:
 -}
 
 import Dict exposing (Dict)
+import Engine.Grid as Grid
 import Network.Protocol as Protocol exposing (AppleState, StateSyncPayload)
 import Snake exposing (Direction, Position, Snake)
 
 
 {-| Client-side game state.
+
+Note: Grid dimensions are not stored here - both host and client use
+Engine.Grid.defaultDimensions (30x40) which never changes during gameplay.
 -}
 type alias ClientGameState =
     { snakes : Dict String SnakeState -- From host
@@ -32,8 +36,6 @@ type alias ClientGameState =
     , myId : String -- Our player ID
     , pendingInput : Maybe Direction -- Optimistic local input
     , lastAppliedInput : Maybe Direction -- For interpolation reference
-    , gridWidth : Int
-    , gridHeight : Int
     }
 
 
@@ -60,8 +62,6 @@ init myId =
     , myId = myId
     , pendingInput = Nothing
     , lastAppliedInput = Nothing
-    , gridWidth = 30 -- Default dimensions matching Engine.Grid, will be updated from host
-    , gridHeight = 40
     }
 
 
@@ -69,7 +69,6 @@ init myId =
 
 Replaces snakes/apples/scores with host data.
 Clears pendingInput if it was applied (direction matches).
-Updates grid dimensions from host.
 -}
 applyHostState : StateSyncPayload -> ClientGameState -> ClientGameState
 applyHostState stateSync clientState =
@@ -112,8 +111,6 @@ applyHostState stateSync clientState =
         , scores = stateSync.scores
         , lastHostTick = stateSync.tick
         , pendingInput = newPendingInput
-        , gridWidth = stateSync.gridWidth
-        , gridHeight = stateSync.gridHeight
     }
 
 
@@ -162,6 +159,7 @@ getMySnake clientState =
 {-| Convert ClientGameState to format compatible with Board.view.
 
 Marks our snake appropriately and applies optimistic input.
+Uses hardcoded grid dimensions from Engine.Grid.defaultDimensions.
 -}
 toGameState : ClientGameState -> { snakes : List Snake, apples : List { position : Position }, gridWidth : Int, gridHeight : Int }
 toGameState clientState =
@@ -203,9 +201,13 @@ toGameState clientState =
         -- Convert AppleState to simple position record
         appleList =
             List.map (\a -> { position = a.position }) clientState.apples
+
+        -- Use hardcoded grid dimensions (same as host)
+        grid =
+            Grid.defaultDimensions
     in
     { snakes = snakeList
     , apples = appleList
-    , gridWidth = clientState.gridWidth
-    , gridHeight = clientState.gridHeight
+    , gridWidth = grid.width
+    , gridHeight = grid.height
     }

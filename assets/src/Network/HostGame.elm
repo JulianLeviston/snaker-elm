@@ -497,6 +497,9 @@ checkAppleEatingForSnake playerId snakeData state =
 
 
 {-| Convert game state to StateSyncPayload for broadcasting.
+
+Note: Grid dimensions are not included in state sync - both host and client
+use Engine.Grid.defaultDimensions (30x40) which never changes during gameplay.
 -}
 toStateSyncPayload : Bool -> HostGameState -> StateSyncPayload
 toStateSyncPayload isFull state =
@@ -527,8 +530,6 @@ toStateSyncPayload isFull state =
     , scores = state.scores
     , tick = state.currentTick
     , isFull = isFull
-    , gridWidth = state.grid.width
-    , gridHeight = state.grid.height
     }
 
 

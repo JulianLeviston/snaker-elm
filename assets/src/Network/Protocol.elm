@@ -37,6 +37,9 @@ type GameMessage
 
 
 {-| Full or delta state synchronization payload.
+
+Note: Grid dimensions are not included - both host and client use
+Engine.Grid.defaultDimensions (30x40) which never changes during gameplay.
 -}
 type alias StateSyncPayload =
     { snakes : List SnakeState
@@ -44,8 +47,6 @@ type alias StateSyncPayload =
     , scores : Dict String Int
     , tick : Int
     , isFull : Bool -- True for full sync, False for delta
-    , gridWidth : Int
-    , gridHeight : Int
     }
 
 
@@ -137,8 +138,6 @@ encodeStateSync payload =
         , ( "scores", encodeScores payload.scores )
         , ( "tick", JE.int payload.tick )
         , ( "is_full", JE.bool payload.isFull )
-        , ( "grid_width", JE.int payload.gridWidth )
-        , ( "grid_height", JE.int payload.gridHeight )
         ]
 
 
@@ -260,14 +259,12 @@ decodeGameMessage =
 -}
 decodeStateSync : JD.Decoder StateSyncPayload
 decodeStateSync =
-    JD.map7 StateSyncPayload
+    JD.map5 StateSyncPayload
         (JD.field "snakes" (JD.list decodeSnakeState))
         (JD.field "apples" (JD.list decodeAppleState))
         (JD.field "scores" decodeScores)
         (JD.field "tick" JD.int)
         (JD.field "is_full" JD.bool)
-        (JD.field "grid_width" JD.int)
-        (JD.field "grid_height" JD.int)
 
 
 {-| Decode a SnakeState from JSON.
