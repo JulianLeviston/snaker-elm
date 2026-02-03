@@ -5,8 +5,9 @@ import Browser.Events
 import Dict
 import Engine.Apple as Apple exposing (Apple)
 import Game exposing (GameState)
-import Html exposing (Html, div, h1, span, text)
+import Html exposing (Html, button, div, h1, h2, p, span, text)
 import Html.Attributes exposing (class, style)
+import Html.Events exposing (onClick)
 import Input
 import Json.Decode as JD
 import Json.Encode as JE
@@ -22,8 +23,31 @@ import Task
 import Time
 import View.Board as Board
 import View.ConnectionUI as ConnectionUI exposing (P2PConnectionState(..), P2PRole(..))
+import View.ModeSelection as ModeSelection
 import View.Notifications as Notifications
 import View.Scoreboard as Scoreboard
+
+
+{-| Flags passed from JavaScript on init.
+-}
+type alias Flags =
+    { savedMode : Maybe String
+    }
+
+
+{-| Current screen being displayed.
+-}
+type Screen
+    = ModeSelectionScreen
+    | GameScreen
+    | SettingsScreen
+
+
+{-| Selected game mode (P2P or Phoenix).
+-}
+type SelectedMode
+    = P2PSelected
+    | PhoenixSelected
 
 
 type alias Model =
@@ -44,6 +68,9 @@ type alias Model =
     , roomCodeInput : String
     , showCopiedFeedback : Bool
     , showingCollision : Bool  -- For collision shake animation
+    -- Screen routing
+    , screen : Screen
+    , selectedMode : Maybe SelectedMode
     }
 
 
@@ -94,31 +121,109 @@ type Msg
     | GotGameStateP2P String
     | NewPlayerSpawn String Position
     | ClearCollisionShake
+      -- Mode selection messages
+    | SelectMode ModeSelection.Mode
+    | OpenSettings
+    | CloseSettings
+    | ChangeMode ModeSelection.Mode
 
 
-init : () -> ( Model, Cmd Msg )
-init _ =
-    -- Start in local mode by default (online mode will be phase 7)
+init : Flags -> ( Model, Cmd Msg )
+init flags =
+    -- Check for saved mode in flags
+    case flags.savedMode |> Maybe.andThen ModeSelection.modeFromString of
+        Just ModeSelection.P2PMode ->
+            -- Skip to P2P mode (show P2P connection UI)
+            initWithMode P2PSelected
+
+        Just ModeSelection.PhoenixMode ->
+            -- Skip to Phoenix mode (show Phoenix UI)
+            initWithMode PhoenixSelected
+
+        Nothing ->
+            -- First visit: show mode selection
+            initModeSelection
+
+
+{-| Initialize with mode selection screen (first visit).
+-}
+initModeSelection : ( Model, Cmd Msg )
+initModeSelection =
     ( { gameState = Nothing
       , localGame = Nothing
       , hostGame = Nothing
       , clientGame = Nothing
-      , playerId = Just "local"
+      , playerId = Nothing
       , myPeerId = Nothing
       , currentDirection = Right
-      , connectionStatus = Connected
+      , connectionStatus = Disconnected
       , error = Nothing
       , notification = Nothing
       , gameMode = LocalMode
       , pendingAppleSpawns = 0
-      -- P2P initial state
       , p2pState = P2PNotConnected
       , roomCodeInput = ""
       , showCopiedFeedback = False
       , showingCollision = False
+      , screen = ModeSelectionScreen
+      , selectedMode = Nothing
       }
-    , Random.generate InitGame LocalGame.init
+    , Cmd.none
     )
+
+
+{-| Initialize with a specific mode already selected (returning visitor).
+-}
+initWithMode : SelectedMode -> ( Model, Cmd Msg )
+initWithMode mode =
+    case mode of
+        P2PSelected ->
+            -- P2P mode: show connection UI, no local game running yet
+            ( { gameState = Nothing
+              , localGame = Nothing
+              , hostGame = Nothing
+              , clientGame = Nothing
+              , playerId = Nothing
+              , myPeerId = Nothing
+              , currentDirection = Right
+              , connectionStatus = Disconnected
+              , error = Nothing
+              , notification = Nothing
+              , gameMode = LocalMode
+              , pendingAppleSpawns = 0
+              , p2pState = P2PNotConnected
+              , roomCodeInput = ""
+              , showCopiedFeedback = False
+              , showingCollision = False
+              , screen = GameScreen
+              , selectedMode = Just P2PSelected
+              }
+            , Cmd.none
+            )
+
+        PhoenixSelected ->
+            -- Phoenix mode: start local game for now (Phoenix socket handled separately)
+            ( { gameState = Nothing
+              , localGame = Nothing
+              , hostGame = Nothing
+              , clientGame = Nothing
+              , playerId = Just "local"
+              , myPeerId = Nothing
+              , currentDirection = Right
+              , connectionStatus = Connected
+              , error = Nothing
+              , notification = Nothing
+              , gameMode = OnlineMode
+              , pendingAppleSpawns = 0
+              , p2pState = P2PNotConnected
+              , roomCodeInput = ""
+              , showCopiedFeedback = False
+              , showingCollision = False
+              , screen = GameScreen
+              , selectedMode = Just PhoenixSelected
+              }
+            , Ports.joinGame (JE.object [])
+            )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -734,6 +839,106 @@ update msg model =
                 Nothing ->
                     ( model, Cmd.none )
 
+        -- Mode selection messages
+        SelectMode mode ->
+            let
+                selectedMode =
+                    case mode of
+                        ModeSelection.P2PMode ->
+                            P2PSelected
+
+                        ModeSelection.PhoenixMode ->
+                            PhoenixSelected
+
+                modeStr =
+                    ModeSelection.modeToString mode
+
+                -- Initialize based on selected mode
+                ( newModel, initCmd ) =
+                    case selectedMode of
+                        P2PSelected ->
+                            -- P2P: show connection UI, no game running yet
+                            ( { model
+                                | screen = GameScreen
+                                , selectedMode = Just P2PSelected
+                                , gameMode = LocalMode
+                              }
+                            , Cmd.none
+                            )
+
+                        PhoenixSelected ->
+                            -- Phoenix: join online game
+                            ( { model
+                                | screen = GameScreen
+                                , selectedMode = Just PhoenixSelected
+                                , gameMode = OnlineMode
+                                , connectionStatus = Connecting
+                              }
+                            , Ports.joinGame (JE.object [])
+                            )
+            in
+            ( newModel
+            , Cmd.batch [ Ports.saveMode modeStr, initCmd ]
+            )
+
+        OpenSettings ->
+            ( { model | screen = SettingsScreen }, Cmd.none )
+
+        CloseSettings ->
+            ( { model | screen = GameScreen }, Cmd.none )
+
+        ChangeMode mode ->
+            let
+                selectedMode =
+                    case mode of
+                        ModeSelection.P2PMode ->
+                            P2PSelected
+
+                        ModeSelection.PhoenixMode ->
+                            PhoenixSelected
+
+                modeStr =
+                    ModeSelection.modeToString mode
+
+                -- Reset game state when changing modes
+                ( newModel, initCmd ) =
+                    case selectedMode of
+                        P2PSelected ->
+                            -- Switch to P2P: reset game state
+                            ( { model
+                                | screen = GameScreen
+                                , selectedMode = Just P2PSelected
+                                , gameMode = LocalMode
+                                , gameState = Nothing
+                                , localGame = Nothing
+                                , hostGame = Nothing
+                                , clientGame = Nothing
+                                , p2pState = P2PNotConnected
+                                , connectionStatus = Disconnected
+                              }
+                            , Cmd.none
+                            )
+
+                        PhoenixSelected ->
+                            -- Switch to Phoenix: join online game
+                            ( { model
+                                | screen = GameScreen
+                                , selectedMode = Just PhoenixSelected
+                                , gameMode = OnlineMode
+                                , gameState = Nothing
+                                , localGame = Nothing
+                                , hostGame = Nothing
+                                , clientGame = Nothing
+                                , p2pState = P2PNotConnected
+                                , connectionStatus = Connecting
+                              }
+                            , Ports.joinGame (JE.object [])
+                            )
+            in
+            ( newModel
+            , Cmd.batch [ Ports.saveMode modeStr, initCmd ]
+            )
+
 
 {-| Generate commands to spawn multiple apples for host game.
 -}
@@ -841,18 +1046,109 @@ roleDecoder str =
 
 view : Model -> Html Msg
 view model =
+    case model.screen of
+        ModeSelectionScreen ->
+            viewModeSelectionScreen
+
+        SettingsScreen ->
+            viewSettingsScreen model
+
+        GameScreen ->
+            viewGameScreen model
+
+
+{-| Mode selection screen (first visit).
+-}
+viewModeSelectionScreen : Html Msg
+viewModeSelectionScreen =
+    div [ class "game-container mode-selection-page", style "padding" "20px" ]
+        [ h1 [] [ text "Snaker" ]
+        , ModeSelection.view { onSelectMode = SelectMode }
+        ]
+
+
+{-| Settings screen for changing mode preference.
+-}
+viewSettingsScreen : Model -> Html Msg
+viewSettingsScreen model =
+    div [ class "game-container settings-page", style "padding" "20px" ]
+        [ h1 [] [ text "Settings" ]
+        , div [ class "settings-content" ]
+            [ h2 [] [ text "Game Mode" ]
+            , p [ class "current-mode" ]
+                [ text "Current mode: "
+                , text
+                    (case model.selectedMode of
+                        Just P2PSelected ->
+                            "Direct Connect (P2P)"
+
+                        Just PhoenixSelected ->
+                            "Classic Online (Phoenix)"
+
+                        Nothing ->
+                            "Not selected"
+                    )
+                ]
+            , div [ class "mode-change-buttons" ]
+                [ button
+                    [ class
+                        (if model.selectedMode == Just P2PSelected then
+                            "mode-option-button selected"
+
+                         else
+                            "mode-option-button"
+                        )
+                    , onClick (ChangeMode ModeSelection.P2PMode)
+                    ]
+                    [ text "Direct Connect" ]
+                , button
+                    [ class
+                        (if model.selectedMode == Just PhoenixSelected then
+                            "mode-option-button selected"
+
+                         else
+                            "mode-option-button"
+                        )
+                    , onClick (ChangeMode ModeSelection.PhoenixMode)
+                    ]
+                    [ text "Classic Online" ]
+                ]
+            , button [ class "btn-back", onClick CloseSettings ]
+                [ text "Back to Game" ]
+            ]
+        ]
+
+
+{-| Main game screen with connection UI and game board.
+-}
+viewGameScreen : Model -> Html Msg
+viewGameScreen model =
     div [ class "game-container", style "padding" "20px" ]
-        [ h1 [] [ text "Snaker - Elm 0.19.1" ]
-        , ConnectionUI.view
-            { p2pState = model.p2pState
-            , roomCodeInput = model.roomCodeInput
-            , showCopiedFeedback = model.showCopiedFeedback
-            , onCreateRoom = CreateRoom
-            , onJoinRoom = JoinRoom
-            , onLeaveRoom = LeaveRoom
-            , onRoomCodeInput = RoomCodeInputChanged
-            , onCopyRoomCode = CopyRoomCode
-            }
+        [ div [ class "game-header" ]
+            [ h1 [] [ text "Snaker - Elm 0.19.1" ]
+            , button [ class "btn-settings", onClick OpenSettings ]
+                [ text "Settings" ]
+            ]
+        , -- Only show P2P connection UI in P2P mode
+          case model.selectedMode of
+            Just P2PSelected ->
+                ConnectionUI.view
+                    { p2pState = model.p2pState
+                    , roomCodeInput = model.roomCodeInput
+                    , showCopiedFeedback = model.showCopiedFeedback
+                    , onCreateRoom = CreateRoom
+                    , onJoinRoom = JoinRoom
+                    , onLeaveRoom = LeaveRoom
+                    , onRoomCodeInput = RoomCodeInputChanged
+                    , onCopyRoomCode = CopyRoomCode
+                    }
+
+            Just PhoenixSelected ->
+                div [ class "connection-status" ]
+                    [ text ("Phoenix: " ++ connectionStatusToString model.connectionStatus) ]
+
+            Nothing ->
+                text ""
         , viewStatus model
         , case model.error of
             Just err ->
@@ -1044,7 +1340,7 @@ subscriptions model =
         ]
 
 
-main : Program () Model Msg
+main : Program Flags Model Msg
 main =
     Browser.element
         { init = init
@@ -1052,3 +1348,12 @@ main =
         , update = update
         , subscriptions = subscriptions
         }
+
+
+{-| Decoder for Flags from JavaScript.
+    Handles the nullable savedMode string.
+-}
+flagsDecoder : JD.Decoder Flags
+flagsDecoder =
+    JD.map Flags
+        (JD.field "savedMode" (JD.nullable JD.string))
