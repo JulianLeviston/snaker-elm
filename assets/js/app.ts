@@ -20,6 +20,8 @@ interface ElmApp {
     joinRoom: { subscribe: (callback: (roomCode: string) => void) => void };
     leaveRoom: { subscribe: (callback: () => void) => void };
     copyToClipboard: { subscribe: (callback: (text: string) => void) => void };
+    broadcastGameState: { subscribe: (callback: (data: string) => void) => void };
+    sendInputP2P: { subscribe: (callback: (data: string) => void) => void };
     roomCreated: { send: (roomCode: string) => void };
     peerConnected: {
       send: (data: { role: string; peerId?: string; roomCode?: string }) => void;
@@ -27,6 +29,8 @@ interface ElmApp {
     peerDisconnected: { send: (peerId: string) => void };
     connectionError: { send: (message: string) => void };
     clipboardCopySuccess: { send: (data: null) => void };
+    receiveGameStateP2P: { send: (data: string) => void };
+    receiveInputP2P: { send: (data: string) => void };
   };
 }
 

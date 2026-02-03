@@ -12,11 +12,15 @@ port module Ports exposing
     , joinRoom
     , leaveRoom
     , copyToClipboard
+    , broadcastGameState
+    , sendInputP2P
     , roomCreated
     , peerConnected
     , peerDisconnected
     , connectionError
     , clipboardCopySuccess
+    , receiveGameStateP2P
+    , receiveInputP2P
     )
 
 import Json.Decode as JD
@@ -49,6 +53,12 @@ port leaveRoom : () -> Cmd msg
 
 
 port copyToClipboard : String -> Cmd msg
+
+
+port broadcastGameState : String -> Cmd msg
+
+
+port sendInputP2P : String -> Cmd msg
 
 
 
@@ -87,3 +97,9 @@ port connectionError : (String -> msg) -> Sub msg
 
 
 port clipboardCopySuccess : (() -> msg) -> Sub msg
+
+
+port receiveGameStateP2P : (String -> msg) -> Sub msg
+
+
+port receiveInputP2P : (String -> msg) -> Sub msg

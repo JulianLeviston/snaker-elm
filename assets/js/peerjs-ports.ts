@@ -8,6 +8,8 @@ interface P2PPorts {
   joinRoom: { subscribe: (callback: (roomCode: string) => void) => void };
   leaveRoom: { subscribe: (callback: () => void) => void };
   copyToClipboard: { subscribe: (callback: (text: string) => void) => void };
+  broadcastGameState: { subscribe: (callback: (data: string) => void) => void };
+  sendInputP2P: { subscribe: (callback: (data: string) => void) => void };
 
   // Incoming (JS -> Elm events)
   roomCreated: { send: (roomCode: string) => void };
@@ -17,6 +19,8 @@ interface P2PPorts {
   peerDisconnected: { send: (peerId: string) => void };
   connectionError: { send: (message: string) => void };
   clipboardCopySuccess: { send: (data: null) => void };
+  receiveGameStateP2P: { send: (data: string) => void };
+  receiveInputP2P: { send: (data: string) => void };
 }
 
 interface ElmAppWithP2P {
@@ -158,10 +162,12 @@ export function setupPeerPorts(app: ElmAppWithP2P): void {
         app.ports.peerDisconnected.send(conn.peer);
       });
 
-      // Data handling will be added in later plans
-      conn.on("data", (data) => {
+      // Handle data from clients
+      conn.on("data", (data: any) => {
         console.log(`Received data from ${conn.peer}:`, data);
-        // TODO: Handle game state sync in future plans
+        if (data && data.type === "input") {
+          app.ports.receiveInputP2P.send(data.data);
+        }
       });
     });
   });
@@ -233,10 +239,12 @@ export function setupPeerPorts(app: ElmAppWithP2P): void {
         app.ports.peerDisconnected.send(roomCode);
       });
 
-      // Data handling will be added in later plans
-      conn.on("data", (data) => {
+      // Handle data from host
+      conn.on("data", (data: any) => {
         console.log(`Received data from host:`, data);
-        // TODO: Handle game state sync in future plans
+        if (data && data.type === "state") {
+          app.ports.receiveGameStateP2P.send(data.data);
+        }
       });
     });
 
@@ -258,6 +266,25 @@ export function setupPeerPorts(app: ElmAppWithP2P): void {
   app.ports.leaveRoom.subscribe(() => {
     console.log("Leaving room");
     cleanup();
+  });
+
+  // Subscribe to broadcastGameState command (host sends to all clients)
+  app.ports.broadcastGameState.subscribe((jsonData: string) => {
+    connections.forEach((conn) => {
+      if (conn.open) {
+        conn.send({ type: "state", data: jsonData });
+      }
+    });
+  });
+
+  // Subscribe to sendInputP2P command (client sends to host)
+  app.ports.sendInputP2P.subscribe((jsonData: string) => {
+    // Client should only have one connection (to host)
+    connections.forEach((conn) => {
+      if (conn.open) {
+        conn.send({ type: "input", data: jsonData });
+      }
+    });
   });
 
   // Subscribe to copyToClipboard command

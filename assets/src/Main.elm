@@ -2,6 +2,7 @@ module Main exposing (main)
 
 import Browser
 import Browser.Events
+import Dict
 import Engine.Apple as Apple exposing (Apple)
 import Game exposing (GameState)
 import Html exposing (Html, div, h1, span, text)
@@ -10,6 +11,8 @@ import Input
 import Json.Decode as JD
 import Json.Encode as JE
 import LocalGame exposing (LocalGameState)
+import Network.HostGame as HostGame exposing (HostGameState)
+import Network.Protocol as Protocol
 import Ports
 import Process
 import Random
@@ -25,7 +28,9 @@ import View.Scoreboard as Scoreboard
 type alias Model =
     { gameState : Maybe GameState
     , localGame : Maybe LocalGameState
+    , hostGame : Maybe HostGameState
     , playerId : Maybe String
+    , myPeerId : Maybe String
     , currentDirection : Direction
     , connectionStatus : ConnectionStatus
     , error : Maybe String
@@ -76,6 +81,12 @@ type Msg
     | CopyRoomCode
     | GotClipboardCopySuccess
     | HideCopiedFeedback
+      -- Host game messages
+    | InitHostGame HostGameState
+    | HostTick Time.Posix
+    | NewHostSpawnPosition String Position
+    | NewHostApplePosition Position
+    | GotInputP2P String
 
 
 init : () -> ( Model, Cmd Msg )
@@ -83,7 +94,9 @@ init _ =
     -- Start in local mode by default (online mode will be phase 7)
     ( { gameState = Nothing
       , localGame = Nothing
+      , hostGame = Nothing
       , playerId = Just "local"
+      , myPeerId = Nothing
       , currentDirection = Right
       , connectionStatus = Connected
       , error = Nothing
@@ -206,28 +219,41 @@ update msg model =
         KeyPressed maybeDir ->
             case maybeDir of
                 Just dir ->
-                    case model.gameMode of
-                        LocalMode ->
-                            -- Update local game with direction change
-                            case model.localGame of
-                                Just localState ->
-                                    let
-                                        newState =
-                                            LocalGame.changeDirection dir localState
-                                    in
-                                    ( { model | localGame = Just newState, currentDirection = dir }
-                                    , Cmd.none
-                                    )
-
-                                Nothing ->
-                                    ( model, Cmd.none )
-
-                        OnlineMode ->
-                            -- Send to server (existing behavior)
-                            ( { model | currentDirection = dir }
-                            , Ports.sendDirection
-                                (JE.object [ ( "direction", JE.string (Snake.directionToString dir) ) ])
+                    -- Check if we're hosting a P2P game first
+                    case model.hostGame of
+                        Just hostState ->
+                            -- Host: apply direction to own snake
+                            let
+                                newState =
+                                    HostGame.changeHostDirection dir hostState
+                            in
+                            ( { model | hostGame = Just newState, currentDirection = dir }
+                            , Cmd.none
                             )
+
+                        Nothing ->
+                            case model.gameMode of
+                                LocalMode ->
+                                    -- Update local game with direction change
+                                    case model.localGame of
+                                        Just localState ->
+                                            let
+                                                newState =
+                                                    LocalGame.changeDirection dir localState
+                                            in
+                                            ( { model | localGame = Just newState, currentDirection = dir }
+                                            , Cmd.none
+                                            )
+
+                                        Nothing ->
+                                            ( model, Cmd.none )
+
+                                OnlineMode ->
+                                    -- Send to server (existing behavior)
+                                    ( { model | currentDirection = dir }
+                                    , Ports.sendDirection
+                                        (JE.object [ ( "direction", JE.string (Snake.directionToString dir) ) ])
+                                    )
 
                 Nothing ->
                     ( model, Cmd.none )
@@ -367,8 +393,13 @@ update msg model =
             ( newState, cmd )
 
         GotRoomCreated roomCode ->
-            ( { model | p2pState = P2PConnected Host roomCode }
-            , Cmd.none
+            -- Host: Initialize host game with roomCode as our peerId
+            ( { model
+                | p2pState = P2PConnected Host roomCode
+                , myPeerId = Just roomCode
+                , localGame = Nothing  -- Clear local game
+              }
+            , Random.generate InitHostGame (HostGame.init roomCode)
             )
 
         GotPeerConnected value ->
@@ -428,6 +459,145 @@ update msg model =
 
         HideCopiedFeedback ->
             ( { model | showCopiedFeedback = False }, Cmd.none )
+
+        -- Host game message handlers
+        InitHostGame hostState ->
+            -- Host game initialized, spawn initial apples
+            let
+                applesNeeded =
+                    Apple.minApples
+
+                spawnCmd =
+                    spawnHostAppleCommands applesNeeded (HostGame.getOccupiedPositions hostState) hostState.grid
+            in
+            ( { model
+                | hostGame = Just hostState
+                , pendingAppleSpawns = applesNeeded
+              }
+            , spawnCmd
+            )
+
+        HostTick _ ->
+            case model.hostGame of
+                Just hostState ->
+                    let
+                        tickResult =
+                            HostGame.tick hostState
+
+                        newState =
+                            tickResult.state
+
+                        -- Check if any snake needs respawn
+                        snakesNeedingRespawn =
+                            Dict.filter (\_ data -> data.needsRespawn) newState.snakes
+                                |> Dict.keys
+                    in
+                    case List.head snakesNeedingRespawn of
+                        Just playerId ->
+                            -- Need random respawn position for this snake
+                            ( { model | hostGame = Just newState }
+                            , Random.generate (NewHostSpawnPosition playerId) (randomPosition newState.grid)
+                            )
+
+                        Nothing ->
+                            -- Check if we need to spawn apples
+                            let
+                                effectiveAppleCount =
+                                    List.length newState.apples + model.pendingAppleSpawns
+
+                                applesNeeded =
+                                    max 0 (Apple.minApples - effectiveAppleCount + List.length tickResult.expiredApples)
+
+                                ( newPendingCount, spawnCmd ) =
+                                    if applesNeeded > 0 then
+                                        ( model.pendingAppleSpawns + applesNeeded
+                                        , spawnHostAppleCommands applesNeeded (HostGame.getOccupiedPositions newState) newState.grid
+                                        )
+
+                                    else
+                                        ( model.pendingAppleSpawns, Cmd.none )
+
+                                -- Broadcast state to all connected peers
+                                stateJson =
+                                    Protocol.encodeStateSync tickResult.stateSync |> JE.encode 0
+
+                                broadcastCmd =
+                                    Ports.broadcastGameState stateJson
+                            in
+                            ( { model
+                                | hostGame = Just newState
+                                , pendingAppleSpawns = newPendingCount
+                              }
+                            , Cmd.batch [ broadcastCmd, spawnCmd ]
+                            )
+
+                Nothing ->
+                    ( model, Cmd.none )
+
+        NewHostSpawnPosition playerId pos ->
+            case model.hostGame of
+                Just hostState ->
+                    let
+                        newState =
+                            HostGame.respawnSnake playerId pos hostState
+                    in
+                    ( { model | hostGame = Just newState }, Cmd.none )
+
+                Nothing ->
+                    ( model, Cmd.none )
+
+        NewHostApplePosition pos ->
+            case model.hostGame of
+                Just hostState ->
+                    let
+                        apple =
+                            { position = pos
+                            , expiresAtTick = hostState.currentTick + Apple.ticksUntilExpiry
+                            }
+
+                        newState =
+                            HostGame.addApple apple hostState
+                    in
+                    ( { model
+                        | hostGame = Just newState
+                        , pendingAppleSpawns = max 0 (model.pendingAppleSpawns - 1)
+                      }
+                    , Cmd.none
+                    )
+
+                Nothing ->
+                    ( model, Cmd.none )
+
+        GotInputP2P jsonString ->
+            -- Host receives input from client
+            case model.hostGame of
+                Just hostState ->
+                    case JD.decodeString Protocol.decodeInput jsonString of
+                        Ok inputPayload ->
+                            let
+                                newState =
+                                    HostGame.bufferInput inputPayload.playerId inputPayload.direction hostState
+                            in
+                            ( { model | hostGame = Just newState }, Cmd.none )
+
+                        Err _ ->
+                            ( model, Cmd.none )
+
+                Nothing ->
+                    ( model, Cmd.none )
+
+
+{-| Generate commands to spawn multiple apples for host game.
+-}
+spawnHostAppleCommands : Int -> List Position -> { width : Int, height : Int } -> Cmd Msg
+spawnHostAppleCommands count occupied grid =
+    if count <= 0 then
+        Cmd.none
+
+    else
+        List.range 1 count
+            |> List.map (\_ -> Random.generate NewHostApplePosition (Apple.randomSafePosition occupied grid))
+            |> Cmd.batch
 
 
 {-| Generate commands to spawn multiple apples.
@@ -537,58 +707,90 @@ view model =
 viewStatus : Model -> Html Msg
 viewStatus model =
     div [ class "game-status" ]
-        [ case model.gameMode of
-            LocalMode ->
-                text "Mode: Local (offline)"
+        [ case model.hostGame of
+            Just hostState ->
+                let
+                    playerCount =
+                        Dict.size hostState.snakes
 
-            OnlineMode ->
-                text ("Status: " ++ connectionStatusToString model.connectionStatus)
-        , case model.playerId of
-            Just pid ->
-                text (" | Player ID: " ++ pid)
-
-            Nothing ->
-                text ""
-        , case model.localGame of
-            Just localState ->
+                    hostScore =
+                        Dict.get hostState.hostId hostState.scores |> Maybe.withDefault 0
+                in
                 span []
-                    [ text (" | Tick: " ++ String.fromInt localState.currentTick)
-                    , text (" | Score: " ++ String.fromInt localState.score)
+                    [ text "Mode: Host (P2P)"
+                    , text (" | Players: " ++ String.fromInt playerCount)
+                    , text (" | Tick: " ++ String.fromInt hostState.currentTick)
+                    , text (" | Score: " ++ String.fromInt hostScore)
                     ]
 
             Nothing ->
-                text ""
+                span []
+                    [ case model.gameMode of
+                        LocalMode ->
+                            text "Mode: Local (offline)"
+
+                        OnlineMode ->
+                            text ("Status: " ++ connectionStatusToString model.connectionStatus)
+                    , case model.playerId of
+                        Just pid ->
+                            text (" | Player ID: " ++ pid)
+
+                        Nothing ->
+                            text ""
+                    , case model.localGame of
+                        Just localState ->
+                            span []
+                                [ text (" | Tick: " ++ String.fromInt localState.currentTick)
+                                , text (" | Score: " ++ String.fromInt localState.score)
+                                ]
+
+                        Nothing ->
+                            text ""
+                    ]
         ]
 
 
 viewGame : Model -> Html Msg
 viewGame model =
-    case model.gameMode of
-        LocalMode ->
-            case model.localGame of
-                Just localState ->
-                    let
-                        gameState =
-                            LocalGame.toGameState localState
-                    in
-                    div [ class "game-layout" ]
-                        [ Board.view gameState model.playerId
-                        , Scoreboard.view gameState.snakes model.playerId
-                        ]
+    -- Check if hosting P2P game first
+    case model.hostGame of
+        Just hostState ->
+            let
+                gameState =
+                    HostGame.toGameState hostState
+            in
+            div [ class "game-layout" ]
+                [ Board.view gameState model.myPeerId
+                , Scoreboard.view gameState.snakes model.myPeerId
+                ]
 
-                Nothing ->
-                    div [] [ text "Initializing game..." ]
+        Nothing ->
+            case model.gameMode of
+                LocalMode ->
+                    case model.localGame of
+                        Just localState ->
+                            let
+                                gameState =
+                                    LocalGame.toGameState localState
+                            in
+                            div [ class "game-layout" ]
+                                [ Board.view gameState model.playerId
+                                , Scoreboard.view gameState.snakes model.playerId
+                                ]
 
-        OnlineMode ->
-            case model.gameState of
-                Just state ->
-                    div [ class "game-layout" ]
-                        [ Board.view state model.playerId
-                        , Scoreboard.view state.snakes model.playerId
-                        ]
+                        Nothing ->
+                            div [] [ text "Initializing game..." ]
 
-                Nothing ->
-                    div [] [ text "Waiting for game state..." ]
+                OnlineMode ->
+                    case model.gameState of
+                        Just state ->
+                            div [ class "game-layout" ]
+                                [ Board.view state model.playerId
+                                , Scoreboard.view state.snakes model.playerId
+                                ]
+
+                        Nothing ->
+                            div [] [ text "Waiting for game state..." ]
 
 
 connectionStatusToString : ConnectionStatus -> String
@@ -608,13 +810,20 @@ subscriptions : Model -> Sub Msg
 subscriptions model =
     Sub.batch
         [ Browser.Events.onKeyDown (JD.map KeyPressed Input.keyDecoder)
-        , case model.gameMode of
-            LocalMode ->
-                -- Local game tick at 100ms intervals
-                Time.every 100 Tick
+          -- Tick subscription depends on game mode and P2P state
+        , case model.p2pState of
+            P2PConnected Host _ ->
+                -- Host: use HostTick for multi-player game loop
+                Time.every 100 HostTick
 
-            OnlineMode ->
-                Sub.none
+            _ ->
+                case model.gameMode of
+                    LocalMode ->
+                        -- Local game tick at 100ms intervals
+                        Time.every 100 Tick
+
+                    OnlineMode ->
+                        Sub.none
         , Ports.receiveGameState GotGameState
         , Ports.receiveError GotError
         , Ports.playerJoined PlayerJoined
@@ -626,6 +835,7 @@ subscriptions model =
         , Ports.peerDisconnected GotPeerDisconnected
         , Ports.connectionError GotConnectionError
         , Ports.clipboardCopySuccess (\_ -> GotClipboardCopySuccess)
+        , Ports.receiveInputP2P GotInputP2P
         ]
 
 
