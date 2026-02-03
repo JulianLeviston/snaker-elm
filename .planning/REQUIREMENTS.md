@@ -29,12 +29,12 @@ Requirements for P2P WebRTC mode. Each maps to roadmap phases.
 
 ### Host/Client
 
-- [ ] **HOST-01**: First peer to create room becomes host
-- [ ] **HOST-02**: Host runs game loop and broadcasts state to all peers
-- [ ] **HOST-03**: Non-host peers send input to host only
-- [ ] **HOST-04**: Non-host peers render state received from host
-- [ ] **HOST-05**: New player joining mid-game receives full state
-- [ ] **HOST-06**: Player leaving is removed from game state
+- [x] **HOST-01**: First peer to create room becomes host
+- [x] **HOST-02**: Host runs game loop and broadcasts state to all peers
+- [x] **HOST-03**: Non-host peers send input to host only
+- [x] **HOST-04**: Non-host peers render state received from host
+- [x] **HOST-05**: New player joining mid-game receives full state
+- [x] **HOST-06**: Player leaving is removed from game state
 - [ ] **HOST-07**: When host disconnects, next peer (by ID) becomes host
 - [ ] **HOST-08**: New host continues game with current state
 - [ ] **HOST-09**: Disconnected player can reconnect to same room
@@ -87,12 +87,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CONN-02 | Phase 5 | Complete |
 | CONN-03 | Phase 5 | Complete |
 | CONN-04 | Phase 5 | Complete |
-| HOST-01 | Phase 6 | Pending |
-| HOST-02 | Phase 6 | Pending |
-| HOST-03 | Phase 6 | Pending |
-| HOST-04 | Phase 6 | Pending |
-| HOST-05 | Phase 6 | Pending |
-| HOST-06 | Phase 6 | Pending |
+| HOST-01 | Phase 6 | Complete |
+| HOST-02 | Phase 6 | Complete |
+| HOST-03 | Phase 6 | Complete |
+| HOST-04 | Phase 6 | Complete |
+| HOST-05 | Phase 6 | Complete |
+| HOST-06 | Phase 6 | Complete |
 | HOST-07 | Phase 7 | Pending |
 | HOST-08 | Phase 7 | Pending |
 | HOST-09 | Phase 7 | Pending |
