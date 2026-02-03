@@ -14,7 +14,7 @@ interface P2PPorts {
   // Incoming (JS -> Elm events)
   roomCreated: { send: (roomCode: string) => void };
   peerConnected: {
-    send: (data: { role: string; peerId?: string; roomCode?: string }) => void;
+    send: (data: { role: string; peerId?: string; roomCode?: string; myPeerId?: string }) => void;
   };
   peerDisconnected: { send: (peerId: string) => void };
   connectionError: { send: (message: string) => void };
@@ -216,6 +216,7 @@ export function setupPeerPorts(app: ElmAppWithP2P): void {
         app.ports.peerConnected.send({
           role: "client",
           roomCode: roomCode,
+          myPeerId: peer!.id,  // Include client's own peerId
         });
       });
 

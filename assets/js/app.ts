@@ -24,7 +24,7 @@ interface ElmApp {
     sendInputP2P: { subscribe: (callback: (data: string) => void) => void };
     roomCreated: { send: (roomCode: string) => void };
     peerConnected: {
-      send: (data: { role: string; peerId?: string; roomCode?: string }) => void;
+      send: (data: { role: string; peerId?: string; roomCode?: string; myPeerId?: string }) => void;
     };
     peerDisconnected: { send: (peerId: string) => void };
     connectionError: { send: (message: string) => void };
