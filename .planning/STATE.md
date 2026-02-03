@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-03)
 
 **Core value:** Players can play snake together in real-time without requiring a backend server
-**Current focus:** Phase 5 - P2P Connection Layer (Plan 01 complete)
+**Current focus:** Phase 6 - Host/Client Integration (Plan 01 complete)
 
 ## Current Position
 
-Phase: 5 of 7 (P2P Connection Layer)
-Plan: 2 of 2 in current phase (PHASE COMPLETE)
-Status: In progress - Phase 5 complete, ready for Phase 6
-Last activity: 2026-02-03 - Completed 05-02-PLAN.md
+Phase: 6 of 7 (Host/Client Integration)
+Plan: 1 of 2 in current phase
+Status: In progress - Plan 01 complete, ready for Plan 02
+Last activity: 2026-02-03 - Completed 06-01-PLAN.md
 
-Progress: [====█░░░░░] 50% (4/8 plans)
+Progress: [=====█░░░░] 62.5% (5/8 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4 (v2)
-- Average duration: 3.4 min
-- Total execution time: 13.5 min
+- Total plans completed: 5 (v2)
+- Average duration: 4.0 min
+- Total execution time: 19.5 min
 
 **By Phase:**
 
@@ -29,12 +29,12 @@ Progress: [====█░░░░░] 50% (4/8 plans)
 |-------|-------|-------|----------|
 | 4. Game Engine Port | 2/2 | 5.5 min | 2.75 min |
 | 5. P2P Connection Layer | 2/2 | 16 min | 8 min |
-| 6. Host/Client Integration | 0/2 | - | - |
+| 6. Host/Client Integration | 1/2 | 6 min | 6 min |
 | 7. Migration & Polish | 0/2 | - | - |
 
 **Recent Trend:**
-- Last 5 plans: 04-01 (3 min), 04-02 (2.5 min), 05-01 (4 min), 05-02 (12 min)
-- Trend: P2P phase more complex, expected for networked features
+- Last 5 plans: 04-02 (2.5 min), 05-01 (4 min), 05-02 (12 min), 06-01 (6 min)
+- Trend: P2P/networking phases more complex, 06-01 efficient execution
 
 *Updated after each plan completion*
 
@@ -56,6 +56,10 @@ Recent decisions affecting current work:
 - [05-01]: 4-letter A-Z room codes for human-friendly sharing
 - [05-01]: 10-second timeout for P2P join attempts
 - [05-01]: Auto-join when room code input reaches 4 characters
+- [06-01]: Full sync every 50 ticks (5 seconds) to recover from packet loss
+- [06-01]: 30-tick grace period for disconnected players before removal
+- [06-01]: Hash-based snake color assignment from 12-color palette
+- [06-01]: Host's peerId equals room code for simplified identification
 
 ### Pending Todos
 
@@ -68,9 +72,9 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-03
-Stopped at: Completed 05-02-PLAN.md (Phase 5 complete)
+Stopped at: Completed 06-01-PLAN.md
 Resume file: None
 
 ---
 *State initialized: 2026-02-03*
-*Last updated: 2026-02-03 (05-02 complete)*
+*Last updated: 2026-02-03 (06-01 complete)*
