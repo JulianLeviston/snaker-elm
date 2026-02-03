@@ -13,9 +13,9 @@ Requirements for P2P WebRTC mode. Each maps to roadmap phases.
 - [x] **CONN-02**: Player can join a room by entering a room code
 - [x] **CONN-03**: Player sees connection state (connecting/connected/disconnected)
 - [x] **CONN-04**: Player sees error message when connection fails
-- [ ] **CONN-05**: Player can share room via URL link
-- [ ] **CONN-06**: Player can scan QR code to join room
-- [ ] **CONN-07**: Player can copy room code with one click
+- [x] **CONN-05**: Player can share room via URL link
+- [x] **CONN-06**: Player can scan QR code to join room
+- [x] **CONN-07**: Player can copy room code with one click
 
 ### Game Engine
 
@@ -35,13 +35,13 @@ Requirements for P2P WebRTC mode. Each maps to roadmap phases.
 - [x] **HOST-04**: Non-host peers render state received from host
 - [x] **HOST-05**: New player joining mid-game receives full state
 - [x] **HOST-06**: Player leaving is removed from game state
-- [ ] **HOST-07**: When host disconnects, next peer (by ID) becomes host
-- [ ] **HOST-08**: New host continues game with current state
-- [ ] **HOST-09**: Disconnected player can reconnect to same room
+- [x] **HOST-07**: When host disconnects, next peer (by ID) becomes host
+- [x] **HOST-08**: New host continues game with current state
+- [x] **HOST-09**: Disconnected player can reconnect to same room
 
 ### Mode Selection
 
-- [ ] **MODE-01**: Player can choose between Phoenix mode and P2P mode
+- [x] **MODE-01**: Player can choose between Phoenix mode and P2P mode
 
 ## Existing Requirements (from v1)
 
@@ -93,13 +93,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | HOST-04 | Phase 6 | Complete |
 | HOST-05 | Phase 6 | Complete |
 | HOST-06 | Phase 6 | Complete |
-| HOST-07 | Phase 7 | Pending |
-| HOST-08 | Phase 7 | Pending |
-| HOST-09 | Phase 7 | Pending |
-| CONN-05 | Phase 7 | Pending |
-| CONN-06 | Phase 7 | Pending |
-| CONN-07 | Phase 7 | Pending |
-| MODE-01 | Phase 7 | Pending |
+| HOST-07 | Phase 7 | Complete |
+| HOST-08 | Phase 7 | Complete |
+| HOST-09 | Phase 7 | Complete |
+| CONN-05 | Phase 7 | Complete |
+| CONN-06 | Phase 7 | Complete |
+| CONN-07 | Phase 7 | Complete |
+| MODE-01 | Phase 7 | Complete |
 
 **Coverage:**
 - v2 requirements: 24 total
@@ -108,4 +108,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-03*
-*Last updated: 2026-02-03 after roadmap creation*
+*Last updated: 2026-02-03 (Phase 7 complete, all v2 requirements met)*

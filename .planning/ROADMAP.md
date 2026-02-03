@@ -3,7 +3,7 @@
 ## Milestones
 
 - [x] **v1 Multiplayer Upgrade** - Phases 1-3 (shipped 2026-02-02)
-- [ ] **v2 P2P WebRTC Mode** - Phases 4-7 (in progress)
+- [x] **v2 P2P WebRTC Mode** - Phases 4-7 (shipped 2026-02-03)
 
 ## Overview
 
@@ -18,7 +18,7 @@ This roadmap delivers serverless P2P multiplayer for Snaker Elm. The journey sta
 - [x] **Phase 4: Game Engine Port** - Port Elixir game logic to pure Elm
 - [x] **Phase 5: P2P Connection Layer** - Establish WebRTC connections via PeerJS
 - [x] **Phase 6: Host/Client Integration** - Enable P2P multiplayer gameplay
-- [ ] **Phase 7: Migration & Polish** - Host migration, room sharing, mode selection
+- [x] **Phase 7: Migration & Polish** - Host migration, room sharing, mode selection
 
 ## Phase Details
 
@@ -81,9 +81,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 07-01-PLAN.md - Mode selection: startup screen, localStorage persistence, settings override
-- [ ] 07-02-PLAN.md - Room sharing: QR code generation, copy code/URL buttons, visual feedback
-- [ ] 07-03-PLAN.md - Host migration: deterministic election, orphaned snakes, reconnection, host indicator
+- [x] 07-01-PLAN.md - Mode selection: startup screen, localStorage persistence, settings override
+- [x] 07-02-PLAN.md - Room sharing: QR code generation, copy code/URL buttons, visual feedback
+- [x] 07-03-PLAN.md - Host migration: deterministic election, orphaned snakes, reconnection, leader indicator
 
 ## Progress
 
@@ -94,8 +94,8 @@ Plans:
 | 4. Game Engine Port | v2 | 2/2 | Complete | 2026-02-03 |
 | 5. P2P Connection Layer | v2 | 2/2 | Complete | 2026-02-03 |
 | 6. Host/Client Integration | v2 | 2/2 | Complete | 2026-02-03 |
-| 7. Migration & Polish | v2 | 0/3 | Ready | - |
+| 7. Migration & Polish | v2 | 3/3 | Complete | 2026-02-03 |
 
 ---
 *Roadmap created: 2026-02-03*
-*Last updated: 2026-02-03 (Phase 7 planned)*
+*Last updated: 2026-02-03 (Phase 7 complete, v2 milestone complete)*
