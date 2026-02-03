@@ -16,7 +16,7 @@ This roadmap delivers serverless P2P multiplayer for Snaker Elm. The journey sta
 - v2 starts at phase 4 (continuous numbering)
 
 - [x] **Phase 4: Game Engine Port** - Port Elixir game logic to pure Elm
-- [ ] **Phase 5: P2P Connection Layer** - Establish WebRTC connections via PeerJS
+- [x] **Phase 5: P2P Connection Layer** - Establish WebRTC connections via PeerJS
 - [ ] **Phase 6: Host/Client Integration** - Enable P2P multiplayer gameplay
 - [ ] **Phase 7: Migration & Polish** - Host migration, room sharing, mode selection
 
@@ -49,8 +49,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 05-01-PLAN.md - P2P infrastructure: PeerJS install, ports, connection state machine
-- [ ] 05-02-PLAN.md - Connection UI: Create/Join buttons, room code display, status, errors
+- [x] 05-01-PLAN.md - P2P infrastructure: PeerJS install, ports, connection state machine
+- [x] 05-02-PLAN.md - Connection UI: Create/Join buttons, room code display, status, errors
 
 ### Phase 6: Host/Client Integration
 **Goal**: Full P2P multiplayer game works between connected peers
@@ -91,10 +91,10 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 4. Game Engine Port | v2 | 2/2 | Complete | 2026-02-03 |
-| 5. P2P Connection Layer | v2 | 0/2 | Not started | - |
+| 5. P2P Connection Layer | v2 | 2/2 | Complete | 2026-02-03 |
 | 6. Host/Client Integration | v2 | 0/2 | Not started | - |
 | 7. Migration & Polish | v2 | 0/2 | Not started | - |
 
 ---
 *Roadmap created: 2026-02-03*
-*Last updated: 2026-02-03 (Phase 5 planned)*
+*Last updated: 2026-02-03 (Phase 5 complete)*

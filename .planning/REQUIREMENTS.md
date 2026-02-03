@@ -9,10 +9,10 @@ Requirements for P2P WebRTC mode. Each maps to roadmap phases.
 
 ### Connection
 
-- [ ] **CONN-01**: Player can create a room and receive a room code
-- [ ] **CONN-02**: Player can join a room by entering a room code
-- [ ] **CONN-03**: Player sees connection state (connecting/connected/disconnected)
-- [ ] **CONN-04**: Player sees error message when connection fails
+- [x] **CONN-01**: Player can create a room and receive a room code
+- [x] **CONN-02**: Player can join a room by entering a room code
+- [x] **CONN-03**: Player sees connection state (connecting/connected/disconnected)
+- [x] **CONN-04**: Player sees error message when connection fails
 - [ ] **CONN-05**: Player can share room via URL link
 - [ ] **CONN-06**: Player can scan QR code to join room
 - [ ] **CONN-07**: Player can copy room code with one click
@@ -83,10 +83,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ENG-05 | Phase 4 | Complete |
 | ENG-06 | Phase 4 | Complete |
 | ENG-07 | Phase 4 | Complete |
-| CONN-01 | Phase 5 | Pending |
-| CONN-02 | Phase 5 | Pending |
-| CONN-03 | Phase 5 | Pending |
-| CONN-04 | Phase 5 | Pending |
+| CONN-01 | Phase 5 | Complete |
+| CONN-02 | Phase 5 | Complete |
+| CONN-03 | Phase 5 | Complete |
+| CONN-04 | Phase 5 | Complete |
 | HOST-01 | Phase 6 | Pending |
 | HOST-02 | Phase 6 | Pending |
 | HOST-03 | Phase 6 | Pending |
