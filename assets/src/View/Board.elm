@@ -1,4 +1,4 @@
-module View.Board exposing (view, viewWithHostIndicator)
+module View.Board exposing (view, viewWithLeader)
 
 import Game exposing (Apple, GameState)
 import Html exposing (Html)
@@ -22,19 +22,18 @@ svgClass name =
     Html.Attributes.attribute "class" name
 
 
-{-| Render the game board with snakes, apples, and optional host indicator.
-    maybeHostId is used to show a crown on the host's snake.
+{-| Render the game board with snakes and apples.
 -}
 view : { a | snakes : List Snake, apples : List Apple, gridWidth : Int, gridHeight : Int } -> Maybe String -> Html msg
 view gameState maybePlayerId =
-    viewWithHostIndicator gameState maybePlayerId Nothing
+    viewWithLeader gameState maybePlayerId Nothing
 
 
-{-| Render the game board with explicit host indicator.
+{-| Render the game board with leader indicator (pulsing head on highest scorer).
     Uses extensible record types to accept any record with required fields.
 -}
-viewWithHostIndicator : { a | snakes : List Snake, apples : List Apple, gridWidth : Int, gridHeight : Int } -> Maybe String -> Maybe String -> Html msg
-viewWithHostIndicator gameState maybePlayerId maybeHostId =
+viewWithLeader : { a | snakes : List Snake, apples : List Apple, gridWidth : Int, gridHeight : Int } -> Maybe String -> Maybe String -> Html msg
+viewWithLeader gameState maybePlayerId maybeLeaderId =
     let
         width =
             gameState.gridWidth * cellSize
@@ -50,7 +49,7 @@ viewWithHostIndicator gameState maybePlayerId maybeHostId =
         ]
         [ background width height
         , renderApples gameState.apples
-        , renderSnakes gameState.snakes maybePlayerId maybeHostId
+        , renderSnakes gameState.snakes maybePlayerId maybeLeaderId
         ]
 
 
@@ -101,25 +100,28 @@ renderApple apple =
 
 
 renderSnakes : List Snake -> Maybe String -> Maybe String -> Svg msg
-renderSnakes snakes maybePlayerId maybeHostId =
+renderSnakes snakes maybePlayerId maybeLeaderId =
     Svg.Keyed.node "g"
         [ svgClass "snakes" ]
-        (List.map (keyedSnake maybePlayerId maybeHostId) snakes)
+        (List.map (keyedSnake maybePlayerId maybeLeaderId) snakes)
 
 
 keyedSnake : Maybe String -> Maybe String -> Snake -> ( String, Svg msg )
-keyedSnake maybePlayerId maybeHostId snake =
-    ( snake.id, renderSnake snake maybePlayerId maybeHostId )
+keyedSnake maybePlayerId maybeLeaderId snake =
+    ( snake.id, renderSnake snake maybePlayerId maybeLeaderId )
 
 
 renderSnake : Snake -> Maybe String -> Maybe String -> Svg msg
-renderSnake snake maybePlayerId maybeHostId =
+renderSnake snake maybePlayerId maybeLeaderId =
     let
         isYou =
             Just snake.id == maybePlayerId
 
-        isHost =
-            Just snake.id == maybeHostId
+        isLeader =
+            Just snake.id == maybeLeaderId
+
+        isOrphaned =
+            snake.state == "orphaned"
 
         classes =
             [ "snake"
@@ -133,7 +135,7 @@ renderSnake snake maybePlayerId maybeHostId =
 
               else
                 ""
-            , if snake.state == "orphaned" then
+            , if isOrphaned then
                 "orphaned"
 
               else
@@ -150,24 +152,32 @@ renderSnake snake maybePlayerId maybeHostId =
         -- Set CSS color property to snake color for currentColor in drop-shadow filters
         colorStyle =
             SA.style ("color: #" ++ snake.color)
+
+        -- Apply SVG opacity directly for orphaned snakes (CSS opacity doesn't work well on SVG groups)
+        opacityAttr =
+            if isOrphaned then
+                SA.opacity "0.5"
+
+            else
+                SA.opacity "1"
     in
-    g [ svgClass classes, colorStyle ]
-        (renderSnakeBody snake isHost)
+    g [ svgClass classes, colorStyle, opacityAttr ]
+        (renderSnakeBody snake isLeader)
 
 
 renderSnakeBody : Snake -> Bool -> List (Svg msg)
-renderSnakeBody snake isHost =
+renderSnakeBody snake isLeader =
     case snake.body of
         [] ->
             []
 
         headPos :: tailPositions ->
-            renderSnakeHead snake headPos isHost
+            renderSnakeHead snake headPos isLeader
                 :: List.indexedMap (renderBodySegment snake) tailPositions
 
 
 renderSnakeHead : Snake -> Position -> Bool -> Svg msg
-renderSnakeHead snake pos isHost =
+renderSnakeHead snake pos isLeader =
     let
         cx_ =
             pos.x * cellSize + cellSize // 2
@@ -212,10 +222,10 @@ renderSnakeHead snake pos isHost =
                 Snake.Right ->
                     ( cx_ + eyeOffset, cy_ + eyeOffset )
 
-        -- Add host-head class if this is the host for pulsing animation
+        -- Add leader-head class if this is the leader for pulsing animation
         headClass =
-            if isHost then
-                "snake-head host-head"
+            if isLeader then
+                "snake-head leader-head"
 
             else
                 "snake-head"

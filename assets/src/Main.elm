@@ -1454,7 +1454,7 @@ viewGame model =
                     HostGame.toGameState hostState
             in
             div [ class "game-layout" ]
-                [ wrapWithShake (Board.viewWithHostIndicator gameState model.myPeerId (Just gameState.hostId))
+                [ wrapWithShake (Board.viewWithLeader gameState model.myPeerId gameState.leaderId)
                 , Scoreboard.view gameState.snakes model.myPeerId
                 ]
 
@@ -1467,7 +1467,7 @@ viewGame model =
                             ClientGame.toGameState clientState
                     in
                     div [ class "game-layout" ]
-                        [ wrapWithShake (Board.viewWithHostIndicator gameState model.myPeerId gameState.hostId)
+                        [ wrapWithShake (Board.viewWithLeader gameState model.myPeerId gameState.leaderId)
                         , Scoreboard.view gameState.snakes model.myPeerId
                         ]
 

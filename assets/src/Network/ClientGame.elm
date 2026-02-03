@@ -191,7 +191,7 @@ getMySnake clientState =
 Marks our snake appropriately and applies optimistic input.
 Uses hardcoded grid dimensions from Engine.Grid.defaultDimensions.
 -}
-toGameState : ClientGameState -> { snakes : List Snake, apples : List { position : Position }, gridWidth : Int, gridHeight : Int, hostId : Maybe String }
+toGameState : ClientGameState -> { snakes : List Snake, apples : List { position : Position }, gridWidth : Int, gridHeight : Int, hostId : Maybe String, scores : Dict String Int, leaderId : Maybe String }
 toGameState clientState =
     let
         -- Convert SnakeState to Snake, applying optimistic direction for our snake
@@ -241,4 +241,24 @@ toGameState clientState =
     , gridWidth = grid.width
     , gridHeight = grid.height
     , hostId = clientState.currentHostId
+    , scores = clientState.scores
+    , leaderId = findLeader clientState.scores
     }
+
+
+{-| Find the leader (player with highest score). Ties broken by lexicographic ID.
+-}
+findLeader : Dict String Int -> Maybe String
+findLeader scores =
+    Dict.toList scores
+        |> List.sortWith
+            (\( id1, score1 ) ( id2, score2 ) ->
+                case compare score2 score1 of
+                    EQ ->
+                        compare id1 id2  -- Tiebreaker: lower ID wins
+
+                    other ->
+                        other
+            )
+        |> List.head
+        |> Maybe.map Tuple.first

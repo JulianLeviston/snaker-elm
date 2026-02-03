@@ -607,7 +607,7 @@ statusToProtocol status =
 
 {-| Convert HostGameState to GameState for rendering with existing Board.view.
 -}
-toGameState : HostGameState -> { snakes : List Snake, apples : List { position : Position }, gridWidth : Int, gridHeight : Int, hostId : String }
+toGameState : HostGameState -> { snakes : List Snake, apples : List { position : Position }, gridWidth : Int, gridHeight : Int, hostId : String, scores : Dict String Int, leaderId : Maybe String }
 toGameState state =
     { snakes =
         Dict.values state.snakes
@@ -636,7 +636,27 @@ toGameState state =
     , gridWidth = state.grid.width
     , gridHeight = state.grid.height
     , hostId = state.hostId
+    , scores = state.scores
+    , leaderId = findLeader state.scores
     }
+
+
+{-| Find the leader (player with highest score). Ties broken by lexicographic ID.
+-}
+findLeader : Dict String Int -> Maybe String
+findLeader scores =
+    Dict.toList scores
+        |> List.sortWith
+            (\( id1, score1 ) ( id2, score2 ) ->
+                case compare score2 score1 of
+                    EQ ->
+                        compare id1 id2  -- Tiebreaker: lower ID wins
+
+                    other ->
+                        other
+            )
+        |> List.head
+        |> Maybe.map Tuple.first
 
 
 {-| Get all occupied positions (all snakes + apples).

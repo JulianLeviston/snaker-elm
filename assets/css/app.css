@@ -141,10 +141,10 @@
 }
 
 /* ==========================================================================
-   Host Indicator (Pulsing Head Animation)
+   Leader Indicator (Pulsing Head Animation for highest scorer)
    ========================================================================== */
 
-@keyframes pulse-host {
+@keyframes pulse-leader {
     0%, 100% {
         transform: scale(1);
         filter: brightness(1);
@@ -155,8 +155,8 @@
     }
 }
 
-.snake-head.host-head {
-    animation: pulse-host 0.8s ease-in-out infinite;
+.snake-head.leader-head {
+    animation: pulse-leader 0.8s ease-in-out infinite;
     transform-origin: center;
     transform-box: fill-box;
 }
@@ -441,6 +441,7 @@
     display: flex;
     flex-direction: column;
     align-items: center;
+    width: 100%;
 }
 
 .share-buttons {
@@ -448,6 +449,12 @@
     justify-content: center;
     gap: 0.5rem;
     margin-bottom: 1rem;
+    order: 1;  /* Buttons first */
+}
+
+.share-ui .qr-code-container {
+    order: 2;  /* QR code second */
+    margin-top: 0.5rem;
 }
 
 .share-copy-button {
