@@ -1327,32 +1327,16 @@ viewGameScreen model =
         , -- Only show P2P connection UI in P2P mode
           case model.selectedMode of
             Just P2PSelected ->
-                div []
-                    [ ConnectionUI.view
-                        { p2pState = model.p2pState
-                        , roomCodeInput = model.roomCodeInput
-                        , showCopiedFeedback = model.showCopiedFeedback
-                        , onCreateRoom = CreateRoom
-                        , onJoinRoom = JoinRoom
-                        , onLeaveRoom = LeaveRoom
-                        , onRoomCodeInput = RoomCodeInputChanged
-                        , onCopyRoomCode = CopyRoomCode
-                        }
-                    , -- Show ShareUI when connected as host
-                      case model.p2pState of
-                        P2PConnected Host roomCode ->
-                            ShareUI.view
-                                { roomCode = roomCode
-                                , qrCodeDataUrl = model.qrCodeDataUrl
-                                , copyCodeState = model.copyCodeState
-                                , copyUrlState = model.copyUrlState
-                                , onCopyCode = CopyRoomCode
-                                , onCopyUrl = CopyRoomUrl
-                                }
-
-                        _ ->
-                            text ""
-                    ]
+                ConnectionUI.view
+                    { p2pState = model.p2pState
+                    , roomCodeInput = model.roomCodeInput
+                    , showCopiedFeedback = model.showCopiedFeedback
+                    , onCreateRoom = CreateRoom
+                    , onJoinRoom = JoinRoom
+                    , onLeaveRoom = LeaveRoom
+                    , onRoomCodeInput = RoomCodeInputChanged
+                    , onCopyRoomCode = CopyRoomCode
+                    }
 
             Just PhoenixSelected ->
                 div [ class "connection-status" ]
@@ -1368,6 +1352,20 @@ viewGameScreen model =
             Nothing ->
                 text ""
         , viewGame model
+        , -- Show ShareUI BELOW the board when connected as host
+          case ( model.selectedMode, model.p2pState ) of
+            ( Just P2PSelected, P2PConnected Host roomCode ) ->
+                ShareUI.view
+                    { roomCode = roomCode
+                    , qrCodeDataUrl = model.qrCodeDataUrl
+                    , copyCodeState = model.copyCodeState
+                    , copyUrlState = model.copyUrlState
+                    , onCopyCode = CopyRoomCode
+                    , onCopyUrl = CopyRoomUrl
+                    }
+
+            _ ->
+                text ""
         , Notifications.view model.notification
         ]
 
@@ -1486,7 +1484,8 @@ viewGame model =
                                         ]
 
                                 Nothing ->
-                                    div [] [ text "Initializing game..." ]
+                                    -- No game yet - user needs to create or join a room
+                                    text ""
 
                         OnlineMode ->
                             case model.gameState of
