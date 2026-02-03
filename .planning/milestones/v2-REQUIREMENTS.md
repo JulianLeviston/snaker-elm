@@ -1,7 +1,12 @@
-# Requirements: Snaker Elm v2
+# Requirements Archive: v2 P2P WebRTC Mode
 
-**Defined:** 2026-02-03
-**Core Value:** Players can play snake together in real-time without requiring a backend server
+**Archived:** 2026-02-03
+**Status:** SHIPPED
+
+This is the archived requirements specification for v2.
+For current requirements, see `.planning/REQUIREMENTS.md` (created for next milestone).
+
+---
 
 ## v2 Requirements
 
@@ -72,7 +77,7 @@ Explicitly excluded from this milestone.
 
 ## Traceability
 
-Which phases cover which requirements. Updated during roadmap creation.
+Which phases cover which requirements.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
@@ -107,5 +112,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 - Unmapped: 0
 
 ---
-*Requirements defined: 2026-02-03*
-*Last updated: 2026-02-03 (Phase 7 complete, all v2 requirements met)*
+
+## Milestone Summary
+
+**Shipped:** 24 of 24 v2 requirements
+**Adjusted:** None - all requirements implemented as specified
+**Dropped:** None
+
+---
+*Archived: 2026-02-03 as part of v2 milestone completion*

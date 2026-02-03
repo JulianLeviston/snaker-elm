@@ -2,23 +2,29 @@
 
 ## What This Is
 
-A multiplayer snake game built with Elm 0.19.1 frontend and Phoenix 1.7/Elixir 1.15 backend. Players connect via WebSocket, each controlling a snake on a shared grid, collecting apples to grow. Server-authoritative architecture ensures all players see synchronized game state in real-time.
+A multiplayer snake game built with Elm 0.19.1 supporting two play modes: server-authoritative Phoenix mode via WebSocket, and serverless P2P mode via WebRTC. Players control snakes on a shared grid, collecting apples to grow. Both modes ensure synchronized game state in real-time.
 
 ## Core Value
 
-Players can play snake together in real-time and see each other's snakes in the correct positions.
+Players can play snake together in real-time without requiring a backend server.
 
-## Current Milestone: v2 P2P WebRTC Mode
+## Current State (v2 shipped 2026-02-03)
 
-**Goal:** Enable serverless multiplayer via WebRTC, playable from pure static hosting.
+**Dual-mode multiplayer:**
+- **P2P mode**: Serverless WebRTC via PeerJS, host-authoritative with automatic migration
+- **Phoenix mode**: Server-authoritative via WebSocket (preserved from v1)
 
-**Target features:**
-- P2P multiplayer using WebRTC DataChannels (no server for gameplay)
-- Game logic (tick loop, collision, apples) ported from Elixir to Elm
-- PeerJS cloud for signaling (free, client-side only)
-- Room joining via codes, shareable links, and QR codes
-- Deterministic host election with automatic migration on disconnect
-- Dual-mode: existing Phoenix mode preserved alongside new P2P mode
+**Tech stack:**
+- Frontend: Elm 0.19.1 with Browser.element, ports-based communication, SVG rendering
+- Backend: Phoenix 1.7.21, Elixir 1.15.8 (optional for P2P mode)
+- Build: esbuild with TypeScript and esbuild-plugin-elm
+- Codebase: ~22,000 lines Elm + ~700 lines TypeScript
+
+**P2P features:**
+- 4-letter room codes, QR code sharing, URL links
+- Deterministic host election (lowest peer ID)
+- Automatic host migration on disconnect
+- 30-tick grace period for reconnection
 
 ## Requirements
 
@@ -37,15 +43,17 @@ Players can play snake together in real-time and see each other's snakes in the 
 - ✓ Phoenix upgraded from 1.3 to 1.7.x — v1
 - ✓ Elixir upgraded from 1.4 to 1.15+ — v1
 - ✓ mise manages Elixir/Erlang/Node versions — v1
-- ✓ Multiplayer state sync fixed — players see correct snake positions on join — v1
+- ✓ Multiplayer state sync fixed — v1
+- ✓ P2P WebRTC multiplayer mode — v2
+- ✓ Game engine ported from Elixir to Elm — v2
+- ✓ PeerJS signaling integration — v2
+- ✓ Room joining via codes, links, and QR — v2
+- ✓ Deterministic host election with migration — v2
+- ✓ Mode selection (P2P/Phoenix) with persistence — v2
 
 ### Active
 
-- [ ] P2P WebRTC multiplayer mode (v2)
-- [ ] Port GameServer logic from Elixir to Elm (v2)
-- [ ] PeerJS signaling integration (v2)
-- [ ] Room joining via codes, links, and QR (v2)
-- [ ] Deterministic host election with migration (v2)
+(None — ready for v3 planning)
 
 ### Deferred
 
@@ -54,29 +62,12 @@ Players can play snake together in real-time and see each other's snakes in the 
 
 ### Out of Scope
 
-- Collision detection between snakes — not in current scope, keep game simple
+- Collision detection between snakes — keep game simple
 - Persistent game state/rooms — not requested
-- Authentication/user accounts — not requested, anonymous play works
+- Authentication/user accounts — anonymous play works
 - Mobile/touch controls — web keyboard controls sufficient
 - Sound effects — not requested
-
-## Context
-
-**Current State (v1 shipped 2026-02-02):**
-- Frontend: Elm 0.19.1 with Browser.element, ports-based WebSocket, SVG rendering
-- Backend: Phoenix 1.7.21, Elixir 1.15.8, GameServer GenServer with 100ms tick loop
-- Build: esbuild with TypeScript and esbuild-plugin-elm
-- Codebase: ~12,000 lines across Elm, Elixir, TypeScript
-
-**Architecture:**
-- Server-authoritative: GameServer maintains all game state (snakes, apples, collisions)
-- Tick-based updates: 100ms intervals, server broadcasts state to all clients
-- Full state on join: New players receive complete game state immediately
-- Input buffering: Server rate-limits direction changes to first per tick
-
-**Known technical debt:**
-- `use Mix.Config` deprecated (should migrate to `import Config`)
-- `Endpoint.init/2` deprecated (should migrate to `config/runtime.exs`)
+- TURN server self-hosting — PeerJS defaults work
 
 ## Constraints
 
@@ -88,13 +79,26 @@ Players can play snake together in real-time and see each other's snakes in the 
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Server-authoritative architecture | Root cause of sync bug was client-side simulation | ✓ Good - sync issue resolved |
+| Server-authoritative (v1) | Root cause of sync bug was client-side simulation | ✓ Good - sync issue resolved |
 | Ports-based WebSocket | elm-phoenix-socket incompatible with Elm 0.19 | ✓ Good - clean integration |
 | esbuild over Brunch | Brunch deprecated in Phoenix 1.7 | ✓ Good - fast builds |
 | 100ms tick interval | Balance smooth gameplay with server load | ✓ Good - responsive multiplayer |
 | Full state on join, delta on tick | Simplify initial sync | ✓ Good - reliable sync |
 | CSS for visual effects | GPU compositing, separate concerns | ✓ Good - smooth animations |
 | Html.Keyed for snake lists | Optimize frequent list updates | ✓ Good - better performance |
+| Host-authoritative P2P (v2) | Mirrors Phoenix architecture, simpler than mesh | ✓ Good - consistent model |
+| PeerJS for signaling (v2) | Free cloud service, defer self-hosting | ✓ Good - zero infra cost |
+| 4-letter room codes (v2) | Human-friendly, sufficient entropy | ✓ Good - easy sharing |
+| Deterministic host election (v2) | Lowest peer ID wins, reproducible | ✓ Good - seamless migration |
+| localStorage mode persistence (v2) | Remember user preference | ✓ Good - better UX |
+
+## Context
+
+**Known technical debt:**
+- `use Mix.Config` deprecated (should migrate to `import Config`)
+- `Endpoint.init/2` deprecated (should migrate to `config/runtime.exs`)
+- Minor UI polish noted (functional but could be improved)
+- Hardcoded 30x40 grid dimensions
 
 ---
-*Last updated: 2026-02-03 after v2 milestone started*
+*Last updated: 2026-02-03 after v2 milestone shipped*
