@@ -120,7 +120,7 @@
     filter: drop-shadow(0 0 4px currentColor);
 }
 
-/* Disconnected player snake (ghosted) */
+/* Disconnected player snake (ghosted) - legacy class */
 .snake.disconnected {
     opacity: 0.4;
 }
@@ -128,6 +128,27 @@
 .snake.disconnected .snake-head,
 .snake.disconnected .snake-segment {
     filter: grayscale(50%);
+}
+
+/* Orphaned player snake (50% opacity, continues until death) */
+.snake.orphaned {
+    opacity: 0.5;
+}
+
+.snake.orphaned .snake-head,
+.snake.orphaned .snake-segment {
+    filter: grayscale(30%);
+}
+
+/* ==========================================================================
+   Host Indicator (Crown)
+   ========================================================================== */
+
+.host-indicator {
+    fill: #FFD700;
+    stroke: #000000;
+    stroke-width: 0.5;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
 }
 
 /* ==========================================================================
