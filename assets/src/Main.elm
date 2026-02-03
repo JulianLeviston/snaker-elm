@@ -578,46 +578,49 @@ update msg model =
                         snakesNeedingRespawn =
                             Dict.filter (\_ data -> data.needsRespawn) newState.snakes
                                 |> Dict.keys
+
+                        -- Check if we need to spawn apples
+                        effectiveAppleCount =
+                            List.length newState.apples + model.pendingAppleSpawns
+
+                        applesNeeded =
+                            max 0 (Apple.minApples - effectiveAppleCount + List.length tickResult.expiredApples)
+
+                        ( newPendingCount, spawnCmd ) =
+                            if applesNeeded > 0 then
+                                ( model.pendingAppleSpawns + applesNeeded
+                                , spawnHostAppleCommands applesNeeded (HostGame.getOccupiedPositions newState) newState.grid
+                                )
+
+                            else
+                                ( model.pendingAppleSpawns, Cmd.none )
+
+                        -- ALWAYS broadcast state to all connected peers (even during respawn ticks)
+                        stateJson =
+                            Protocol.encodeStateSync tickResult.stateSync |> JE.encode 0
+
+                        broadcastCmd =
+                            Ports.broadcastGameState stateJson
                     in
                     case List.head snakesNeedingRespawn of
                         Just playerId ->
                             -- Need random respawn position for this snake
                             -- Trigger collision shake animation
+                            -- Still broadcast so clients see the death immediately
                             ( { model
                                 | hostGame = Just newState
                                 , showingCollision = True
+                                , pendingAppleSpawns = newPendingCount
                               }
                             , Cmd.batch
-                                [ Random.generate (NewHostSpawnPosition playerId) (randomPosition newState.grid)
+                                [ broadcastCmd
+                                , Random.generate (NewHostSpawnPosition playerId) (randomPosition newState.grid)
                                 , Process.sleep 300 |> Task.perform (\_ -> ClearCollisionShake)
+                                , spawnCmd
                                 ]
                             )
 
                         Nothing ->
-                            -- Check if we need to spawn apples
-                            let
-                                effectiveAppleCount =
-                                    List.length newState.apples + model.pendingAppleSpawns
-
-                                applesNeeded =
-                                    max 0 (Apple.minApples - effectiveAppleCount + List.length tickResult.expiredApples)
-
-                                ( newPendingCount, spawnCmd ) =
-                                    if applesNeeded > 0 then
-                                        ( model.pendingAppleSpawns + applesNeeded
-                                        , spawnHostAppleCommands applesNeeded (HostGame.getOccupiedPositions newState) newState.grid
-                                        )
-
-                                    else
-                                        ( model.pendingAppleSpawns, Cmd.none )
-
-                                -- Broadcast state to all connected peers
-                                stateJson =
-                                    Protocol.encodeStateSync tickResult.stateSync |> JE.encode 0
-
-                                broadcastCmd =
-                                    Ports.broadcastGameState stateJson
-                            in
                             ( { model
                                 | hostGame = Just newState
                                 , pendingAppleSpawns = newPendingCount
@@ -634,8 +637,18 @@ update msg model =
                     let
                         newState =
                             HostGame.respawnSnake playerId pos hostState
+
+                        -- Broadcast immediately after respawn so clients see the new state
+                        stateSync =
+                            HostGame.toStateSyncPayload False newState
+
+                        stateJson =
+                            Protocol.encodeStateSync stateSync |> JE.encode 0
+
+                        broadcastCmd =
+                            Ports.broadcastGameState stateJson
                     in
-                    ( { model | hostGame = Just newState }, Cmd.none )
+                    ( { model | hostGame = Just newState }, broadcastCmd )
 
                 Nothing ->
                     ( model, Cmd.none )
@@ -705,8 +718,18 @@ update msg model =
                     let
                         newState =
                             HostGame.addPlayer peerId ("Player " ++ String.left 4 peerId) pos hostState
+
+                        -- Broadcast immediately so new player and all clients see the state
+                        stateSync =
+                            HostGame.toStateSyncPayload True newState -- Full sync for new player
+
+                        stateJson =
+                            Protocol.encodeStateSync stateSync |> JE.encode 0
+
+                        broadcastCmd =
+                            Ports.broadcastGameState stateJson
                     in
-                    ( { model | hostGame = Just newState }, Cmd.none )
+                    ( { model | hostGame = Just newState }, broadcastCmd )
 
                 Nothing ->
                     ( model, Cmd.none )

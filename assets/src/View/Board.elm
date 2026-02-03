@@ -132,8 +132,12 @@ renderSnake snake maybePlayerId =
             ]
                 |> List.filter (not << String.isEmpty)
                 |> String.join " "
+
+        -- Set CSS color property to snake color for currentColor in drop-shadow filters
+        colorStyle =
+            SA.style ("color: #" ++ snake.color)
     in
-    g [ svgClass classes ]
+    g [ svgClass classes, colorStyle ]
         (renderSnakeBody snake)
 
 
