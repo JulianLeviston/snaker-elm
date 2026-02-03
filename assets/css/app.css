@@ -399,3 +399,65 @@
     94% { transform: translateX(0); opacity: 1; }
     100% { transform: translateX(400px); opacity: 0; }
 }
+
+/* ==========================================================================
+   Share UI
+   ========================================================================== */
+
+.share-ui {
+    margin-top: 1rem;
+    text-align: center;
+}
+
+.share-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.share-copy-button {
+    padding: 8px 16px;
+    font-size: 14px;
+    background: #e0e0e0;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+    margin-left: 0; /* Override base copy-button margin */
+}
+
+.share-copy-button:hover {
+    background: #d0d0d0;
+}
+
+.share-copy-button.copied {
+    color: #22c55e;
+    background: #e8f5e9;
+    cursor: default;
+}
+
+.qr-code-container {
+    display: flex;
+    justify-content: center;
+    margin-top: 1rem;
+}
+
+.qr-code {
+    width: 256px;
+    height: 256px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+.qr-code-loading {
+    width: 256px;
+    height: 256px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px dashed #ccc;
+    border-radius: 4px;
+    color: #666;
+    font-size: 14px;
+}
