@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-02-03)
 
 ## Current Position
 
-Phase: 6 of 7 (Host/Client Integration) - COMPLETE
-Plan: 2 of 2 in phase (all plans complete)
-Status: Phase 6 complete, ready for Phase 7
-Last activity: 2026-02-03 - Completed 06-02-PLAN.md
+Phase: 7 of 7 (Migration & Polish)
+Plan: 1 of 2 in phase
+Status: In progress
+Last activity: 2026-02-03 - Completed 07-01-PLAN.md
 
-Progress: [======█░░░] 75% (6/8 plans)
+Progress: [=======█░░] 87.5% (7/8 plans)
 
 ## Performance Metrics
 
@@ -30,11 +30,11 @@ Progress: [======█░░░] 75% (6/8 plans)
 | 4. Game Engine Port | 2/2 | 5.5 min | 2.75 min |
 | 5. P2P Connection Layer | 2/2 | 16 min | 8 min |
 | 6. Host/Client Integration | 2/2 | 26 min | 13 min |
-| 7. Migration & Polish | 0/2 | - | - |
+| 7. Migration & Polish | 1/2 | 3 min | 3 min |
 
 **Recent Trend:**
-- Last 5 plans: 05-01 (4 min), 05-02 (12 min), 06-01 (6 min), 06-02 (~20 min)
-- Trend: Phase 6 plans longer due to checkpoint verification iterations
+- Last 5 plans: 05-02 (12 min), 06-01 (6 min), 06-02 (~20 min), 07-01 (3 min)
+- Trend: 07-01 fast due to no checkpoint verification needed
 
 *Updated after each plan completion*
 
@@ -62,6 +62,9 @@ Recent decisions affecting current work:
 - [06-01]: Host's peerId equals room code for simplified identification
 - [06-02]: Hardcoded 20x20 grid dimensions (simplifies protocol)
 - [06-02]: CSS-based collision animations (shake + teeth-scatter)
+- [07-01]: Mode selection on first visit, P2P primary, Phoenix secondary
+- [07-01]: localStorage key 'snaker-mode' stores mode preference
+- [07-01]: Screen-based routing (ModeSelectionScreen, GameScreen, SettingsScreen)
 
 ### Pending Todos
 
@@ -75,9 +78,9 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-03
-Stopped at: Completed 06-02-PLAN.md (Phase 6 complete)
+Stopped at: Completed 07-01-PLAN.md
 Resume file: None
 
 ---
 *State initialized: 2026-02-03*
-*Last updated: 2026-02-03 (06-02 complete, Phase 6 complete)*
+*Last updated: 2026-02-03 (07-01 complete)*
