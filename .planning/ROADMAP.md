@@ -62,11 +62,11 @@ Plans:
   3. Non-host players send inputs and see their actions reflected
   4. New player joining mid-game receives full state and can play immediately
   5. Player leaving is removed from all peers' game state
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 06-01: TBD
-- [ ] 06-02: TBD
+- [ ] 06-01-PLAN.md - Message protocol and host game loop with state broadcasting
+- [ ] 06-02-PLAN.md - Client state rendering, input forwarding, join/leave, visual polish
 
 ### Phase 7: Migration & Polish
 **Goal**: Robust room sharing and graceful host disconnect handling
@@ -92,9 +92,9 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 4. Game Engine Port | v2 | 2/2 | Complete | 2026-02-03 |
 | 5. P2P Connection Layer | v2 | 2/2 | Complete | 2026-02-03 |
-| 6. Host/Client Integration | v2 | 0/2 | Not started | - |
+| 6. Host/Client Integration | v2 | 0/2 | Ready | - |
 | 7. Migration & Polish | v2 | 0/2 | Not started | - |
 
 ---
 *Roadmap created: 2026-02-03*
-*Last updated: 2026-02-03 (Phase 5 complete)*
+*Last updated: 2026-02-03 (Phase 6 planned)*
