@@ -21,6 +21,8 @@ port module Ports exposing
     , clipboardCopySuccess
     , receiveGameStateP2P
     , receiveInputP2P
+      -- Host migration
+    , hostMigration
       -- Mode persistence
     , saveMode
       -- QR code generation
@@ -111,6 +113,13 @@ port receiveGameStateP2P : (String -> msg) -> Sub msg
 
 
 port receiveInputP2P : (String -> msg) -> Sub msg
+
+
+
+-- Host Migration port
+
+
+port hostMigration : (JD.Value -> msg) -> Sub msg
 
 
 
