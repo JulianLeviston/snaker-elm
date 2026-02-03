@@ -23,6 +23,9 @@ port module Ports exposing
     , receiveInputP2P
       -- Mode persistence
     , saveMode
+      -- QR code generation
+    , generateQRCode
+    , qrCodeGenerated
     )
 
 import Json.Decode as JD
@@ -108,3 +111,13 @@ port receiveGameStateP2P : (String -> msg) -> Sub msg
 
 
 port receiveInputP2P : (String -> msg) -> Sub msg
+
+
+
+-- QR Code Generation ports
+
+
+port generateQRCode : String -> Cmd msg
+
+
+port qrCodeGenerated : (JD.Value -> msg) -> Sub msg

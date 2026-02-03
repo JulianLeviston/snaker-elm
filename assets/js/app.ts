@@ -3,6 +3,7 @@
 import { Elm } from "../src/Main.elm";
 import { connectSocket } from "./socket";
 import { setupPeerPorts } from "./peerjs-ports";
+import { setupQRPorts } from "./qr-generator";
 
 interface ElmApp {
   ports: {
@@ -33,6 +34,9 @@ interface ElmApp {
     receiveInputP2P: { send: (data: string) => void };
     // Mode persistence port
     saveMode: { subscribe: (callback: (mode: string) => void) => void };
+    // QR code generation ports
+    generateQRCode: { subscribe: (callback: (url: string) => void) => void };
+    qrCodeGenerated: { send: (result: { success: boolean; dataUrl?: string; error?: string }) => void };
   };
 }
 
@@ -68,6 +72,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Setup PeerJS port handlers for P2P connections
   setupPeerPorts(app);
+
+  // Setup QR code generation ports
+  setupQRPorts(app as any);
 
   // Subscribe to mode persistence port
   app.ports.saveMode.subscribe((mode: string) => {
