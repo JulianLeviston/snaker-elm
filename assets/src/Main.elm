@@ -26,12 +26,14 @@ import View.ConnectionUI as ConnectionUI exposing (P2PConnectionState(..), P2PRo
 import View.ModeSelection as ModeSelection
 import View.Notifications as Notifications
 import View.Scoreboard as Scoreboard
+import View.ShareUI as ShareUI
 
 
 {-| Flags passed from JavaScript on init.
 -}
 type alias Flags =
     { savedMode : Maybe String
+    , baseUrl : String
     }
 
 
@@ -71,6 +73,11 @@ type alias Model =
     -- Screen routing
     , screen : Screen
     , selectedMode : Maybe SelectedMode
+    -- Share UI state
+    , baseUrl : String
+    , qrCodeDataUrl : Maybe String
+    , copyCodeState : ShareUI.CopyState
+    , copyUrlState : ShareUI.CopyState
     }
 
 
@@ -109,8 +116,11 @@ type Msg
     | GotPeerDisconnected String
     | GotConnectionError String
     | CopyRoomCode
-    | GotClipboardCopySuccess
-    | HideCopiedFeedback
+    | CopyRoomUrl
+    | GotClipboardCopySuccess ShareUI.CopyTarget
+    | HideCopiedCodeFeedback
+    | HideCopiedUrlFeedback
+    | GotQRCodeGenerated JD.Value
       -- Host game messages
     | InitHostGame HostGameState
     | HostTick Time.Posix
@@ -134,21 +144,21 @@ init flags =
     case flags.savedMode |> Maybe.andThen ModeSelection.modeFromString of
         Just ModeSelection.P2PMode ->
             -- Skip to P2P mode (show P2P connection UI)
-            initWithMode P2PSelected
+            initWithMode flags.baseUrl P2PSelected
 
         Just ModeSelection.PhoenixMode ->
             -- Skip to Phoenix mode (show Phoenix UI)
-            initWithMode PhoenixSelected
+            initWithMode flags.baseUrl PhoenixSelected
 
         Nothing ->
             -- First visit: show mode selection
-            initModeSelection
+            initModeSelection flags.baseUrl
 
 
 {-| Initialize with mode selection screen (first visit).
 -}
-initModeSelection : ( Model, Cmd Msg )
-initModeSelection =
+initModeSelection : String -> ( Model, Cmd Msg )
+initModeSelection baseUrl =
     ( { gameState = Nothing
       , localGame = Nothing
       , hostGame = Nothing
@@ -167,6 +177,10 @@ initModeSelection =
       , showingCollision = False
       , screen = ModeSelectionScreen
       , selectedMode = Nothing
+      , baseUrl = baseUrl
+      , qrCodeDataUrl = Nothing
+      , copyCodeState = ShareUI.Ready
+      , copyUrlState = ShareUI.Ready
       }
     , Cmd.none
     )
@@ -174,8 +188,8 @@ initModeSelection =
 
 {-| Initialize with a specific mode already selected (returning visitor).
 -}
-initWithMode : SelectedMode -> ( Model, Cmd Msg )
-initWithMode mode =
+initWithMode : String -> SelectedMode -> ( Model, Cmd Msg )
+initWithMode baseUrl mode =
     case mode of
         P2PSelected ->
             -- P2P mode: show connection UI, no local game running yet
@@ -197,6 +211,10 @@ initWithMode mode =
               , showingCollision = False
               , screen = GameScreen
               , selectedMode = Just P2PSelected
+              , baseUrl = baseUrl
+              , qrCodeDataUrl = Nothing
+              , copyCodeState = ShareUI.Ready
+              , copyUrlState = ShareUI.Ready
               }
             , Cmd.none
             )
@@ -221,6 +239,10 @@ initWithMode mode =
               , showingCollision = False
               , screen = GameScreen
               , selectedMode = Just PhoenixSelected
+              , baseUrl = baseUrl
+              , qrCodeDataUrl = Nothing
+              , copyCodeState = ShareUI.Ready
+              , copyUrlState = ShareUI.Ready
               }
             , Ports.joinGame (JE.object [])
             )
@@ -540,12 +562,23 @@ update msg model =
 
         GotRoomCreated roomCode ->
             -- Host: Initialize host game with roomCode as our peerId
+            -- Also generate QR code for the room URL
+            let
+                roomUrl =
+                    model.baseUrl ++ "?room=" ++ roomCode
+            in
             ( { model
                 | p2pState = P2PConnected Host roomCode
                 , myPeerId = Just roomCode
                 , localGame = Nothing  -- Clear local game
+                , qrCodeDataUrl = Nothing  -- Reset QR code (will be generated)
+                , copyCodeState = ShareUI.Ready
+                , copyUrlState = ShareUI.Ready
               }
-            , Random.generate InitHostGame (HostGame.init roomCode)
+            , Cmd.batch
+                [ Random.generate InitHostGame (HostGame.init roomCode)
+                , Ports.generateQRCode roomUrl
+                ]
             )
 
         GotPeerConnected value ->
@@ -638,19 +671,56 @@ update msg model =
         CopyRoomCode ->
             case model.p2pState of
                 P2PConnected _ roomCode ->
-                    ( model, Ports.copyToClipboard roomCode )
+                    ( { model | copyCodeState = ShareUI.Copied }
+                    , Cmd.batch
+                        [ Ports.copyToClipboard roomCode
+                        , Process.sleep 2000 |> Task.perform (\_ -> HideCopiedCodeFeedback)
+                        ]
+                    )
 
                 _ ->
                     ( model, Cmd.none )
 
-        GotClipboardCopySuccess ->
-            ( { model | showCopiedFeedback = True }
-            , Process.sleep 2000
-                |> Task.perform (\_ -> HideCopiedFeedback)
-            )
+        CopyRoomUrl ->
+            case model.p2pState of
+                P2PConnected _ roomCode ->
+                    let
+                        roomUrl =
+                            model.baseUrl ++ "?room=" ++ roomCode
+                    in
+                    ( { model | copyUrlState = ShareUI.Copied }
+                    , Cmd.batch
+                        [ Ports.copyToClipboard roomUrl
+                        , Process.sleep 2000 |> Task.perform (\_ -> HideCopiedUrlFeedback)
+                        ]
+                    )
 
-        HideCopiedFeedback ->
-            ( { model | showCopiedFeedback = False }, Cmd.none )
+                _ ->
+                    ( model, Cmd.none )
+
+        GotClipboardCopySuccess _ ->
+            -- Feedback is now handled by the individual copy handlers
+            ( model, Cmd.none )
+
+        HideCopiedCodeFeedback ->
+            ( { model | copyCodeState = ShareUI.Ready, showCopiedFeedback = False }, Cmd.none )
+
+        HideCopiedUrlFeedback ->
+            ( { model | copyUrlState = ShareUI.Ready }, Cmd.none )
+
+        GotQRCodeGenerated value ->
+            -- Decode QR code generation result
+            case JD.decodeValue qrCodeResultDecoder value of
+                Ok result ->
+                    if result.success then
+                        ( { model | qrCodeDataUrl = result.dataUrl }, Cmd.none )
+
+                    else
+                        -- QR generation failed, log but don't crash
+                        ( model, Cmd.none )
+
+                Err _ ->
+                    ( model, Cmd.none )
 
         -- Host game message handlers
         InitHostGame hostState ->
@@ -1011,6 +1081,21 @@ tickDecoder =
         (JD.field "apples" (JD.list Game.appleDecoder))
 
 
+{-| Result from QR code generation port.
+-}
+type alias QRCodeResult =
+    { success : Bool
+    , dataUrl : Maybe String
+    }
+
+
+qrCodeResultDecoder : JD.Decoder QRCodeResult
+qrCodeResultDecoder =
+    JD.map2 QRCodeResult
+        (JD.field "success" JD.bool)
+        (JD.maybe (JD.field "dataUrl" JD.string))
+
+
 {-| Decoder for peerConnected events from JavaScript.
     Host receives: { role: "host", peerId: "XXXX" } - peerId is the connecting client
     Client receives: { role: "client", roomCode: "XXXX", myPeerId: "..." } - myPeerId is our own ID
@@ -1132,16 +1217,32 @@ viewGameScreen model =
         , -- Only show P2P connection UI in P2P mode
           case model.selectedMode of
             Just P2PSelected ->
-                ConnectionUI.view
-                    { p2pState = model.p2pState
-                    , roomCodeInput = model.roomCodeInput
-                    , showCopiedFeedback = model.showCopiedFeedback
-                    , onCreateRoom = CreateRoom
-                    , onJoinRoom = JoinRoom
-                    , onLeaveRoom = LeaveRoom
-                    , onRoomCodeInput = RoomCodeInputChanged
-                    , onCopyRoomCode = CopyRoomCode
-                    }
+                div []
+                    [ ConnectionUI.view
+                        { p2pState = model.p2pState
+                        , roomCodeInput = model.roomCodeInput
+                        , showCopiedFeedback = model.showCopiedFeedback
+                        , onCreateRoom = CreateRoom
+                        , onJoinRoom = JoinRoom
+                        , onLeaveRoom = LeaveRoom
+                        , onRoomCodeInput = RoomCodeInputChanged
+                        , onCopyRoomCode = CopyRoomCode
+                        }
+                    , -- Show ShareUI when connected as host
+                      case model.p2pState of
+                        P2PConnected Host roomCode ->
+                            ShareUI.view
+                                { roomCode = roomCode
+                                , qrCodeDataUrl = model.qrCodeDataUrl
+                                , copyCodeState = model.copyCodeState
+                                , copyUrlState = model.copyUrlState
+                                , onCopyCode = CopyRoomCode
+                                , onCopyUrl = CopyRoomUrl
+                                }
+
+                        _ ->
+                            text ""
+                    ]
 
             Just PhoenixSelected ->
                 div [ class "connection-status" ]
@@ -1334,9 +1435,11 @@ subscriptions model =
         , Ports.peerConnected GotPeerConnected
         , Ports.peerDisconnected GotPeerDisconnected
         , Ports.connectionError GotConnectionError
-        , Ports.clipboardCopySuccess (\_ -> GotClipboardCopySuccess)
+        , Ports.clipboardCopySuccess (\_ -> GotClipboardCopySuccess ShareUI.CopyCode)
         , Ports.receiveInputP2P GotInputP2P
         , Ports.receiveGameStateP2P GotGameStateP2P
+          -- QR code generation
+        , Ports.qrCodeGenerated GotQRCodeGenerated
         ]
 
 
@@ -1351,9 +1454,10 @@ main =
 
 
 {-| Decoder for Flags from JavaScript.
-    Handles the nullable savedMode string.
+    Handles the nullable savedMode string and baseUrl.
 -}
 flagsDecoder : JD.Decoder Flags
 flagsDecoder =
-    JD.map Flags
+    JD.map2 Flags
         (JD.field "savedMode" (JD.nullable JD.string))
+        (JD.field "baseUrl" JD.string)

@@ -52,10 +52,13 @@ document.addEventListener("DOMContentLoaded", () => {
   // Read saved mode from localStorage ('p2p' | 'phoenix' | null)
   const savedMode = localStorage.getItem("snaker-mode");
 
+  // Get base URL for room sharing (origin without path)
+  const baseUrl = window.location.origin;
+
   // Initialize Elm application with flags
   const app: ElmApp = Elm.Main.init({
     node: elmNode,
-    flags: { savedMode: savedMode },
+    flags: { savedMode: savedMode, baseUrl: baseUrl },
   });
 
   console.log("Elm app initialized");
