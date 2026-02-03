@@ -527,6 +527,8 @@ toStateSyncPayload isFull state =
     , scores = state.scores
     , tick = state.currentTick
     , isFull = isFull
+    , gridWidth = state.grid.width
+    , gridHeight = state.grid.height
     }
 
 

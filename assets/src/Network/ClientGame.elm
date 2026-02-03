@@ -60,8 +60,8 @@ init myId =
     , myId = myId
     , pendingInput = Nothing
     , lastAppliedInput = Nothing
-    , gridWidth = 40 -- Default dimensions, will be updated from host
-    , gridHeight = 30
+    , gridWidth = 30 -- Default dimensions matching Engine.Grid, will be updated from host
+    , gridHeight = 40
     }
 
 
@@ -69,6 +69,7 @@ init myId =
 
 Replaces snakes/apples/scores with host data.
 Clears pendingInput if it was applied (direction matches).
+Updates grid dimensions from host.
 -}
 applyHostState : StateSyncPayload -> ClientGameState -> ClientGameState
 applyHostState stateSync clientState =
@@ -111,6 +112,8 @@ applyHostState stateSync clientState =
         , scores = stateSync.scores
         , lastHostTick = stateSync.tick
         , pendingInput = newPendingInput
+        , gridWidth = stateSync.gridWidth
+        , gridHeight = stateSync.gridHeight
     }
 
 
