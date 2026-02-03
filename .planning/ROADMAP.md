@@ -78,11 +78,12 @@ Plans:
   3. Player can share room via URL link or QR code
   4. Player can copy room code with one click
   5. Player can choose between Phoenix mode and P2P mode at startup
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 07-01: TBD
-- [ ] 07-02: TBD
+- [ ] 07-01-PLAN.md - Mode selection: startup screen, localStorage persistence, settings override
+- [ ] 07-02-PLAN.md - Room sharing: QR code generation, copy code/URL buttons, visual feedback
+- [ ] 07-03-PLAN.md - Host migration: deterministic election, orphaned snakes, reconnection, host indicator
 
 ## Progress
 
@@ -93,8 +94,8 @@ Plans:
 | 4. Game Engine Port | v2 | 2/2 | Complete | 2026-02-03 |
 | 5. P2P Connection Layer | v2 | 2/2 | Complete | 2026-02-03 |
 | 6. Host/Client Integration | v2 | 2/2 | Complete | 2026-02-03 |
-| 7. Migration & Polish | v2 | 0/2 | Ready | - |
+| 7. Migration & Polish | v2 | 0/3 | Ready | - |
 
 ---
 *Roadmap created: 2026-02-03*
-*Last updated: 2026-02-03 (Phase 6 complete)*
+*Last updated: 2026-02-03 (Phase 7 planned)*
