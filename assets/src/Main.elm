@@ -43,6 +43,7 @@ type Screen
     = ModeSelectionScreen
     | GameScreen
     | SettingsScreen
+    | ConnectionLostScreen
 
 
 {-| Selected game mode (P2P or Phoenix).
@@ -131,6 +132,10 @@ type Msg
     | GotGameStateP2P String
     | NewPlayerSpawn String Position
     | ClearCollisionShake
+      -- Host migration messages
+    | GotHostMigration JD.Value
+    | CreateNewRoom
+    | GoHome
       -- Mode selection messages
     | SelectMode ModeSelection.Mode
     | OpenSettings
@@ -909,6 +914,80 @@ update msg model =
                 Nothing ->
                     ( model, Cmd.none )
 
+        -- Host migration messages
+        GotHostMigration value ->
+            case JD.decodeValue Protocol.decodeHostMigration value of
+                Ok migration ->
+                    case migration of
+                        Protocol.BecomeHost { myPeerId, peers } ->
+                            -- Transition from client to host
+                            case model.clientGame of
+                                Just clientState ->
+                                    let
+                                        hostState =
+                                            HostGame.fromClientState
+                                                myPeerId
+                                                clientState.lastHostTick
+                                                clientState.snakes
+                                                clientState.apples
+                                                clientState.scores
+                                    in
+                                    ( { model
+                                        | hostGame = Just hostState
+                                        , clientGame = Nothing
+                                        , p2pState = P2PConnected Host myPeerId
+                                        , myPeerId = Just myPeerId
+                                        , notification = Just "You are now the host"
+                                      }
+                                    , Process.sleep 3000 |> Task.perform (\_ -> ClearNotification)
+                                    )
+
+                                Nothing ->
+                                    -- No client game state, can't migrate
+                                    ( model, Cmd.none )
+
+                        Protocol.NewHost { newHostId } ->
+                            -- Wait for new host to start broadcasting
+                            -- Connection will be re-established automatically
+                            ( { model
+                                | notification = Just "Reconnecting to new host..."
+                              }
+                            , Process.sleep 3000 |> Task.perform (\_ -> ClearNotification)
+                            )
+
+                        Protocol.ConnectionLost ->
+                            -- Show connection lost screen
+                            ( { model
+                                | screen = ConnectionLostScreen
+                                , clientGame = Nothing
+                                , hostGame = Nothing
+                                , p2pState = P2PNotConnected
+                              }
+                            , Cmd.none
+                            )
+
+                Err _ ->
+                    ( model, Cmd.none )
+
+        CreateNewRoom ->
+            -- From connection lost screen, create a new room
+            ( { model
+                | screen = GameScreen
+                , p2pState = P2PCreatingRoom
+              }
+            , Ports.createRoom ()
+            )
+
+        GoHome ->
+            -- From connection lost screen, go back to mode selection
+            ( { model
+                | screen = ModeSelectionScreen
+                , p2pState = P2PNotConnected
+                , selectedMode = Nothing
+              }
+            , Cmd.none
+            )
+
         -- Mode selection messages
         SelectMode mode ->
             let
@@ -1141,6 +1220,9 @@ view model =
         GameScreen ->
             viewGameScreen model
 
+        ConnectionLostScreen ->
+            viewConnectionLostScreen
+
 
 {-| Mode selection screen (first visit).
 -}
@@ -1200,6 +1282,23 @@ viewSettingsScreen model =
                 ]
             , button [ class "btn-back", onClick CloseSettings ]
                 [ text "Back to Game" ]
+            ]
+        ]
+
+
+{-| Connection lost screen when all peers disconnect.
+-}
+viewConnectionLostScreen : Html Msg
+viewConnectionLostScreen =
+    div [ class "game-container connection-lost-page", style "padding" "20px", style "text-align" "center" ]
+        [ h1 [] [ text "Connection Lost" ]
+        , p [ style "margin" "20px 0", style "color" "#666" ]
+            [ text "Lost connection to all players." ]
+        , div [ class "connection-lost-buttons", style "display" "flex", style "gap" "12px", style "justify-content" "center" ]
+            [ button [ class "btn-create", onClick CreateNewRoom ]
+                [ text "Create New Room" ]
+            , button [ class "btn-cancel", onClick GoHome ]
+                [ text "Go Home" ]
             ]
         ]
 
@@ -1344,7 +1443,7 @@ viewGame model =
                     HostGame.toGameState hostState
             in
             div [ class "game-layout" ]
-                [ wrapWithShake (Board.view gameState model.myPeerId)
+                [ wrapWithShake (Board.viewWithHostIndicator gameState model.myPeerId (Just gameState.hostId))
                 , Scoreboard.view gameState.snakes model.myPeerId
                 ]
 
@@ -1357,7 +1456,7 @@ viewGame model =
                             ClientGame.toGameState clientState
                     in
                     div [ class "game-layout" ]
-                        [ wrapWithShake (Board.view gameState model.myPeerId)
+                        [ wrapWithShake (Board.viewWithHostIndicator gameState model.myPeerId gameState.hostId)
                         , Scoreboard.view gameState.snakes model.myPeerId
                         ]
 
@@ -1438,6 +1537,8 @@ subscriptions model =
         , Ports.clipboardCopySuccess (\_ -> GotClipboardCopySuccess ShareUI.CopyCode)
         , Ports.receiveInputP2P GotInputP2P
         , Ports.receiveGameStateP2P GotGameStateP2P
+          -- Host migration
+        , Ports.hostMigration GotHostMigration
           -- QR code generation
         , Ports.qrCodeGenerated GotQRCodeGenerated
         ]

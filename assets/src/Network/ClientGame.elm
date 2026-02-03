@@ -2,6 +2,7 @@ module Network.ClientGame exposing
     ( ClientGameState
     , SnakeState
     , init
+    , initWithHost
     , applyHostState
     , bufferLocalInput
     , getMySnake
@@ -19,7 +20,7 @@ Responsibilities:
 
 import Dict exposing (Dict)
 import Engine.Grid as Grid
-import Network.Protocol as Protocol exposing (AppleState, StateSyncPayload)
+import Network.Protocol as Protocol exposing (AppleState, SnakeStatus, StateSyncPayload)
 import Snake exposing (Direction, Position, Snake)
 
 
@@ -36,6 +37,7 @@ type alias ClientGameState =
     , myId : String -- Our player ID
     , pendingInput : Maybe Direction -- Optimistic local input
     , lastAppliedInput : Maybe Direction -- For interpolation reference
+    , currentHostId : Maybe String -- Track current host for migration
     }
 
 
@@ -62,6 +64,22 @@ init myId =
     , myId = myId
     , pendingInput = Nothing
     , lastAppliedInput = Nothing
+    , currentHostId = Nothing
+    }
+
+
+{-| Initialize client game state with our player ID and host ID.
+-}
+initWithHost : String -> String -> ClientGameState
+initWithHost myId hostId =
+    { snakes = Dict.empty
+    , apples = []
+    , scores = Dict.empty
+    , lastHostTick = 0
+    , myId = myId
+    , pendingInput = Nothing
+    , lastAppliedInput = Nothing
+    , currentHostId = Just hostId
     }
 
 
@@ -84,7 +102,7 @@ applyHostState stateSync clientState =
                           , color = s.color
                           , name = s.name
                           , isInvincible = s.isInvincible
-                          , isDisconnected = False
+                          , isDisconnected = protocolStatusIsOrphaned s.status
                           }
                         )
                     )
@@ -112,6 +130,18 @@ applyHostState stateSync clientState =
         , lastHostTick = stateSync.tick
         , pendingInput = newPendingInput
     }
+
+
+{-| Check if protocol status represents an orphaned snake.
+-}
+protocolStatusIsOrphaned : Protocol.SnakeStatus -> Bool
+protocolStatusIsOrphaned status =
+    case status of
+        Protocol.Orphaned ->
+            True
+
+        _ ->
+            False
 
 
 {-| Buffer a local input for optimistic display.
@@ -161,7 +191,7 @@ getMySnake clientState =
 Marks our snake appropriately and applies optimistic input.
 Uses hardcoded grid dimensions from Engine.Grid.defaultDimensions.
 -}
-toGameState : ClientGameState -> { snakes : List Snake, apples : List { position : Position }, gridWidth : Int, gridHeight : Int }
+toGameState : ClientGameState -> { snakes : List Snake, apples : List { position : Position }, gridWidth : Int, gridHeight : Int, hostId : Maybe String }
 toGameState clientState =
     let
         -- Convert SnakeState to Snake, applying optimistic direction for our snake
@@ -182,7 +212,7 @@ toGameState clientState =
                             -- Determine state string for CSS classes
                             stateStr =
                                 if snakeState.isDisconnected then
-                                    "disconnected"
+                                    "orphaned"
 
                                 else
                                     "alive"
@@ -210,4 +240,5 @@ toGameState clientState =
     , apples = appleList
     , gridWidth = grid.width
     , gridHeight = grid.height
+    , hostId = clientState.currentHostId
     }

@@ -1,12 +1,14 @@
 module Network.HostGame exposing
     ( HostGameState
     , SnakeData
+    , SnakeStatus(..)
     , TickResult
     , init
     , tick
     , addPlayer
     , removePlayer
     , confirmRemovePlayer
+    , markOrphaned
     , bufferInput
     , changeHostDirection
     , toStateSyncPayload
@@ -14,6 +16,7 @@ module Network.HostGame exposing
     , getOccupiedPositions
     , addApple
     , respawnSnake
+    , fromClientState
     )
 
 {-| Multi-player host game loop.
@@ -30,6 +33,7 @@ import Dict exposing (Dict)
 import Engine.Apple as Apple exposing (Apple)
 import Engine.Collision as Collision
 import Engine.Grid as Grid
+import Network.ClientGame as ClientGame
 import Network.Protocol as Protocol exposing (StateSyncPayload)
 import Random
 import Snake exposing (Direction(..), Position, Snake)
@@ -49,12 +53,21 @@ type alias HostGameState =
     }
 
 
+{-| Snake status for tracking active vs orphaned snakes.
+-}
+type SnakeStatus
+    = Active
+    | Orphaned
+    | Dead
+
+
 {-| Individual snake data with per-snake invincibility tracking.
 -}
 type alias SnakeData =
     { snake : Snake
     , invincibleUntilTick : Int
     , needsRespawn : Bool
+    , status : SnakeStatus -- Active, Orphaned, or Dead
     }
 
 
@@ -126,6 +139,7 @@ init hostId =
                         { snake = hostSnake
                         , invincibleUntilTick = 15 -- 1500ms at 100ms ticks
                         , needsRespawn = False
+                        , status = Active
                         }
                 in
                 { snakes = Dict.singleton hostId hostData
@@ -169,6 +183,7 @@ addPlayer playerId name pos state =
             { snake = newSnake
             , invincibleUntilTick = state.currentTick + 15
             , needsRespawn = False
+            , status = Active
             }
     in
     { state
@@ -179,13 +194,30 @@ addPlayer playerId name pos state =
 
 {-| Mark player as disconnected (start grace period).
 
-During grace period, snake continues moving in last direction but is ghosted.
+During grace period, snake continues moving in last direction but is orphaned (faded).
+The snake will continue until it collides and dies naturally.
 -}
 removePlayer : String -> HostGameState -> HostGameState
 removePlayer playerId state =
     { state
         | disconnectedPlayers =
             Dict.insert playerId (state.currentTick + 30) state.disconnectedPlayers
+        , snakes =
+            Dict.update playerId
+                (Maybe.map (\data -> { data | status = Orphaned }))
+                state.snakes
+    }
+
+
+{-| Mark a player's snake as orphaned (for host migration).
+-}
+markOrphaned : String -> HostGameState -> HostGameState
+markOrphaned playerId state =
+    { state
+        | snakes =
+            Dict.update playerId
+                (Maybe.map (\data -> { data | status = Orphaned }))
+                state.snakes
     }
 
 
@@ -314,6 +346,7 @@ cleanupDisconnectedPlayers state =
 
 
 {-| Apply all buffered inputs to their respective snakes.
+    Orphaned snakes continue in their last direction (no input processing).
 -}
 applyAllInputs : HostGameState -> HostGameState
 applyAllInputs state =
@@ -321,16 +354,25 @@ applyAllInputs state =
         | snakes =
             Dict.map
                 (\playerId snakeData ->
-                    case Dict.get playerId state.pendingInputs of
-                        Just newDirection ->
-                            let
-                                snake =
-                                    snakeData.snake
-                            in
-                            { snakeData | snake = { snake | direction = newDirection } }
-
-                        Nothing ->
+                    -- Skip orphaned snakes - they continue straight
+                    case snakeData.status of
+                        Orphaned ->
                             snakeData
+
+                        Dead ->
+                            snakeData
+
+                        Active ->
+                            case Dict.get playerId state.pendingInputs of
+                                Just newDirection ->
+                                    let
+                                        snake =
+                                            snakeData.snake
+                                    in
+                                    { snakeData | snake = { snake | direction = newDirection } }
+
+                                Nothing ->
+                                    snakeData
                 )
                 state.snakes
     }
@@ -409,6 +451,8 @@ checkAllCollisions state =
 
 
 {-| Check collision for a single snake.
+    Orphaned snakes become Dead on collision (no respawn).
+    Active snakes get needsRespawn = True on collision.
 -}
 checkCollisions : Int -> String -> SnakeData -> List ( String, List Position ) -> SnakeData
 checkCollisions currentTick playerId snakeData allBodies =
@@ -427,7 +471,18 @@ checkCollisions currentTick playerId snakeData allBodies =
         snakeData
 
     else if selfCollision || otherCollision then
-        { snakeData | needsRespawn = True }
+        case snakeData.status of
+            Orphaned ->
+                -- Orphaned snake dies permanently (no respawn)
+                { snakeData | status = Dead }
+
+            Active ->
+                -- Active snake needs respawn
+                { snakeData | needsRespawn = True }
+
+            Dead ->
+                -- Already dead
+                snakeData
 
     else
         snakeData
@@ -505,6 +560,7 @@ toStateSyncPayload : Bool -> HostGameState -> StateSyncPayload
 toStateSyncPayload isFull state =
     { snakes =
         Dict.values state.snakes
+            |> List.filter (\snakeData -> snakeData.status /= Dead) -- Don't include dead snakes
             |> List.map
                 (\snakeData ->
                     let
@@ -517,6 +573,7 @@ toStateSyncPayload isFull state =
                     , color = s.color
                     , name = s.name
                     , isInvincible = state.currentTick < snakeData.invincibleUntilTick
+                    , status = statusToProtocol snakeData.status
                     }
                 )
     , apples =
@@ -533,23 +590,52 @@ toStateSyncPayload isFull state =
     }
 
 
+{-| Convert internal SnakeStatus to Protocol.SnakeStatus.
+-}
+statusToProtocol : SnakeStatus -> Protocol.SnakeStatus
+statusToProtocol status =
+    case status of
+        Active ->
+            Protocol.Active
+
+        Orphaned ->
+            Protocol.Orphaned
+
+        Dead ->
+            Protocol.Dead
+
+
 {-| Convert HostGameState to GameState for rendering with existing Board.view.
 -}
-toGameState : HostGameState -> { snakes : List Snake, apples : List { position : Position }, gridWidth : Int, gridHeight : Int }
+toGameState : HostGameState -> { snakes : List Snake, apples : List { position : Position }, gridWidth : Int, gridHeight : Int, hostId : String }
 toGameState state =
     { snakes =
         Dict.values state.snakes
+            |> List.filter (\snakeData -> snakeData.status /= Dead) -- Don't render dead snakes
             |> List.map
                 (\snakeData ->
                     let
                         snake =
                             snakeData.snake
+
+                        -- Set state string based on status for CSS
+                        stateStr =
+                            case snakeData.status of
+                                Orphaned ->
+                                    "orphaned"
+
+                                _ ->
+                                    "alive"
                     in
-                    { snake | isInvincible = state.currentTick < snakeData.invincibleUntilTick }
+                    { snake
+                        | isInvincible = state.currentTick < snakeData.invincibleUntilTick
+                        , state = stateStr
+                    }
                 )
     , apples = List.map (\apple -> { position = apple.position }) state.apples
     , gridWidth = state.grid.width
     , gridHeight = state.grid.height
+    , hostId = state.hostId
     }
 
 
@@ -601,6 +687,73 @@ respawnSnake playerId pos state =
                         | snake = respawnedSnake
                         , invincibleUntilTick = state.currentTick + 15
                         , needsRespawn = False
+                        , status = Active
                     }
             in
             { state | snakes = Dict.insert playerId respawnedData state.snakes }
+
+
+{-| Create HostGameState from ClientGameState during host migration.
+    The client becomes the new host using the last known game state.
+-}
+fromClientState : String -> Int -> Dict String ClientGame.SnakeState -> List Protocol.AppleState -> Dict String Int -> HostGameState
+fromClientState newHostId lastTick snakes apples scores =
+    let
+        grid =
+            Grid.defaultDimensions
+
+        -- Convert client snake states to host snake data
+        hostSnakes =
+            Dict.map
+                (\id snakeState ->
+                    let
+                        snake =
+                            { id = id
+                            , body = snakeState.body
+                            , direction = snakeState.direction
+                            , color = snakeState.color
+                            , name = snakeState.name
+                            , isInvincible = snakeState.isInvincible
+                            , state = "alive"
+                            , pendingGrowth = 0
+                            }
+
+                        status =
+                            if snakeState.isDisconnected then
+                                Orphaned
+
+                            else
+                                Active
+                    in
+                    { snake = snake
+                    , invincibleUntilTick =
+                        if snakeState.isInvincible then
+                            lastTick + 15
+
+                        else
+                            0
+                    , needsRespawn = False
+                    , status = status
+                    }
+                )
+                snakes
+
+        -- Convert apple states
+        hostApples =
+            List.map
+                (\appleState ->
+                    { position = appleState.position
+                    , expiresAtTick = appleState.expiresAtTick
+                    }
+                )
+                apples
+    in
+    { snakes = hostSnakes
+    , apples = hostApples
+    , grid = grid
+    , scores = scores
+    , currentTick = lastTick
+    , hostId = newHostId
+    , pendingInputs = Dict.empty
+    , disconnectedPlayers = Dict.empty
+    }

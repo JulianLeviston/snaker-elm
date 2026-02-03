@@ -2,10 +2,12 @@ module Network.Protocol exposing
     ( GameMessage(..)
     , StateSyncPayload
     , SnakeState
+    , SnakeStatus(..)
     , AppleState
     , InputPayload
     , PlayerJoinPayload
     , PlayerLeavePayload
+    , HostMigrationPayload(..)
     , encodeGameMessage
     , decodeGameMessage
     , encodeStateSync
@@ -14,6 +16,7 @@ module Network.Protocol exposing
     , decodeInput
     , encodeDirection
     , decodeDirection
+    , decodeHostMigration
     )
 
 {-| P2P game message protocol for host-client communication.
@@ -34,6 +37,23 @@ type GameMessage
     | InputMessage InputPayload -- Client -> Host: direction input
     | PlayerJoin PlayerJoinPayload -- Bidirectional: player joining
     | PlayerLeave PlayerLeavePayload -- Bidirectional: player leaving
+    | HostMigrated { newHostId : String, tick : Int } -- Migration event
+
+
+{-| Snake status for tracking active vs orphaned snakes.
+-}
+type SnakeStatus
+    = Active
+    | Orphaned
+    | Dead
+
+
+{-| Host migration payload from JavaScript.
+-}
+type HostMigrationPayload
+    = BecomeHost { myPeerId : String, peers : List String }
+    | NewHost { newHostId : String }
+    | ConnectionLost
 
 
 {-| Full or delta state synchronization payload.
@@ -59,6 +79,7 @@ type alias SnakeState =
     , color : String
     , name : String
     , isInvincible : Bool
+    , status : SnakeStatus -- Active, Orphaned, or Dead
     }
 
 
@@ -127,6 +148,17 @@ encodeGameMessage msg =
                 , ( "payload", encodePlayerLeave payload )
                 ]
 
+        HostMigrated payload ->
+            JE.object
+                [ ( "type", JE.string "host_migrated" )
+                , ( "payload"
+                  , JE.object
+                        [ ( "new_host_id", JE.string payload.newHostId )
+                        , ( "tick", JE.int payload.tick )
+                        ]
+                  )
+                ]
+
 
 {-| Encode a StateSyncPayload to JSON.
 -}
@@ -152,7 +184,25 @@ encodeSnakeState snake =
         , ( "color", JE.string snake.color )
         , ( "name", JE.string snake.name )
         , ( "is_invincible", JE.bool snake.isInvincible )
+        , ( "status", encodeSnakeStatus snake.status )
         ]
+
+
+{-| Encode a SnakeStatus to JSON.
+-}
+encodeSnakeStatus : SnakeStatus -> JE.Value
+encodeSnakeStatus status =
+    JE.string
+        (case status of
+            Active ->
+                "active"
+
+            Orphaned ->
+                "orphaned"
+
+            Dead ->
+                "dead"
+        )
 
 
 {-| Encode an AppleState to JSON.
@@ -271,13 +321,36 @@ decodeStateSync =
 -}
 decodeSnakeState : JD.Decoder SnakeState
 decodeSnakeState =
-    JD.map6 SnakeState
+    JD.map7 SnakeState
         (JD.field "id" JD.string)
         (JD.field "body" (JD.list decodePosition))
         (JD.field "direction" decodeDirection)
         (JD.field "color" JD.string)
         (JD.field "name" JD.string)
         (JD.field "is_invincible" JD.bool)
+        (JD.field "status" decodeSnakeStatus)
+
+
+{-| Decode a SnakeStatus from JSON.
+-}
+decodeSnakeStatus : JD.Decoder SnakeStatus
+decodeSnakeStatus =
+    JD.string
+        |> JD.andThen
+            (\str ->
+                case str of
+                    "active" ->
+                        JD.succeed Active
+
+                    "orphaned" ->
+                        JD.succeed Orphaned
+
+                    "dead" ->
+                        JD.succeed Dead
+
+                    _ ->
+                        JD.fail ("Unknown snake status: " ++ str)
+            )
 
 
 {-| Decode an AppleState from JSON.
@@ -377,3 +450,28 @@ directionToString dir =
 
         Right ->
             "right"
+
+
+{-| Decode host migration payload from JavaScript port.
+-}
+decodeHostMigration : JD.Decoder HostMigrationPayload
+decodeHostMigration =
+    JD.field "type" JD.string
+        |> JD.andThen
+            (\migType ->
+                case migType of
+                    "become_host" ->
+                        JD.map2 (\pid peers -> BecomeHost { myPeerId = pid, peers = peers })
+                            (JD.field "myPeerId" JD.string)
+                            (JD.field "peers" (JD.list JD.string))
+
+                    "new_host" ->
+                        JD.map (\hid -> NewHost { newHostId = hid })
+                            (JD.field "newHostId" JD.string)
+
+                    "connection_lost" ->
+                        JD.succeed ConnectionLost
+
+                    _ ->
+                        JD.fail ("Unknown migration type: " ++ migType)
+            )
