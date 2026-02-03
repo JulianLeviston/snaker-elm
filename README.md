@@ -1,6 +1,6 @@
 # Snaker
-A new and adjusted version of the classic Snake game, written in Elm and Phoenix.
-Multiplayer is working, and state is now synchronised properly!
+
+A multiplayer Snake game written in Elm and Phoenix, with support for both server-based and peer-to-peer gameplay.
 
 ![](https://raw.githubusercontent.com/JulianLeviston/snaker-elm/main/images/snaker-elm.png)
 
@@ -8,26 +8,62 @@ Multiplayer is working, and state is now synchronised properly!
 
 The idea should be familiar: you are a snake, and you want to eat randomly appearing apples. This makes you grow. Apples appear for a brief time, then reappear somewhere else.
 
-You can try out the compiled code in `index.html`. All of the source is currently in `Main.elm`.
+## Multiplayer Modes
 
-## Server
+Snaker supports two multiplayer modes:
+
+- **P2P Mode** - Serverless peer-to-peer connections using WebRTC (PeerJS). One player hosts and shares a room code or QR code with others. No server required after the initial page load.
+- **Phoenix Mode** - Traditional server-based multiplayer using Phoenix channels. Game state is managed on the server.
+
+Your mode preference is saved locally and remembered between sessions.
+
+## Running Locally
 
 To start the system:
 
-  * Install dependencies with `mix deps.get`
-  * Install Node.js dependencies with `cd assets && npm install`
-  * Install Elm dependencies with `cd elm && elm package install` then `cd ../..`
-  * Start Phoenix endpoint with `mix phx.server`
+1. Install Elixir dependencies: `mix deps.get`
+2. Install Node.js dependencies: `cd assets && npm install`
+3. Start Phoenix endpoint: `mix phx.server`
 
 Now you can visit [`localhost:4000`](http://localhost:4000) from your browser.
 
+## Static Build (P2P Only)
+
+For P2P-only deployment without a Phoenix server:
+
+```bash
+cd assets && npm run build:static
+```
+
+This generates a standalone `dist/index.html` that can be hosted on any static file server.
+
 ## Development
 
-The Elm app can be found in `/assets/elm`, and the Phoenix app is responsible for hosting and building the target Elm app.
+- **Elm frontend**: `/assets/src/` (Elm 0.19.1)
+- **Phoenix backend**: `/lib/`
+- **JavaScript interop**: `/assets/js/` (TypeScript)
+
+The build uses esbuild with the Elm plugin. Run `npm run watch` in the assets directory for development with hot reloading.
+
+## Project Structure
+
+```
+assets/
+  src/           # Elm source files
+    Main.elm     # Application entry point
+    Engine/      # Game logic (collision, grid, apple spawning)
+    Network/     # P2P host/client game management
+    View/        # UI components (board, scoreboard, connection UI)
+  js/            # TypeScript for JS interop
+    app.ts       # Entry point, wires Elm ports
+    socket.ts    # Phoenix channel connection
+    peerjs-ports.ts  # WebRTC P2P connections
+lib/
+  snaker/        # Elixir game logic
+  snaker_web/    # Phoenix web layer
+```
 
 ## Future
 
-Things that need to change:
-
-* Experiment with WebGL and/or WebGPU.
-* "Levels" and other intresting features (more to come): implement new ideas for features to make it more fun.
+- Experiment with WebGL and/or WebGPU
+- "Levels" and other interesting features
