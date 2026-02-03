@@ -1,0 +1,603 @@
+module Network.HostGame exposing
+    ( HostGameState
+    , SnakeData
+    , TickResult
+    , init
+    , tick
+    , addPlayer
+    , removePlayer
+    , confirmRemovePlayer
+    , bufferInput
+    , changeHostDirection
+    , toStateSyncPayload
+    , toGameState
+    , getOccupiedPositions
+    , addApple
+    , respawnSnake
+    )
+
+{-| Multi-player host game loop.
+
+Extends LocalGame pattern for host-authoritative multiplayer.
+Key differences:
+- Multiple snakes in a Dict (keyed by playerId)
+- Host's own snake is one of the snakes (id matches host's peerId)
+- Each snake has individual invincibility tracking
+- Collision detection between all snakes
+-}
+
+import Dict exposing (Dict)
+import Engine.Apple as Apple exposing (Apple)
+import Engine.Collision as Collision
+import Engine.Grid as Grid
+import Network.Protocol as Protocol exposing (StateSyncPayload)
+import Random
+import Snake exposing (Direction(..), Position, Snake)
+
+
+{-| Game state for host running multiplayer game.
+-}
+type alias HostGameState =
+    { snakes : Dict String SnakeData
+    , apples : List Apple
+    , grid : { width : Int, height : Int }
+    , scores : Dict String Int
+    , currentTick : Int
+    , hostId : String -- Host's own player ID
+    , pendingInputs : Dict String Direction -- Buffered inputs per player
+    , disconnectedPlayers : Dict String Int -- playerId -> disconnectTick (for grace period)
+    }
+
+
+{-| Individual snake data with per-snake invincibility tracking.
+-}
+type alias SnakeData =
+    { snake : Snake
+    , invincibleUntilTick : Int
+    , needsRespawn : Bool
+    }
+
+
+{-| Result of a tick operation.
+-}
+type alias TickResult =
+    { state : HostGameState
+    , needsAppleSpawn : Int -- Number of apples needed
+    , expiredApples : List Apple -- Apples that expired and need respawning
+    , stateSync : StateSyncPayload -- For broadcasting
+    }
+
+
+{-| Color palette for random snake colors (12 distinct colors).
+-}
+snakeColors : List String
+snakeColors =
+    [ "e57373", "f06292", "ba68c8", "9575cd" -- reds/pinks/purples
+    , "64b5f6", "4fc3f7", "4dd0e1", "4db6ac" -- blues/teals
+    , "81c784", "aed581", "dce775", "ffb74d" -- greens/yellows/orange
+    ]
+
+
+{-| Simple string hash for deterministic color assignment.
+-}
+hashString : String -> Int
+hashString str =
+    String.foldl (\char acc -> acc * 31 + Char.toCode char) 0 str
+        |> abs
+
+
+{-| Get color for a player ID.
+-}
+colorForPlayer : String -> String
+colorForPlayer playerId =
+    let
+        index =
+            modBy (List.length snakeColors) (hashString playerId)
+    in
+    List.drop index snakeColors
+        |> List.head
+        |> Maybe.withDefault "67a387"
+
+
+{-| Initialize a new host game with random snake position.
+-}
+init : String -> Random.Generator HostGameState
+init hostId =
+    let
+        grid =
+            Grid.defaultDimensions
+    in
+    randomPosition grid
+        |> Random.map
+            (\startPos ->
+                let
+                    hostSnake =
+                        { id = hostId
+                        , body = [ startPos ]
+                        , direction = Right
+                        , color = colorForPlayer hostId
+                        , name = "Host"
+                        , isInvincible = True
+                        , state = "alive"
+                        , pendingGrowth = 0
+                        }
+
+                    hostData =
+                        { snake = hostSnake
+                        , invincibleUntilTick = 15 -- 1500ms at 100ms ticks
+                        , needsRespawn = False
+                        }
+                in
+                { snakes = Dict.singleton hostId hostData
+                , apples = []
+                , grid = grid
+                , scores = Dict.singleton hostId 0
+                , currentTick = 0
+                , hostId = hostId
+                , pendingInputs = Dict.empty
+                , disconnectedPlayers = Dict.empty
+                }
+            )
+
+
+{-| Generate a random position within grid bounds.
+-}
+randomPosition : { width : Int, height : Int } -> Random.Generator Position
+randomPosition grid =
+    Random.map2 Position
+        (Random.int 0 (grid.width - 1))
+        (Random.int 0 (grid.height - 1))
+
+
+{-| Add a new player with spawn position.
+-}
+addPlayer : String -> String -> Position -> HostGameState -> HostGameState
+addPlayer playerId name pos state =
+    let
+        newSnake =
+            { id = playerId
+            , body = [ pos ]
+            , direction = Right
+            , color = colorForPlayer playerId
+            , name = name
+            , isInvincible = True
+            , state = "alive"
+            , pendingGrowth = 0
+            }
+
+        newData =
+            { snake = newSnake
+            , invincibleUntilTick = state.currentTick + 15
+            , needsRespawn = False
+            }
+    in
+    { state
+        | snakes = Dict.insert playerId newData state.snakes
+        , scores = Dict.insert playerId 0 state.scores
+    }
+
+
+{-| Mark player as disconnected (start grace period).
+
+During grace period, snake continues moving in last direction but is ghosted.
+-}
+removePlayer : String -> HostGameState -> HostGameState
+removePlayer playerId state =
+    { state
+        | disconnectedPlayers =
+            Dict.insert playerId (state.currentTick + 30) state.disconnectedPlayers
+    }
+
+
+{-| Actually remove a player after grace period.
+-}
+confirmRemovePlayer : String -> HostGameState -> HostGameState
+confirmRemovePlayer playerId state =
+    { state
+        | snakes = Dict.remove playerId state.snakes
+        , scores = Dict.remove playerId state.scores
+        , disconnectedPlayers = Dict.remove playerId state.disconnectedPlayers
+        , pendingInputs = Dict.remove playerId state.pendingInputs
+    }
+
+
+{-| Buffer input for a player.
+-}
+bufferInput : String -> Direction -> HostGameState -> HostGameState
+bufferInput playerId direction state =
+    -- Only accept if no direction already buffered this tick
+    case Dict.get playerId state.pendingInputs of
+        Just _ ->
+            -- Rate limited - already have a buffered input
+            state
+
+        Nothing ->
+            -- Validate direction change
+            case Dict.get playerId state.snakes of
+                Just snakeData ->
+                    if Snake.validDirectionChange snakeData.snake.direction direction then
+                        { state | pendingInputs = Dict.insert playerId direction state.pendingInputs }
+
+                    else
+                        state
+
+                Nothing ->
+                    state
+
+
+{-| Change direction for host's snake (called directly, not through network).
+-}
+changeHostDirection : Direction -> HostGameState -> HostGameState
+changeHostDirection direction state =
+    bufferInput state.hostId direction state
+
+
+{-| Process one game tick.
+
+Order matches Elixir GameServer:
+1. Apply all buffered inputs
+2. Move all snakes
+3. Check collisions (self and with others)
+4. Handle respawns for collided snakes
+5. Check apple eating (any snake can eat)
+6. Check apple expiration
+7. Generate StateSyncPayload
+-}
+tick : HostGameState -> TickResult
+tick state =
+    let
+        -- Check grace period for disconnected players
+        stateWithRemovals =
+            cleanupDisconnectedPlayers state
+
+        -- 1. Apply all buffered inputs
+        stateWithInputs =
+            applyAllInputs stateWithRemovals
+
+        -- 2. Move all snakes
+        stateAfterMove =
+            moveAllSnakes stateWithInputs
+
+        -- 3. Check collisions (self and with others)
+        stateAfterCollisions =
+            checkAllCollisions stateAfterMove
+
+        -- 4. Respawns are handled separately via needsRespawn flag
+
+        -- 5. Check apple eating (any snake can eat)
+        stateAfterEating =
+            checkAllAppleEating stateAfterCollisions
+
+        -- 6. Check apple expiration
+        expirationResult =
+            Apple.tickExpiredApples stateAfterEating.currentTick stateAfterEating.apples
+
+        stateAfterExpiration =
+            { stateAfterEating | apples = expirationResult.remaining }
+
+        -- 7. Clear input buffers and increment tick
+        finalState =
+            { stateAfterExpiration
+                | pendingInputs = Dict.empty
+                , currentTick = stateAfterExpiration.currentTick + 1
+            }
+
+        -- Calculate apples needed
+        applesNeeded =
+            Apple.spawnIfNeeded finalState.apples + List.length expirationResult.expired
+
+        -- Full sync every 50 ticks
+        isFull =
+            modBy 50 finalState.currentTick == 0
+    in
+    { state = finalState
+    , needsAppleSpawn = applesNeeded
+    , expiredApples = expirationResult.expired
+    , stateSync = toStateSyncPayload isFull finalState
+    }
+
+
+{-| Remove players whose grace period has expired.
+-}
+cleanupDisconnectedPlayers : HostGameState -> HostGameState
+cleanupDisconnectedPlayers state =
+    Dict.foldl
+        (\playerId disconnectTick acc ->
+            if state.currentTick >= disconnectTick then
+                confirmRemovePlayer playerId acc
+
+            else
+                acc
+        )
+        state
+        state.disconnectedPlayers
+
+
+{-| Apply all buffered inputs to their respective snakes.
+-}
+applyAllInputs : HostGameState -> HostGameState
+applyAllInputs state =
+    { state
+        | snakes =
+            Dict.map
+                (\playerId snakeData ->
+                    case Dict.get playerId state.pendingInputs of
+                        Just newDirection ->
+                            let
+                                snake =
+                                    snakeData.snake
+                            in
+                            { snakeData | snake = { snake | direction = newDirection } }
+
+                        Nothing ->
+                            snakeData
+                )
+                state.snakes
+    }
+
+
+{-| Move all snakes in their current direction.
+-}
+moveAllSnakes : HostGameState -> HostGameState
+moveAllSnakes state =
+    { state
+        | snakes =
+            Dict.map
+                (\_ snakeData ->
+                    moveSnake state.grid snakeData
+                )
+                state.snakes
+    }
+
+
+{-| Move a single snake.
+-}
+moveSnake : { width : Int, height : Int } -> SnakeData -> SnakeData
+moveSnake grid snakeData =
+    let
+        snake =
+            snakeData.snake
+
+        currentHead =
+            Snake.head snake
+                |> Maybe.withDefault { x = 0, y = 0 }
+
+        unwrappedNewHead =
+            Grid.nextPosition currentHead snake.direction
+
+        newHead =
+            Grid.wrapPosition unwrappedNewHead grid
+
+        ( newBody, newPendingGrowth ) =
+            if snake.pendingGrowth > 0 then
+                -- Growing: prepend head, keep all segments
+                ( newHead :: snake.body, snake.pendingGrowth - 1 )
+
+            else
+                -- Not growing: prepend head, drop last segment
+                ( newHead :: List.take (List.length snake.body - 1) snake.body
+                , 0
+                )
+
+        updatedSnake =
+            { snake
+                | body = newBody
+                , pendingGrowth = newPendingGrowth
+            }
+    in
+    { snakeData | snake = updatedSnake }
+
+
+{-| Check collisions for all snakes.
+-}
+checkAllCollisions : HostGameState -> HostGameState
+checkAllCollisions state =
+    let
+        -- Get all snake bodies for other-snake collision checks
+        allBodies =
+            Dict.toList state.snakes
+                |> List.map (\( id, data ) -> ( id, data.snake.body ))
+    in
+    { state
+        | snakes =
+            Dict.map
+                (\playerId snakeData ->
+                    checkCollisions state.currentTick playerId snakeData allBodies
+                )
+                state.snakes
+    }
+
+
+{-| Check collision for a single snake.
+-}
+checkCollisions : Int -> String -> SnakeData -> List ( String, List Position ) -> SnakeData
+checkCollisions currentTick playerId snakeData allBodies =
+    let
+        isInvincible =
+            currentTick < snakeData.invincibleUntilTick
+
+        selfCollision =
+            Collision.collidesWithSelf snakeData.snake.body
+
+        -- Check collision with other snakes' bodies
+        otherCollision =
+            checkOtherSnakeCollision playerId snakeData.snake.body allBodies
+    in
+    if isInvincible then
+        snakeData
+
+    else if selfCollision || otherCollision then
+        { snakeData | needsRespawn = True }
+
+    else
+        snakeData
+
+
+{-| Check if snake head collides with any other snake's body.
+-}
+checkOtherSnakeCollision : String -> List Position -> List ( String, List Position ) -> Bool
+checkOtherSnakeCollision playerId body allBodies =
+    case body of
+        [] ->
+            False
+
+        head :: _ ->
+            allBodies
+                |> List.filter (\( otherId, _ ) -> otherId /= playerId)
+                |> List.any (\( _, otherBody ) -> Collision.collidesWithOther head otherBody)
+
+
+{-| Check apple eating for all snakes.
+-}
+checkAllAppleEating : HostGameState -> HostGameState
+checkAllAppleEating state =
+    Dict.foldl
+        (\playerId snakeData acc ->
+            checkAppleEatingForSnake playerId snakeData acc
+        )
+        state
+        state.snakes
+
+
+{-| Check if a specific snake eats any apple.
+-}
+checkAppleEatingForSnake : String -> SnakeData -> HostGameState -> HostGameState
+checkAppleEatingForSnake playerId snakeData state =
+    case Snake.head snakeData.snake of
+        Nothing ->
+            state
+
+        Just headPos ->
+            let
+                result =
+                    Apple.checkEaten headPos state.apples
+            in
+            if result.eaten then
+                let
+                    snake =
+                        snakeData.snake
+
+                    grownSnake =
+                        { snake | pendingGrowth = snake.pendingGrowth + Apple.growthAmount }
+
+                    updatedData =
+                        { snakeData | snake = grownSnake }
+
+                    currentScore =
+                        Dict.get playerId state.scores |> Maybe.withDefault 0
+                in
+                { state
+                    | apples = result.remaining
+                    , snakes = Dict.insert playerId updatedData state.snakes
+                    , scores = Dict.insert playerId (currentScore + 1) state.scores
+                }
+
+            else
+                state
+
+
+{-| Convert game state to StateSyncPayload for broadcasting.
+-}
+toStateSyncPayload : Bool -> HostGameState -> StateSyncPayload
+toStateSyncPayload isFull state =
+    { snakes =
+        Dict.values state.snakes
+            |> List.map
+                (\snakeData ->
+                    let
+                        s =
+                            snakeData.snake
+                    in
+                    { id = s.id
+                    , body = s.body
+                    , direction = s.direction
+                    , color = s.color
+                    , name = s.name
+                    , isInvincible = state.currentTick < snakeData.invincibleUntilTick
+                    }
+                )
+    , apples =
+        List.map
+            (\apple ->
+                { position = apple.position
+                , expiresAtTick = apple.expiresAtTick
+                }
+            )
+            state.apples
+    , scores = state.scores
+    , tick = state.currentTick
+    , isFull = isFull
+    }
+
+
+{-| Convert HostGameState to GameState for rendering with existing Board.view.
+-}
+toGameState : HostGameState -> { snakes : List Snake, apples : List { position : Position }, gridWidth : Int, gridHeight : Int }
+toGameState state =
+    { snakes =
+        Dict.values state.snakes
+            |> List.map
+                (\snakeData ->
+                    let
+                        snake =
+                            snakeData.snake
+                    in
+                    { snake | isInvincible = state.currentTick < snakeData.invincibleUntilTick }
+                )
+    , apples = List.map (\apple -> { position = apple.position }) state.apples
+    , gridWidth = state.grid.width
+    , gridHeight = state.grid.height
+    }
+
+
+{-| Get all occupied positions (all snakes + apples).
+-}
+getOccupiedPositions : HostGameState -> List Position
+getOccupiedPositions state =
+    let
+        snakePositions =
+            Dict.values state.snakes
+                |> List.concatMap (\data -> data.snake.body)
+
+        applePositions =
+            List.map .position state.apples
+    in
+    snakePositions ++ applePositions
+
+
+{-| Add an apple to the game state.
+-}
+addApple : Apple -> HostGameState -> HostGameState
+addApple apple state =
+    { state | apples = apple :: state.apples }
+
+
+{-| Respawn a snake at a given position.
+-}
+respawnSnake : String -> Position -> HostGameState -> HostGameState
+respawnSnake playerId pos state =
+    case Dict.get playerId state.snakes of
+        Nothing ->
+            state
+
+        Just snakeData ->
+            let
+                snake =
+                    snakeData.snake
+
+                respawnedSnake =
+                    { snake
+                        | body = [ pos ]
+                        , direction = Right
+                        , pendingGrowth = 0
+                        , isInvincible = True
+                    }
+
+                respawnedData =
+                    { snakeData
+                        | snake = respawnedSnake
+                        , invincibleUntilTick = state.currentTick + 15
+                        , needsRespawn = False
+                    }
+            in
+            { state | snakes = Dict.insert playerId respawnedData state.snakes }
