@@ -119,6 +119,11 @@ renderSnake snake maybePlayerId =
 
               else
                 ""
+            , if snake.state == "disconnected" then
+                "disconnected"
+
+              else
+                ""
             , if isYou then
                 "you"
 

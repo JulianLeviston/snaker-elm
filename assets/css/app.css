@@ -15,7 +15,7 @@
     50% { opacity: 0.3; }
 }
 
-/* Death Fade-Out Animation
+/* Death Fade-Out Animation (simple version for non-collision deaths)
    500ms fadeOut, forwards keeps final state (opacity 0) */
 .snake.dying {
     animation: fadeOut 500ms ease-out forwards;
@@ -26,11 +26,108 @@
     to { opacity: 0; }
 }
 
+/* ==========================================================================
+   Collision Animation - Shake + Teeth Scatter
+   ========================================================================== */
+
+/* Collision animation - shake the board */
+@keyframes collision-shake {
+    0%, 100% { transform: translate(0, 0); }
+    10% { transform: translate(-3px, -2px); }
+    20% { transform: translate(3px, 2px); }
+    30% { transform: translate(-2px, 3px); }
+    40% { transform: translate(2px, -3px); }
+    50% { transform: translate(-3px, 0); }
+    60% { transform: translate(3px, 0); }
+    70% { transform: translate(0, 3px); }
+    80% { transform: translate(0, -3px); }
+    90% { transform: translate(-2px, -2px); }
+}
+
+.game-board.collision-shake,
+.game-board-wrapper.collision-shake {
+    animation: collision-shake 0.3s ease-out;
+}
+
+/* Teeth scatter animation - snake segments fall away like teeth */
+@keyframes teeth-scatter {
+    0% {
+        opacity: 1;
+        transform: translate(0, 0) rotate(0deg);
+    }
+    100% {
+        opacity: 0;
+        transform: translate(var(--scatter-x, 20px), var(--scatter-y, 40px)) rotate(var(--scatter-rot, 180deg));
+    }
+}
+
+.snake.dying .snake-segment {
+    animation: teeth-scatter 0.6s ease-out forwards;
+}
+
+/* Each segment gets slightly different scatter direction via nth-child */
+.snake.dying .snake-segment:nth-child(odd) {
+    --scatter-x: -25px;
+    --scatter-rot: -120deg;
+}
+
+.snake.dying .snake-segment:nth-child(3n) {
+    --scatter-y: 50px;
+    --scatter-rot: 200deg;
+}
+
+.snake.dying .snake-segment:nth-child(4n) {
+    --scatter-x: 30px;
+    --scatter-y: 35px;
+    --scatter-rot: -90deg;
+}
+
+.snake.dying .snake-segment:nth-child(5n) {
+    --scatter-x: -15px;
+    --scatter-y: 45px;
+    --scatter-rot: 150deg;
+}
+
+.snake.dying .snake-segment:nth-child(2n) {
+    --scatter-x: 18px;
+    --scatter-y: 30px;
+    --scatter-rot: -150deg;
+}
+
+/* Snake head also scatters but stays more centered */
+.snake.dying .snake-head {
+    animation: teeth-scatter 0.6s ease-out forwards;
+    --scatter-x: 0;
+    --scatter-y: 25px;
+    --scatter-rot: 45deg;
+}
+
 /* "You" Indicator Glow
    Double glow effect using currentColor for snake color matching */
 .snake.you circle {
     filter: drop-shadow(0 0 8px currentColor)
             drop-shadow(0 0 12px currentColor);
+}
+
+/* Player's own snake head has extra emphasis */
+.snake.you .snake-head circle:first-child {
+    filter: drop-shadow(0 0 6px currentColor);
+    stroke: white;
+    stroke-width: 2;
+}
+
+.snake.you .snake-segment {
+    filter: drop-shadow(0 0 4px currentColor);
+}
+
+/* Disconnected player snake (ghosted) */
+.snake.disconnected {
+    opacity: 0.4;
+}
+
+.snake.disconnected .snake-head,
+.snake.disconnected .snake-segment {
+    filter: grayscale(50%);
 }
 
 /* ==========================================================================

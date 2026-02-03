@@ -43,6 +43,7 @@ type alias Model =
     , p2pState : P2PConnectionState
     , roomCodeInput : String
     , showCopiedFeedback : Bool
+    , showingCollision : Bool  -- For collision shake animation
     }
 
 
@@ -92,6 +93,7 @@ type Msg
       -- Client game messages
     | GotGameStateP2P String
     | NewPlayerSpawn String Position
+    | ClearCollisionShake
 
 
 init : () -> ( Model, Cmd Msg )
@@ -113,6 +115,7 @@ init _ =
       , p2pState = P2PNotConnected
       , roomCodeInput = ""
       , showCopiedFeedback = False
+      , showingCollision = False
       }
     , Random.generate InitGame LocalGame.init
     )
@@ -133,9 +136,15 @@ update msg model =
                             tickResult.state
                     in
                     if newState.needsRespawn then
-                        -- Need random respawn position
-                        ( { model | localGame = Just newState }
-                        , Random.generate NewSpawnPosition (randomPosition newState.grid)
+                        -- Need random respawn position, trigger collision shake
+                        ( { model
+                            | localGame = Just newState
+                            , showingCollision = True
+                          }
+                        , Cmd.batch
+                            [ Random.generate NewSpawnPosition (randomPosition newState.grid)
+                            , Process.sleep 300 |> Task.perform (\_ -> ClearCollisionShake)
+                            ]
                         )
 
                     else
@@ -371,6 +380,9 @@ update msg model =
         ClearNotification ->
             ( { model | notification = Nothing }, Cmd.none )
 
+        ClearCollisionShake ->
+            ( { model | showingCollision = False }, Cmd.none )
+
         -- P2P message handlers
         CreateRoom ->
             ( { model | p2pState = P2PCreatingRoom }
@@ -570,8 +582,15 @@ update msg model =
                     case List.head snakesNeedingRespawn of
                         Just playerId ->
                             -- Need random respawn position for this snake
-                            ( { model | hostGame = Just newState }
-                            , Random.generate (NewHostSpawnPosition playerId) (randomPosition newState.grid)
+                            -- Trigger collision shake animation
+                            ( { model
+                                | hostGame = Just newState
+                                , showingCollision = True
+                              }
+                            , Cmd.batch
+                                [ Random.generate (NewHostSpawnPosition playerId) (randomPosition newState.grid)
+                                , Process.sleep 300 |> Task.perform (\_ -> ClearCollisionShake)
+                                ]
                             )
 
                         Nothing ->
@@ -888,6 +907,15 @@ viewStatus model =
 
 viewGame : Model -> Html Msg
 viewGame model =
+    let
+        -- Wrap game board with collision shake class if collision is happening
+        wrapWithShake content =
+            if model.showingCollision then
+                div [ class "game-board-wrapper collision-shake" ] [ content ]
+
+            else
+                content
+    in
     -- Check if hosting P2P game first
     case model.hostGame of
         Just hostState ->
@@ -896,7 +924,7 @@ viewGame model =
                     HostGame.toGameState hostState
             in
             div [ class "game-layout" ]
-                [ Board.view gameState model.myPeerId
+                [ wrapWithShake (Board.view gameState model.myPeerId)
                 , Scoreboard.view gameState.snakes model.myPeerId
                 ]
 
@@ -909,7 +937,7 @@ viewGame model =
                             ClientGame.toGameState clientState
                     in
                     div [ class "game-layout" ]
-                        [ Board.view gameState model.myPeerId
+                        [ wrapWithShake (Board.view gameState model.myPeerId)
                         , Scoreboard.view gameState.snakes model.myPeerId
                         ]
 
@@ -923,7 +951,7 @@ viewGame model =
                                             LocalGame.toGameState localState
                                     in
                                     div [ class "game-layout" ]
-                                        [ Board.view gameState model.playerId
+                                        [ wrapWithShake (Board.view gameState model.playerId)
                                         , Scoreboard.view gameState.snakes model.playerId
                                         ]
 
@@ -934,7 +962,7 @@ viewGame model =
                             case model.gameState of
                                 Just state ->
                                     div [ class "game-layout" ]
-                                        [ Board.view state model.playerId
+                                        [ wrapWithShake (Board.view state model.playerId)
                                         , Scoreboard.view state.snakes model.playerId
                                         ]
 
