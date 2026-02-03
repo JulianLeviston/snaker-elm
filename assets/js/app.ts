@@ -31,6 +31,8 @@ interface ElmApp {
     clipboardCopySuccess: { send: (data: null) => void };
     receiveGameStateP2P: { send: (data: string) => void };
     receiveInputP2P: { send: (data: string) => void };
+    // Mode persistence port
+    saveMode: { subscribe: (callback: (mode: string) => void) => void };
   };
 }
 
@@ -43,9 +45,13 @@ document.addEventListener("DOMContentLoaded", () => {
     return;
   }
 
-  // Initialize Elm application
+  // Read saved mode from localStorage ('p2p' | 'phoenix' | null)
+  const savedMode = localStorage.getItem("snaker-mode");
+
+  // Initialize Elm application with flags
   const app: ElmApp = Elm.Main.init({
     node: elmNode,
+    flags: { savedMode: savedMode },
   });
 
   console.log("Elm app initialized");
@@ -62,4 +68,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Setup PeerJS port handlers for P2P connections
   setupPeerPorts(app);
+
+  // Subscribe to mode persistence port
+  app.ports.saveMode.subscribe((mode: string) => {
+    localStorage.setItem("snaker-mode", mode);
+  });
 });

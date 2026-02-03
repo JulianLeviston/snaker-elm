@@ -21,6 +21,8 @@ port module Ports exposing
     , clipboardCopySuccess
     , receiveGameStateP2P
     , receiveInputP2P
+      -- Mode persistence
+    , saveMode
     )
 
 import Json.Decode as JD
@@ -59,6 +61,9 @@ port broadcastGameState : String -> Cmd msg
 
 
 port sendInputP2P : String -> Cmd msg
+
+
+port saveMode : String -> Cmd msg
 
 
 
