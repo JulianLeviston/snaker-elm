@@ -38,6 +38,7 @@ Key architectural decisions:
 
 ### Pending Todos
 
+- [ ] Set initial snake size to 3 segments (todos/pending/2026-02-05-initial-snake-size-3.md)
 - [ ] Move npm commands to top level directory (todos/pending/2026-02-05-move-npm-to-top-level.md)
 - [ ] Improve mobile responsive layout (todos/pending/2026-02-04-mobile-responsive-layout.md)
 - [ ] Add mobile controls support (todos/pending/2026-02-04-mobile-controls-support.md)
