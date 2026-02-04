@@ -18,7 +18,7 @@ async function buildStatic() {
   await esbuild.build({
     entryPoints: ['js/app.ts'],
     bundle: true,
-    outfile: path.join(distDir, 'app.js'),
+    outfile: path.join(distDir, 'snaker-app.js'),
     target: 'es2020',
     sourcemap: false,
     minify: true,
@@ -34,25 +34,25 @@ async function buildStatic() {
   console.log('Copying CSS...');
   fs.copyFileSync(
     path.join(__dirname, 'css', 'app.css'),
-    path.join(distDir, 'app.css')
+    path.join(distDir, 'snaker-app.css')
   );
 
   // Copy favicon if exists
   const faviconPath = path.join(__dirname, '..', 'priv', 'static', 'favicon.ico');
   if (fs.existsSync(faviconPath)) {
-    fs.copyFileSync(faviconPath, path.join(distDir, 'favicon.ico'));
+    fs.copyFileSync(faviconPath, path.join(distDir, 'snaker-favicon.ico'));
   }
 
-  // Create index.html
-  console.log('Creating index.html...');
+  // Create snaker-index.html
+  console.log('Creating snaker-index.html...');
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Snaker - P2P Multiplayer Snake</title>
-  <link rel="icon" type="image/x-icon" href="favicon.ico">
-  <link rel="stylesheet" href="app.css">
+  <link rel="icon" type="image/x-icon" href="snaker-favicon.ico">
+  <link rel="stylesheet" href="snaker-app.css">
   <style>
     body {
       margin: 0;
@@ -70,21 +70,21 @@ async function buildStatic() {
 </head>
 <body>
   <div id="elm-app"></div>
-  <script src="app.js"></script>
+  <script src="snaker-app.js"></script>
 </body>
 </html>`;
 
-  fs.writeFileSync(path.join(distDir, 'index.html'), html);
+  fs.writeFileSync(path.join(distDir, 'snaker-index.html'), html);
 
   console.log('\n✓ Static build complete!');
   console.log(`\nOutput: ${distDir}/`);
-  console.log('  - index.html');
-  console.log('  - app.js');
-  console.log('  - app.css');
-  console.log('  - favicon.ico');
+  console.log('  - snaker-index.html');
+  console.log('  - snaker-app.js');
+  console.log('  - snaker-app.css');
+  console.log('  - snaker-favicon.ico');
   console.log('\nTo test locally:');
   console.log('  cd dist && python3 -m http.server 8000');
-  console.log('  open http://localhost:8000');
+  console.log('  open http://localhost:8000/snaker-index.html');
   console.log('\nTo deploy: Upload the dist/ folder to any static host.');
 }
 
