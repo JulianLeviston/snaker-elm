@@ -38,6 +38,7 @@ Key architectural decisions:
 
 ### Pending Todos
 
+- [ ] Move npm commands to top level directory (todos/pending/2026-02-05-move-npm-to-top-level.md)
 - [ ] Improve mobile responsive layout (todos/pending/2026-02-04-mobile-responsive-layout.md)
 - [ ] Add mobile controls support (todos/pending/2026-02-04-mobile-controls-support.md)
 - [ ] Restore whimsical player names (todos/pending/2026-02-03-restore-whimsical-player-names.md)
