@@ -39,7 +39,6 @@ Key architectural decisions:
 ### Pending Todos
 
 - [ ] Improve mobile responsive layout (todos/pending/2026-02-04-mobile-responsive-layout.md)
-- [ ] Fix spurious socket connection error on deployed P2P (todos/pending/2026-02-04-spurious-socket-error-on-deploy.md)
 - [ ] Add mobile controls support (todos/pending/2026-02-04-mobile-controls-support.md)
 - [ ] Restore whimsical player names (todos/pending/2026-02-03-restore-whimsical-player-names.md)
 - [ ] UX polish: Move connection status to top of game area, improve visual hierarchy
