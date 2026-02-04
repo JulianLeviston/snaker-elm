@@ -1,0 +1,13 @@
+{
+  "name": "snaker-elm",
+  "version": "0.1.0",
+  "description": "A multiplayer Snake game in Elm and Phoenix",
+  "private": true,
+  "scripts": {
+    "install": "npm --prefix assets install",
+    "build": "npm --prefix assets run build",
+    "watch": "npm --prefix assets run watch",
+    "deploy": "npm --prefix assets run deploy",
+    "build:static": "npm --prefix assets run build:static"
+  }
+}

@@ -22,7 +22,7 @@ Your mode preference is saved locally and remembered between sessions.
 To start the system:
 
 1. Install Elixir dependencies: `mix deps.get`
-2. Install Node.js dependencies: `cd assets && npm install`
+2. Install Node.js dependencies: `npm install`
 3. Start Phoenix endpoint: `mix phx.server`
 
 Now you can visit [`localhost:4000`](http://localhost:4000) from your browser.
@@ -32,7 +32,7 @@ Now you can visit [`localhost:4000`](http://localhost:4000) from your browser.
 For P2P-only deployment without a Phoenix server:
 
 ```bash
-cd assets && npm run build:static
+npm run build:static
 ```
 
 This generates a standalone `dist/index.html` that can be hosted on any static file server.
@@ -43,7 +43,7 @@ This generates a standalone `dist/index.html` that can be hosted on any static f
 - **Phoenix backend**: `/lib/`
 - **JavaScript interop**: `/assets/js/` (TypeScript)
 
-The build uses esbuild with the Elm plugin. Run `npm run watch` in the assets directory for development with hot reloading.
+The build uses esbuild with the Elm plugin. Run `npm run watch` for development with hot reloading.
 
 ## Project Structure
 
