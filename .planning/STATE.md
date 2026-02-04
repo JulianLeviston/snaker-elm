@@ -38,6 +38,7 @@ Key architectural decisions:
 
 ### Pending Todos
 
+- [ ] Add mobile controls support (todos/pending/2026-02-04-mobile-controls-support.md)
 - [ ] Restore whimsical player names (todos/pending/2026-02-03-restore-whimsical-player-names.md)
 - [ ] UX polish: Move connection status to top of game area, improve visual hierarchy
 - [ ] Visual effects enhancement: nicer fades, highlights, transitions
