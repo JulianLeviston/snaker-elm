@@ -70,6 +70,7 @@ async function buildStatic() {
 </head>
 <body>
   <div id="elm-app"></div>
+  <script>window.SNAKER_P2P_ONLY = true;</script>
   <script src="snaker-app.js"></script>
 </body>
 </html>`;

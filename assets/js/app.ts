@@ -70,8 +70,10 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // Connect Phoenix socket and wire to Elm ports
-  connectSocket(app);
+  // Connect Phoenix socket only if not in P2P-only static build
+  if (!(window as any).SNAKER_P2P_ONLY) {
+    connectSocket(app);
+  }
 
   // Setup PeerJS port handlers for P2P connections
   setupPeerPorts(app);
