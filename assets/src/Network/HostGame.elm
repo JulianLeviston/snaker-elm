@@ -170,7 +170,7 @@ addPlayer playerId name pos state =
     let
         newSnake =
             { id = playerId
-            , body = [ pos ]
+            , body = [ pos, { x = pos.x - 1, y = pos.y }, { x = pos.x - 2, y = pos.y } ]
             , direction = Right
             , color = colorForPlayer playerId
             , name = name
@@ -696,7 +696,7 @@ respawnSnake playerId pos state =
 
                 respawnedSnake =
                     { snake
-                        | body = [ pos ]
+                        | body = [ pos, { x = pos.x - 1, y = pos.y }, { x = pos.x - 2, y = pos.y } ]
                         , direction = Right
                         , pendingGrowth = 0
                         , isInvincible = True

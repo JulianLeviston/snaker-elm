@@ -44,7 +44,7 @@ type alias Snake =
 defaultSnake : Position -> Snake
 defaultSnake startPos =
     { id = "local"
-    , body = [ startPos ]
+    , body = [ startPos, { x = startPos.x - 1, y = startPos.y }, { x = startPos.x - 2, y = startPos.y } ]
     , direction = Right
     , color = "67a387"
     , name = "Player"

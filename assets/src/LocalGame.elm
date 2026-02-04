@@ -301,7 +301,7 @@ changeDirection newDirection state =
 
 {-| Respawn snake at a given position.
 
-Resets snake to single segment, direction right, grants invincibility.
+Resets snake to 3 segments, direction right, grants invincibility.
 -}
 respawnSnake : Position -> LocalGameState -> LocalGameState
 respawnSnake pos state =
@@ -311,7 +311,7 @@ respawnSnake pos state =
 
         respawnedSnake =
             { snake
-                | body = [ pos ]
+                | body = [ pos, { x = pos.x - 1, y = pos.y }, { x = pos.x - 2, y = pos.y } ]
                 , direction = Right
                 , pendingGrowth = 0
                 , isInvincible = True
