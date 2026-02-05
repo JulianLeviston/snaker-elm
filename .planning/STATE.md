@@ -39,7 +39,6 @@ Key architectural decisions:
 ### Pending Todos
 
 - [ ] Add venom spitting mechanic with snake splitting (todos/pending/2026-02-05-venom-spitting-snake-split-mechanic.md)
-- [ ] Add changelog and about page with attribution (todos/pending/2026-02-05-changelog-and-about-page.md)
 - [ ] QR code should auto-join room (todos/pending/2026-02-05-qr-code-auto-join-room.md)
 - [ ] Improve mobile responsive layout (todos/pending/2026-02-04-mobile-responsive-layout.md)
 - [ ] Multi-language backend showcase (todos/pending/2026-01-31-multi-language-multi-backend-showcase.md)
