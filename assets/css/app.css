@@ -243,12 +243,20 @@ body {
     top: 20px;
     right: 20px;
     padding: 12px 20px;
-    background: rgba(0, 0, 0, 0.8);
+    background: rgba(0, 0, 0, 0.9);
     color: white;
-    border-radius: 4px;
+    border-radius: 6px;
     font-size: 14px;
+    font-weight: 500;
     z-index: 1000;
     animation: slideInFadeOut 3s ease-out forwards;
+    border: 2px solid transparent;
+    background-image:
+        linear-gradient(rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0.9)),
+        linear-gradient(135deg, #f58231, #e6194b, #911eb4, #4363d8, #3cb44b, #ffe119);
+    background-origin: border-box;
+    background-clip: padding-box, border-box;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 @keyframes slideInFadeOut {

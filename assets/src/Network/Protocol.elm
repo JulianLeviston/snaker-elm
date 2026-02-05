@@ -4,6 +4,7 @@ module Network.Protocol exposing
     , SnakeState
     , SnakeStatus(..)
     , AppleState
+    , KillEvent
     , InputPayload
     , PlayerJoinPayload
     , PlayerLeavePayload
@@ -67,6 +68,7 @@ type alias StateSyncPayload =
     , scores : Dict String Int
     , tick : Int
     , isFull : Bool -- True for full sync, False for delta
+    , kills : List KillEvent -- Kills that happened this tick
     }
 
 
@@ -88,6 +90,14 @@ type alias SnakeState =
 type alias AppleState =
     { position : Position
     , expiresAtTick : Int
+    }
+
+
+{-| Kill event for notifications.
+-}
+type alias KillEvent =
+    { victimName : String
+    , killerName : Maybe String -- Nothing if self-kill
     }
 
 
@@ -170,6 +180,24 @@ encodeStateSync payload =
         , ( "scores", encodeScores payload.scores )
         , ( "tick", JE.int payload.tick )
         , ( "is_full", JE.bool payload.isFull )
+        , ( "kills", JE.list encodeKillEvent payload.kills )
+        ]
+
+
+{-| Encode a KillEvent to JSON.
+-}
+encodeKillEvent : KillEvent -> JE.Value
+encodeKillEvent kill =
+    JE.object
+        [ ( "victim_name", JE.string kill.victimName )
+        , ( "killer_name"
+          , case kill.killerName of
+                Just name ->
+                    JE.string name
+
+                Nothing ->
+                    JE.null
+          )
         ]
 
 
@@ -309,12 +337,22 @@ decodeGameMessage =
 -}
 decodeStateSync : JD.Decoder StateSyncPayload
 decodeStateSync =
-    JD.map5 StateSyncPayload
+    JD.map6 StateSyncPayload
         (JD.field "snakes" (JD.list decodeSnakeState))
         (JD.field "apples" (JD.list decodeAppleState))
         (JD.field "scores" decodeScores)
         (JD.field "tick" JD.int)
         (JD.field "is_full" JD.bool)
+        (JD.field "kills" (JD.list decodeKillEvent))
+
+
+{-| Decode a KillEvent from JSON.
+-}
+decodeKillEvent : JD.Decoder KillEvent
+decodeKillEvent =
+    JD.map2 KillEvent
+        (JD.field "victim_name" JD.string)
+        (JD.field "killer_name" (JD.nullable JD.string))
 
 
 {-| Decode a SnakeState from JSON.

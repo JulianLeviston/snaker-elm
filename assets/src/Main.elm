@@ -906,8 +906,23 @@ update msg model =
                             let
                                 newClientState =
                                     ClientGame.applyHostState stateSync clientState
+
+                                -- Generate kill notifications for any kills this tick
+                                killCmds =
+                                    stateSync.kills
+                                        |> List.filterMap
+                                            (\kill ->
+                                                case kill.killerName of
+                                                    Just killerName ->
+                                                        Just (Random.generate (\verb -> ShowKillNotification killerName verb kill.victimName) KillVerbs.generate)
+
+                                                    Nothing ->
+                                                        Nothing
+                                            )
                             in
-                            ( { model | clientGame = Just newClientState }, Cmd.none )
+                            ( { model | clientGame = Just newClientState }
+                            , Cmd.batch killCmds
+                            )
 
                         Err _ ->
                             ( model, Cmd.none )

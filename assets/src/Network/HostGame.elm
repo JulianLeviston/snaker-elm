@@ -358,7 +358,7 @@ tick state =
     { state = finalState
     , needsAppleSpawn = applesNeeded
     , expiredApples = expirationResult.expired
-    , stateSync = toStateSyncPayload isFull finalState
+    , stateSync = toStateSyncPayloadWithKills isFull collisionResult.kills finalState
     , kills = collisionResult.kills
     }
 
@@ -669,6 +669,13 @@ use Engine.Grid.defaultDimensions (30x40) which never changes during gameplay.
 -}
 toStateSyncPayload : Bool -> HostGameState -> StateSyncPayload
 toStateSyncPayload isFull state =
+    toStateSyncPayloadWithKills isFull [] state
+
+
+{-| Convert game state to StateSyncPayload with kills for broadcasting.
+-}
+toStateSyncPayloadWithKills : Bool -> List Kill -> HostGameState -> StateSyncPayload
+toStateSyncPayloadWithKills isFull kills state =
     { snakes =
         Dict.values state.snakes
             |> List.filter (\snakeData -> snakeData.status /= Dead) -- Don't include dead snakes
@@ -698,6 +705,18 @@ toStateSyncPayload isFull state =
     , scores = state.scores
     , tick = state.currentTick
     , isFull = isFull
+    , kills =
+        List.filterMap
+            (\kill ->
+                -- Only include kills with a killer (not self-kills) for notifications
+                case kill.killerName of
+                    Just killerName ->
+                        Just { victimName = kill.victimName, killerName = Just killerName }
+
+                    Nothing ->
+                        Nothing
+            )
+            kills
     }
 
 
