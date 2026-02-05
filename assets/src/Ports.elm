@@ -28,6 +28,8 @@ port module Ports exposing
       -- QR code generation
     , generateQRCode
     , qrCodeGenerated
+      -- Touch controls
+    , receiveTouchDirection
     )
 
 import Json.Decode as JD
@@ -130,3 +132,10 @@ port generateQRCode : String -> Cmd msg
 
 
 port qrCodeGenerated : (JD.Value -> msg) -> Sub msg
+
+
+
+-- Touch Controls port
+
+
+port receiveTouchDirection : (String -> msg) -> Sub msg

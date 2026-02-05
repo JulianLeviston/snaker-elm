@@ -492,3 +492,128 @@
     color: #666;
     font-size: 14px;
 }
+
+/* ==========================================================================
+   Mobile Touch Controls (D-pad)
+   ========================================================================== */
+
+.dpad {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 140px;
+    height: 140px;
+    z-index: 1000;
+    touch-action: none;
+    /* Only show on touch devices */
+    display: none;
+}
+
+@media (pointer: coarse) {
+    .dpad {
+        display: block;
+    }
+}
+
+.dpad.dpad-hidden .dpad-btn {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.dpad-btn {
+    position: absolute;
+    width: 48px;
+    height: 48px;
+    border: none;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.5);
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.1s, opacity 0.2s, transform 0.1s;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.dpad-btn svg {
+    width: 24px;
+    height: 24px;
+}
+
+.dpad-btn:active,
+.dpad-btn.active {
+    background: rgba(76, 175, 80, 0.8);
+    transform: scale(0.95);
+}
+
+.dpad-up {
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.dpad-up:active,
+.dpad-up.active {
+    transform: translateX(-50%) scale(0.95);
+}
+
+.dpad-down {
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.dpad-down:active,
+.dpad-down.active {
+    transform: translateX(-50%) scale(0.95);
+}
+
+.dpad-left {
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.dpad-left:active,
+.dpad-left.active {
+    transform: translateY(-50%) scale(0.95);
+}
+
+.dpad-right {
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.dpad-right:active,
+.dpad-right.active {
+    transform: translateY(-50%) scale(0.95);
+}
+
+.dpad-toggle {
+    position: absolute;
+    bottom: -35px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 30px;
+    height: 30px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.3);
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.dpad-toggle svg {
+    width: 18px;
+    height: 18px;
+}
+
+.dpad-toggle:active {
+    background: rgba(0, 0, 0, 0.5);
+}

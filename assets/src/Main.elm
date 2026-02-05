@@ -1551,7 +1551,30 @@ subscriptions model =
         , Ports.hostMigration GotHostMigration
           -- QR code generation
         , Ports.qrCodeGenerated GotQRCodeGenerated
+          -- Touch controls
+        , Ports.receiveTouchDirection (stringToDirection >> KeyPressed)
         ]
+
+
+{-| Convert string direction from touch controls to Maybe Direction.
+-}
+stringToDirection : String -> Maybe Direction
+stringToDirection str =
+    case str of
+        "up" ->
+            Just Up
+
+        "down" ->
+            Just Down
+
+        "left" ->
+            Just Left
+
+        "right" ->
+            Just Right
+
+        _ ->
+            Nothing
 
 
 main : Program Flags Model Msg

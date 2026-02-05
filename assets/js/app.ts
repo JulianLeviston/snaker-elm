@@ -4,6 +4,7 @@ import { Elm } from "../src/Main.elm";
 import { connectSocket } from "./socket";
 import { setupPeerPorts } from "./peerjs-ports";
 import { setupQRPorts } from "./qr-generator";
+import { setupTouchControls } from "./touch-controls";
 
 interface ElmApp {
   ports: {
@@ -37,6 +38,8 @@ interface ElmApp {
     // QR code generation ports
     generateQRCode: { subscribe: (callback: (url: string) => void) => void };
     qrCodeGenerated: { send: (result: { success: boolean; dataUrl?: string; error?: string }) => void };
+    // Touch controls port
+    receiveTouchDirection: { send: (direction: string) => void };
   };
 }
 
@@ -80,6 +83,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Setup QR code generation ports
   setupQRPorts(app as any);
+
+  // Setup touch controls for mobile
+  setupTouchControls(app.ports);
 
   // Subscribe to mode persistence port
   app.ports.saveMode.subscribe((mode: string) => {
