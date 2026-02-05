@@ -2,6 +2,7 @@ module Snake exposing
     ( Snake
     , Position
     , Direction(..)
+    , PenaltyState
     , directionToString
     , decoder
     , positionDecoder
@@ -24,6 +25,20 @@ type Direction
 type alias Position =
     { x : Int
     , y : Int
+    }
+
+
+{-| Penalty state for skull eating animation.
+
+Animation timeline (6 ticks = 600ms):
+- Ticks 0-1: Flash 1 (doomed segments highlighted red, opacity pulse)
+- Ticks 2-3: Flash 2
+- Ticks 4-5: Flash 3 + jitter effect
+- Tick 6: Actually remove segments and halve score
+-}
+type alias PenaltyState =
+    { segmentsToRemove : Int
+    , flashPhase : Int -- 0-6 (flash 3x at 2 ticks each)
     }
 
 

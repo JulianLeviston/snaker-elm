@@ -627,6 +627,7 @@ checkAllAppleEating state =
 
 
 {-| Check if a specific snake eats any apple.
+    Uses stage-based scoring. Skulls cause immediate penalty (halve score and length).
 -}
 checkAppleEatingForSnake : String -> SnakeData -> HostGameState -> HostGameState
 checkAppleEatingForSnake playerId snakeData state =
@@ -637,27 +638,56 @@ checkAppleEatingForSnake playerId snakeData state =
         Just headPos ->
             let
                 result =
-                    Apple.checkEaten headPos state.apples
+                    Apple.checkEatenWithStage state.currentTick headPos state.apples
             in
             if result.eaten then
-                let
-                    snake =
-                        snakeData.snake
+                if result.isSkull then
+                    -- Skull penalty: halve score and snake length immediately
+                    let
+                        snake =
+                            snakeData.snake
 
-                    grownSnake =
-                        { snake | pendingGrowth = snake.pendingGrowth + Apple.growthAmount }
+                        newBodyLength =
+                            max 3 (List.length snake.body // 2)
 
-                    updatedData =
-                        { snakeData | snake = grownSnake }
+                        penalizedSnake =
+                            { snake | body = List.take newBodyLength snake.body }
 
-                    currentScore =
-                        Dict.get playerId state.scores |> Maybe.withDefault 0
-                in
-                { state
-                    | apples = result.remaining
-                    , snakes = Dict.insert playerId updatedData state.snakes
-                    , scores = Dict.insert playerId (currentScore + 1) state.scores
-                }
+                        updatedData =
+                            { snakeData | snake = penalizedSnake }
+
+                        currentScore =
+                            Dict.get playerId state.scores |> Maybe.withDefault 0
+
+                        newScore =
+                            max 0 (currentScore // 2)
+                    in
+                    { state
+                        | apples = result.remaining
+                        , snakes = Dict.insert playerId updatedData state.snakes
+                        , scores = Dict.insert playerId newScore state.scores
+                    }
+
+                else
+                    -- Normal apple: apply stage-based score and growth
+                    let
+                        snake =
+                            snakeData.snake
+
+                        grownSnake =
+                            { snake | pendingGrowth = snake.pendingGrowth + result.growth }
+
+                        updatedData =
+                            { snakeData | snake = grownSnake }
+
+                        currentScore =
+                            Dict.get playerId state.scores |> Maybe.withDefault 0
+                    in
+                    { state
+                        | apples = result.remaining
+                        , snakes = Dict.insert playerId updatedData state.snakes
+                        , scores = Dict.insert playerId (currentScore + result.score) state.scores
+                    }
 
             else
                 state
@@ -699,7 +729,7 @@ toStateSyncPayloadWithKills isFull kills state =
         List.map
             (\apple ->
                 { position = apple.position
-                , expiresAtTick = apple.expiresAtTick
+                , spawnedAtTick = apple.spawnedAtTick
                 }
             )
             state.apples
@@ -732,7 +762,7 @@ statusToProtocol status =
 
 {-| Convert HostGameState to GameState for rendering with existing Board.view.
 -}
-toGameState : HostGameState -> { snakes : List Snake, apples : List { position : Position }, gridWidth : Int, gridHeight : Int, hostId : String, scores : Dict String Int, leaderId : Maybe String }
+toGameState : HostGameState -> { snakes : List Snake, apples : List { position : Position, spawnedAtTick : Int }, gridWidth : Int, gridHeight : Int, hostId : String, scores : Dict String Int, leaderId : Maybe String, currentTick : Int }
 toGameState state =
     { snakes =
         Dict.values state.snakes
@@ -757,12 +787,13 @@ toGameState state =
                         , state = stateStr
                     }
                 )
-    , apples = List.map (\apple -> { position = apple.position }) state.apples
+    , apples = List.map (\apple -> { position = apple.position, spawnedAtTick = apple.spawnedAtTick }) state.apples
     , gridWidth = state.grid.width
     , gridHeight = state.grid.height
     , hostId = state.hostId
     , scores = state.scores
     , leaderId = findLeader state.scores
+    , currentTick = state.currentTick
     }
 
 
@@ -888,7 +919,7 @@ fromClientState newHostId lastTick snakes apples scores =
             List.map
                 (\appleState ->
                     { position = appleState.position
-                    , expiresAtTick = appleState.expiresAtTick
+                    , spawnedAtTick = appleState.spawnedAtTick
                     }
                 )
                 apples

@@ -191,7 +191,7 @@ getMySnake clientState =
 Marks our snake appropriately and applies optimistic input.
 Uses hardcoded grid dimensions from Engine.Grid.defaultDimensions.
 -}
-toGameState : ClientGameState -> { snakes : List Snake, apples : List { position : Position }, gridWidth : Int, gridHeight : Int, hostId : Maybe String, scores : Dict String Int, leaderId : Maybe String }
+toGameState : ClientGameState -> { snakes : List Snake, apples : List { position : Position, spawnedAtTick : Int }, gridWidth : Int, gridHeight : Int, hostId : Maybe String, scores : Dict String Int, leaderId : Maybe String, currentTick : Int }
 toGameState clientState =
     let
         -- Convert SnakeState to Snake, applying optimistic direction for our snake
@@ -228,9 +228,9 @@ toGameState clientState =
                         }
                     )
 
-        -- Convert AppleState to simple position record
+        -- Convert AppleState to record with spawn tick for aging
         appleList =
-            List.map (\a -> { position = a.position }) clientState.apples
+            List.map (\a -> { position = a.position, spawnedAtTick = a.spawnedAtTick }) clientState.apples
 
         -- Use hardcoded grid dimensions (same as host)
         grid =
@@ -243,6 +243,7 @@ toGameState clientState =
     , hostId = clientState.currentHostId
     , scores = clientState.scores
     , leaderId = findLeader clientState.scores
+    , currentTick = clientState.lastHostTick
     }
 
 

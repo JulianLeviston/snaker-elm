@@ -1,9 +1,12 @@
 module Engine.Apple exposing
     ( Apple
+    , AppleStage(..)
     , checkEaten
+    , checkEatenWithStage
+    , getStage
+    , stageValues
     , spawnIfNeeded
     , tickExpiredApples
-    , growthAmount
     , minApples
     , ticksUntilExpiry
     , randomSafePosition
@@ -11,19 +14,34 @@ module Engine.Apple exposing
 
 {-| Apple spawning, eating, and expiration logic.
 
-Matches Elixir Game.Apple behavior with addition of expiration.
+Apples progress through aging stages:
+- Fresh (0-24 ticks): Green, +1 score, +1 growth
+- Aging (25-49 ticks): Yellow, +2 score, +2 growth
+- Old (50-79 ticks): Red, +3 score, +3 growth
+- Expiring (80-99 ticks): Red + pulse, +3 score, +3 growth
+- Skull (100+ ticks): White skull, -50% score, -50% length
 -}
 
 import Random
 import Snake exposing (Position)
 
 
-{-| Apple with position and expiration tick.
+{-| Apple with position and spawn tick for age calculation.
 -}
 type alias Apple =
     { position : Position
-    , expiresAtTick : Int
+    , spawnedAtTick : Int
     }
+
+
+{-| Apple aging stage determines appearance and reward.
+-}
+type AppleStage
+    = Fresh -- Green, ticks 0-24
+    | Aging -- Yellow, ticks 25-49
+    | Old -- Red, ticks 50-79
+    | Expiring -- Red + pulse, ticks 80-99
+    | Skull -- White skull, ticks 100+
 
 
 {-| Minimum number of apples that should always be on the board.
@@ -34,20 +52,58 @@ minApples =
     3
 
 
-{-| Segments added to snake when eating an apple.
-Matches Elixir @growth_per_apple.
--}
-growthAmount : Int
-growthAmount =
-    3
-
-
-{-| Number of ticks before an apple expires and respawns.
+{-| Number of ticks before an apple becomes a skull.
 10 seconds at 100ms per tick.
 -}
 ticksUntilExpiry : Int
 ticksUntilExpiry =
     100
+
+
+{-| Determine the stage of an apple based on its age.
+-}
+getStage : Int -> Apple -> AppleStage
+getStage currentTick apple =
+    let
+        age =
+            currentTick - apple.spawnedAtTick
+    in
+    if age <= 24 then
+        Fresh
+
+    else if age <= 49 then
+        Aging
+
+    else if age <= 79 then
+        Old
+
+    else if age <= 99 then
+        Expiring
+
+    else
+        Skull
+
+
+{-| Get score and growth values for a stage.
+Returns score, growth, and whether it's a skull (penalty).
+-}
+stageValues : AppleStage -> { score : Int, growth : Int, isSkull : Bool }
+stageValues stage =
+    case stage of
+        Fresh ->
+            { score = 1, growth = 1, isSkull = False }
+
+        Aging ->
+            { score = 2, growth = 2, isSkull = False }
+
+        Old ->
+            { score = 3, growth = 3, isSkull = False }
+
+        Expiring ->
+            { score = 3, growth = 3, isSkull = False }
+
+        Skull ->
+            { score = 0, growth = 0, isSkull = True }
 
 
 {-| Check if snake head has eaten any apple.
@@ -74,15 +130,56 @@ checkEaten snakeHead apples =
             }
 
 
-{-| Check for expired apples and separate them from remaining.
+{-| Check if snake head has eaten any apple, returning stage-based values.
 
-Returns apples that have expired (need respawning) and those still valid.
+Returns score/growth based on apple stage, and whether skull penalty applies.
+-}
+checkEatenWithStage : Int -> Position -> List Apple -> { eaten : Bool, remaining : List Apple, score : Int, growth : Int, isSkull : Bool }
+checkEatenWithStage currentTick snakeHead apples =
+    let
+        ( eaten, remaining ) =
+            List.partition (\apple -> apple.position == snakeHead) apples
+    in
+    case eaten of
+        eatenApple :: _ ->
+            let
+                stage =
+                    getStage currentTick eatenApple
+
+                values =
+                    stageValues stage
+            in
+            { eaten = True
+            , remaining = remaining
+            , score = values.score
+            , growth = values.growth
+            , isSkull = values.isSkull
+            }
+
+        [] ->
+            { eaten = False
+            , remaining = apples
+            , score = 0
+            , growth = 0
+            , isSkull = False
+            }
+
+
+{-| Check for truly expired apples (skulls that have been around too long).
+
+Skulls stay on the board for 50 more ticks (5 seconds) after becoming skulls,
+then they expire and respawn as fresh apples.
 -}
 tickExpiredApples : Int -> List Apple -> { expired : List Apple, remaining : List Apple }
 tickExpiredApples currentTick apples =
     let
+        -- Skulls (age >= 100) stay for another 50 ticks before expiring
+        -- Total lifespan: 150 ticks = 15 seconds
+        maxAge =
+            ticksUntilExpiry + 50
+
         ( expired, remaining ) =
-            List.partition (\apple -> currentTick >= apple.expiresAtTick) apples
+            List.partition (\apple -> (currentTick - apple.spawnedAtTick) >= maxAge) apples
     in
     { expired = expired, remaining = remaining }
 

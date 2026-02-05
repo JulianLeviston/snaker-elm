@@ -345,7 +345,7 @@ update msg model =
                     let
                         apple =
                             { position = pos
-                            , expiresAtTick = localState.currentTick + Apple.ticksUntilExpiry
+                            , spawnedAtTick = localState.currentTick
                             }
 
                         newState =
@@ -869,7 +869,7 @@ update msg model =
                     let
                         apple =
                             { position = pos
-                            , expiresAtTick = hostState.currentTick + Apple.ticksUntilExpiry
+                            , spawnedAtTick = hostState.currentTick
                             }
 
                         newState =
@@ -1515,7 +1515,7 @@ viewGame model =
                     HostGame.toGameState hostState
             in
             div [ class "game-layout" ]
-                [ wrapWithShake (Board.viewWithLeader gameState model.myPeerId gameState.leaderId)
+                [ wrapWithShake (Board.viewWithTickAndLeader gameState model.myPeerId gameState.leaderId)
                 , Scoreboard.view gameState.snakes gameState.scores model.myPeerId
                 ]
 
@@ -1528,7 +1528,7 @@ viewGame model =
                             ClientGame.toGameState clientState
                     in
                     div [ class "game-layout" ]
-                        [ wrapWithShake (Board.viewWithLeader gameState model.myPeerId gameState.leaderId)
+                        [ wrapWithShake (Board.viewWithTickAndLeader gameState model.myPeerId gameState.leaderId)
                         , Scoreboard.view gameState.snakes gameState.scores model.myPeerId
                         ]
 
@@ -1542,7 +1542,7 @@ viewGame model =
                                             LocalGame.toGameState localState
                                     in
                                     div [ class "game-layout" ]
-                                        [ wrapWithShake (Board.view gameState model.playerId)
+                                        [ wrapWithShake (Board.viewWithTick gameState model.playerId)
                                         , Scoreboard.view gameState.snakes Dict.empty model.playerId
                                         ]
 

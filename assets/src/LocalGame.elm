@@ -34,6 +34,7 @@ type alias LocalGameState =
     , currentTick : Int
     , invincibleUntilTick : Int
     , needsRespawn : Bool
+    , penaltyState : Maybe Snake.PenaltyState -- For skull penalty animation
     }
 
 
@@ -67,6 +68,7 @@ init =
                 , currentTick = 0
                 , invincibleUntilTick = 15  -- 1500ms invincibility at start
                 , needsRespawn = False
+                , penaltyState = Nothing
                 }
             )
 
@@ -84,58 +86,104 @@ randomPosition grid =
 {-| Process a single game tick.
 
 Order matches Elixir GameServer:
-1. Apply buffered input
-2. Move snake
-3. Check collisions
-4. Check apple eating
-5. Check apple expiration
+1. Process penalty animation if active
+2. Apply buffered input
+3. Move snake
+4. Check collisions
+5. Check apple eating
+6. Check apple expiration
 -}
 tick : LocalGameState -> TickResult
 tick state =
-    let
-        -- 1. Apply buffered input
-        stateWithInput =
-            applyInputBuffer state
-
-        -- 2. Move snake
-        stateAfterMove =
-            moveSnake stateWithInput
-
-        -- 3. Check collisions (only if not invincible)
-        stateAfterCollisions =
-            checkCollisions stateAfterMove
-
-        -- 4. Check apple eating
-        stateAfterEating =
-            checkAppleEating stateAfterCollisions
-
-        -- 5. Check apple expiration
-        expirationResult =
-            Apple.tickExpiredApples stateAfterEating.currentTick stateAfterEating.apples
-
-        stateAfterExpiration =
-            { stateAfterEating | apples = expirationResult.remaining }
-
-        -- 6. Clear input buffer and increment tick
-        finalState =
-            { stateAfterExpiration
-                | inputBuffer = Nothing
-                , currentTick = stateAfterExpiration.currentTick + 1
+    -- Check if we're in penalty animation
+    case state.penaltyState of
+        Just penalty ->
+            -- Process penalty tick
+            let
+                newState =
+                    processPenaltyTick penalty state
+            in
+            { state = { newState | currentTick = newState.currentTick + 1 }
+            , needsAppleSpawn = 0
+            , expiredApples = []
             }
 
-        -- Calculate how many apples we need to spawn
-        applesNeeded =
-            Apple.spawnIfNeeded finalState.apples
-    in
-    { state = finalState
-    , needsAppleSpawn = applesNeeded + List.length expirationResult.expired
-    , expiredApples = expirationResult.expired
-    }
+        Nothing ->
+            -- Normal tick processing
+            let
+                -- 1. Apply buffered input
+                stateWithInput =
+                    applyInputBuffer state
+
+                -- 2. Move snake
+                stateAfterMove =
+                    moveSnake stateWithInput
+
+                -- 3. Check collisions (only if not invincible)
+                stateAfterCollisions =
+                    checkCollisions stateAfterMove
+
+                -- 4. Check apple eating (with stage-based values)
+                stateAfterEating =
+                    checkAppleEating stateAfterCollisions
+
+                -- 5. Check apple expiration
+                expirationResult =
+                    Apple.tickExpiredApples stateAfterEating.currentTick stateAfterEating.apples
+
+                stateAfterExpiration =
+                    { stateAfterEating | apples = expirationResult.remaining }
+
+                -- 6. Clear input buffer and increment tick
+                finalState =
+                    { stateAfterExpiration
+                        | inputBuffer = Nothing
+                        , currentTick = stateAfterExpiration.currentTick + 1
+                    }
+
+                -- Calculate how many apples we need to spawn
+                applesNeeded =
+                    Apple.spawnIfNeeded finalState.apples
+            in
+            { state = finalState
+            , needsAppleSpawn = applesNeeded + List.length expirationResult.expired
+            , expiredApples = expirationResult.expired
+            }
+
+
+{-| Process one tick of the penalty animation.
+-}
+processPenaltyTick : Snake.PenaltyState -> LocalGameState -> LocalGameState
+processPenaltyTick penalty state =
+    if penalty.flashPhase < 6 then
+        -- Continue animation
+        { state | penaltyState = Just { penalty | flashPhase = penalty.flashPhase + 1 } }
+
+    else
+        -- Apply actual penalty
+        let
+            snake =
+                state.snake
+
+            newBodyLength =
+                max 3 (List.length snake.body - penalty.segmentsToRemove)
+
+            penalizedSnake =
+                { snake | body = List.take newBodyLength snake.body }
+
+            newScore =
+                max 0 (state.score // 2)
+        in
+        { state
+            | snake = penalizedSnake
+            , score = newScore
+            , penaltyState = Nothing
+        }
 
 
 {-| Check if snake head has eaten an apple.
 
-Updates score, grows snake, and removes eaten apple.
+Uses stage-based scoring and growth. Skulls trigger penalty animation.
 -}
 checkAppleEating : LocalGameState -> LocalGameState
 checkAppleEating state =
@@ -146,21 +194,38 @@ checkAppleEating state =
         Just headPos ->
             let
                 result =
-                    Apple.checkEaten headPos state.apples
+                    Apple.checkEatenWithStage state.currentTick headPos state.apples
             in
             if result.eaten then
-                let
-                    snake =
-                        state.snake
+                if result.isSkull then
+                    -- Skull penalty: start animation
+                    let
+                        segmentsToRemove =
+                            List.length state.snake.body // 2
+                    in
+                    { state
+                        | apples = result.remaining
+                        , penaltyState =
+                            Just
+                                { segmentsToRemove = segmentsToRemove
+                                , flashPhase = 0
+                                }
+                    }
 
-                    grownSnake =
-                        { snake | pendingGrowth = snake.pendingGrowth + Apple.growthAmount }
-                in
-                { state
-                    | apples = result.remaining
-                    , snake = grownSnake
-                    , score = state.score + 1
-                }
+                else
+                    -- Normal apple: apply score and growth based on stage
+                    let
+                        snake =
+                            state.snake
+
+                        grownSnake =
+                            { snake | pendingGrowth = snake.pendingGrowth + result.growth }
+                    in
+                    { state
+                        | apples = result.remaining
+                        , snake = grownSnake
+                        , score = state.score + result.score
+                    }
 
             else
                 state
@@ -322,12 +387,13 @@ respawnSnake pos state =
         | snake = respawnedSnake
         , invincibleUntilTick = state.currentTick + 15  -- 1500ms at 100ms ticks
         , needsRespawn = False
+        , penaltyState = Nothing  -- Clear any penalty state
     }
 
 
 {-| Convert LocalGameState to GameState for rendering with existing Board.view.
 -}
-toGameState : LocalGameState -> { snakes : List Snake, apples : List { position : Position }, gridWidth : Int, gridHeight : Int }
+toGameState : LocalGameState -> { snakes : List Snake, apples : List { position : Position, spawnedAtTick : Int }, gridWidth : Int, gridHeight : Int, currentTick : Int, penaltyState : Maybe Snake.PenaltyState }
 toGameState state =
     let
         snake =
@@ -338,7 +404,9 @@ toGameState state =
             { snake | isInvincible = state.currentTick < state.invincibleUntilTick }
     in
     { snakes = [ snakeWithInvincibility ]
-    , apples = List.map (\apple -> { position = apple.position }) state.apples
+    , apples = List.map (\apple -> { position = apple.position, spawnedAtTick = apple.spawnedAtTick }) state.apples
     , gridWidth = state.grid.width
     , gridHeight = state.grid.height
+    , currentTick = state.currentTick
+    , penaltyState = state.penaltyState
     }

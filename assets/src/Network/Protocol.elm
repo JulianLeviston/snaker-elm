@@ -89,7 +89,7 @@ type alias SnakeState =
 -}
 type alias AppleState =
     { position : Position
-    , expiresAtTick : Int
+    , spawnedAtTick : Int
     }
 
 
@@ -239,7 +239,7 @@ encodeAppleState : AppleState -> JE.Value
 encodeAppleState apple =
     JE.object
         [ ( "position", encodePosition apple.position )
-        , ( "expires_at_tick", JE.int apple.expiresAtTick )
+        , ( "spawned_at_tick", JE.int apple.spawnedAtTick )
         ]
 
 
@@ -397,7 +397,7 @@ decodeAppleState : JD.Decoder AppleState
 decodeAppleState =
     JD.map2 AppleState
         (JD.field "position" decodePosition)
-        (JD.field "expires_at_tick" JD.int)
+        (JD.field "spawned_at_tick" JD.int)
 
 
 {-| Decode an InputPayload from JSON.
