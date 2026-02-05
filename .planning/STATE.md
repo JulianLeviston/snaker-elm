@@ -42,7 +42,6 @@ Key architectural decisions:
 - [ ] Host leave causes room to show UUID (todos/pending/2026-02-05-host-leave-room-shows-uuid.md)
 - [ ] Add apple aging lifecycle with skull penalty (todos/pending/2026-02-05-apple-aging-and-skull-mechanic.md)
 - [ ] Improve mobile responsive layout (todos/pending/2026-02-04-mobile-responsive-layout.md)
-- [ ] Update repo to reference official live URL (todos/pending/2026-02-05-update-official-url.md)
 - [ ] UX polish: Move connection status to top of game area, improve visual hierarchy
 - [ ] Visual effects enhancement: nicer fades, highlights, transitions
 - [ ] UI styling improvements: functional but needs polish

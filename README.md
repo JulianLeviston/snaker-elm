@@ -2,6 +2,8 @@
 
 A multiplayer Snake game written in Elm and Phoenix, with support for both server-based and peer-to-peer gameplay.
 
+**Play Now: [genericoverlords.com/snaker](https://www.genericoverlords.com/snaker)**
+
 ![](https://raw.githubusercontent.com/JulianLeviston/snaker-elm/main/images/snaker-elm.png)
 
 ## Background
