@@ -42,9 +42,7 @@ viewWithLeader gameState maybePlayerId maybeLeaderId =
             gameState.gridHeight * cellSize
     in
     svg
-        [ SA.width (String.fromInt width)
-        , SA.height (String.fromInt height)
-        , SA.viewBox ("0 0 " ++ String.fromInt width ++ " " ++ String.fromInt height)
+        [ SA.viewBox ("0 0 " ++ String.fromInt width ++ " " ++ String.fromInt height)
         , svgClass "game-board"
         ]
         [ background width height
