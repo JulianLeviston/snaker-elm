@@ -20,6 +20,38 @@
     }
 }
 
+/* Mobile layout improvements */
+@media (max-width: 600px) {
+    .game-container {
+        padding: 10px !important;
+    }
+
+    .game-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+    }
+
+    .game-header h1 {
+        font-size: 1.2em;
+        margin: 0;
+    }
+
+    .connection-panel {
+        padding: 10px;
+        margin-bottom: 10px;
+    }
+
+    .connection-status {
+        margin: 5px 0;
+    }
+
+    .connection-actions {
+        margin-top: 10px;
+    }
+}
+
 /* ==========================================================================
    Game Visual Effects
    ========================================================================== */
@@ -219,6 +251,15 @@
     border-radius: 4px;
     min-width: 180px;
     z-index: 100;
+}
+
+/* On mobile, make scoreboard flow with document instead of fixed overlay */
+@media (max-width: 600px) {
+    .scoreboard {
+        position: static;
+        margin: 10px 0;
+        min-width: auto;
+    }
 }
 
 .scoreboard h3 {

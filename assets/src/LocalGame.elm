@@ -72,11 +72,12 @@ init =
 
 
 {-| Generate a random position within grid bounds.
+    Ensures x >= 2 to leave room for initial snake tail segments.
 -}
 randomPosition : { width : Int, height : Int } -> Random.Generator Position
 randomPosition grid =
     Random.map2 Position
-        (Random.int 0 (grid.width - 1))
+        (Random.int 2 (grid.width - 1))
         (Random.int 0 (grid.height - 1))
 
 

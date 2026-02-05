@@ -1131,7 +1131,7 @@ spawnAppleCommands count occupied grid =
 randomPosition : { width : Int, height : Int } -> Random.Generator Position
 randomPosition grid =
     Random.map2 Position
-        (Random.int 0 (grid.width - 1))
+        (Random.int 2 (grid.width - 1))
         (Random.int 0 (grid.height - 1))
 
 
