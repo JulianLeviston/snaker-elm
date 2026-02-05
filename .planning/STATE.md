@@ -38,6 +38,7 @@ Key architectural decisions:
 
 ### Pending Todos
 
+- [ ] Fix app title and add version number (todos/pending/2026-02-05-fix-app-title-add-version.md)
 - [ ] Remove blue background from status text (todos/pending/2026-02-05-remove-status-blue-background.md)
 - [ ] Make player colors more distinct (todos/pending/2026-02-05-distinct-player-colors.md)
 - [ ] Host leave causes room to show UUID (todos/pending/2026-02-05-host-leave-room-shows-uuid.md)
