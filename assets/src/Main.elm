@@ -149,15 +149,18 @@ type Msg
       -- Info screen messages
     | OpenInfo
     | CloseInfo
+      -- Auto-join from URL
+    | TriggerAutoJoin String
 
 
 init : Flags -> ( Model, Cmd Msg )
 init flags =
-    -- First check for room code in URL (auto-join via QR code or shared link)
+    -- Check for room code in URL - if present, go to P2P mode
+    -- (JS will trigger the actual join after ports are subscribed)
     case flags.roomCode of
-        Just roomCode ->
-            -- Auto-join the room (skip mode selection, go straight to P2P)
-            initWithAutoJoin flags.baseUrl roomCode
+        Just _ ->
+            -- Room code in URL: go to P2P mode, JS will trigger join
+            initWithMode flags.baseUrl P2PSelected
 
         Nothing ->
             -- No room code, check for saved mode
@@ -204,78 +207,6 @@ initModeSelection baseUrl =
       }
     , Cmd.none
     )
-
-
-{-| Initialize with auto-join (room code in URL from QR code or shared link).
--}
-initWithAutoJoin : String -> String -> ( Model, Cmd Msg )
-initWithAutoJoin baseUrl roomCode =
-    let
-        normalizedCode =
-            roomCode
-                |> String.toUpper
-                |> String.filter Char.isAlpha
-                |> String.left 4
-    in
-    if String.length normalizedCode == 4 then
-        -- Valid room code: auto-join immediately
-        ( { gameState = Nothing
-          , localGame = Nothing
-          , hostGame = Nothing
-          , clientGame = Nothing
-          , playerId = Nothing
-          , myPeerId = Nothing
-          , currentDirection = Right
-          , connectionStatus = Disconnected
-          , error = Nothing
-          , notification = Just "Joining room..."
-          , gameMode = LocalMode
-          , pendingAppleSpawns = 0
-          , p2pState = P2PJoiningRoom normalizedCode
-          , roomCodeInput = normalizedCode
-          , showCopiedFeedback = False
-          , showingCollision = False
-          , screen = GameScreen
-          , selectedMode = Just P2PSelected
-          , baseUrl = baseUrl
-          , qrCodeDataUrl = Nothing
-          , copyCodeState = ShareUI.Ready
-          , copyUrlState = ShareUI.Ready
-          }
-        , Cmd.batch
-            [ Ports.joinRoom normalizedCode
-            , Ports.saveMode "p2p"
-            , Process.sleep 3000 |> Task.perform (\_ -> ClearNotification)
-            ]
-        )
-
-    else
-        -- Invalid room code: show P2P connection UI
-        ( { gameState = Nothing
-          , localGame = Nothing
-          , hostGame = Nothing
-          , clientGame = Nothing
-          , playerId = Nothing
-          , myPeerId = Nothing
-          , currentDirection = Right
-          , connectionStatus = Disconnected
-          , error = Nothing
-          , notification = Just "Invalid room code"
-          , gameMode = LocalMode
-          , pendingAppleSpawns = 0
-          , p2pState = P2PNotConnected
-          , roomCodeInput = ""
-          , showCopiedFeedback = False
-          , showingCollision = False
-          , screen = GameScreen
-          , selectedMode = Just P2PSelected
-          , baseUrl = baseUrl
-          , qrCodeDataUrl = Nothing
-          , copyCodeState = ShareUI.Ready
-          , copyUrlState = ShareUI.Ready
-          }
-        , Process.sleep 3000 |> Task.perform (\_ -> ClearNotification)
-        )
 
 
 {-| Initialize with a specific mode already selected (returning visitor).
@@ -1262,6 +1193,25 @@ update msg model =
             in
             ( { model | screen = previousScreen }, Cmd.none )
 
+        TriggerAutoJoin roomCode ->
+            -- JS triggers this after ports are ready
+            let
+                normalizedCode =
+                    roomCode
+                        |> String.toUpper
+                        |> String.filter Char.isAlpha
+                        |> String.left 4
+            in
+            if String.length normalizedCode == 4 then
+                ( { model | p2pState = P2PJoiningRoom normalizedCode }
+                , Ports.joinRoom normalizedCode
+                )
+
+            else
+                ( { model | notification = Just "Invalid room code" }
+                , Process.sleep 3000 |> Task.perform (\_ -> ClearNotification)
+                )
+
 
 {-| Generate commands to spawn multiple apples for host game.
 -}
@@ -1790,6 +1740,8 @@ subscriptions model =
         , Ports.qrCodeGenerated GotQRCodeGenerated
           -- Touch controls
         , Ports.receiveTouchDirection (stringToDirection >> KeyPressed)
+          -- Auto-join from URL
+        , Ports.triggerAutoJoin TriggerAutoJoin
         ]
 
 

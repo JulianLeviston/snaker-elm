@@ -40,6 +40,8 @@ interface ElmApp {
     qrCodeGenerated: { send: (result: { success: boolean; dataUrl?: string; error?: string }) => void };
     // Touch controls port
     receiveTouchDirection: { send: (direction: string) => void };
+    // Auto-join port
+    triggerAutoJoin: { send: (roomCode: string) => void };
   };
 }
 
@@ -95,4 +97,9 @@ document.addEventListener("DOMContentLoaded", () => {
   app.ports.saveMode.subscribe((mode: string) => {
     localStorage.setItem("snaker-mode", mode);
   });
+
+  // If room code in URL, trigger auto-join now that ports are ready
+  if (roomCode) {
+    app.ports.triggerAutoJoin.send(roomCode);
+  }
 });

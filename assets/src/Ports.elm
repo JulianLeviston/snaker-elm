@@ -30,6 +30,8 @@ port module Ports exposing
     , qrCodeGenerated
       -- Touch controls
     , receiveTouchDirection
+      -- Auto-join trigger
+    , triggerAutoJoin
     )
 
 import Json.Decode as JD
@@ -139,3 +141,10 @@ port qrCodeGenerated : (JD.Value -> msg) -> Sub msg
 
 
 port receiveTouchDirection : (String -> msg) -> Sub msg
+
+
+
+-- Auto-join trigger (JS sends room code after ports are ready)
+
+
+port triggerAutoJoin : (String -> msg) -> Sub msg
