@@ -964,9 +964,18 @@ update msg model =
                                                 clientState.apples
                                                 clientState.scores
 
-                                        -- Generate QR code for new host's room
+                                        -- Preserve the original room code from when we joined
+                                        originalRoomCode =
+                                            case model.p2pState of
+                                                P2PConnected _ roomCode ->
+                                                    roomCode
+
+                                                _ ->
+                                                    myPeerId
+
+                                        -- Generate QR code using original room code
                                         joinUrl =
-                                            model.baseUrl ++ "?room=" ++ myPeerId
+                                            model.baseUrl ++ "?room=" ++ originalRoomCode
 
                                         qrCmd =
                                             Ports.generateQRCode joinUrl
@@ -974,7 +983,7 @@ update msg model =
                                     ( { model
                                         | hostGame = Just hostState
                                         , clientGame = Nothing
-                                        , p2pState = P2PConnected Host myPeerId
+                                        , p2pState = P2PConnected Host originalRoomCode
                                         , myPeerId = Just myPeerId
                                         , notification = Just "You are now the host"
                                         , qrCodeDataUrl = Nothing -- Reset to show loading while generating
