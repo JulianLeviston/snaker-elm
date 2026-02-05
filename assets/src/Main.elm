@@ -35,6 +35,7 @@ import View.ShareUI as ShareUI
 type alias Flags =
     { savedMode : Maybe String
     , baseUrl : String
+    , roomCode : Maybe String
     }
 
 
@@ -152,19 +153,26 @@ type Msg
 
 init : Flags -> ( Model, Cmd Msg )
 init flags =
-    -- Check for saved mode in flags
-    case flags.savedMode |> Maybe.andThen ModeSelection.modeFromString of
-        Just ModeSelection.P2PMode ->
-            -- Skip to P2P mode (show P2P connection UI)
-            initWithMode flags.baseUrl P2PSelected
-
-        Just ModeSelection.PhoenixMode ->
-            -- Skip to Phoenix mode (show Phoenix UI)
-            initWithMode flags.baseUrl PhoenixSelected
+    -- First check for room code in URL (auto-join via QR code or shared link)
+    case flags.roomCode of
+        Just roomCode ->
+            -- Auto-join the room (skip mode selection, go straight to P2P)
+            initWithAutoJoin flags.baseUrl roomCode
 
         Nothing ->
-            -- First visit: show mode selection
-            initModeSelection flags.baseUrl
+            -- No room code, check for saved mode
+            case flags.savedMode |> Maybe.andThen ModeSelection.modeFromString of
+                Just ModeSelection.P2PMode ->
+                    -- Skip to P2P mode (show P2P connection UI)
+                    initWithMode flags.baseUrl P2PSelected
+
+                Just ModeSelection.PhoenixMode ->
+                    -- Skip to Phoenix mode (show Phoenix UI)
+                    initWithMode flags.baseUrl PhoenixSelected
+
+                Nothing ->
+                    -- First visit: show mode selection
+                    initModeSelection flags.baseUrl
 
 
 {-| Initialize with mode selection screen (first visit).
@@ -196,6 +204,78 @@ initModeSelection baseUrl =
       }
     , Cmd.none
     )
+
+
+{-| Initialize with auto-join (room code in URL from QR code or shared link).
+-}
+initWithAutoJoin : String -> String -> ( Model, Cmd Msg )
+initWithAutoJoin baseUrl roomCode =
+    let
+        normalizedCode =
+            roomCode
+                |> String.toUpper
+                |> String.filter Char.isAlpha
+                |> String.left 4
+    in
+    if String.length normalizedCode == 4 then
+        -- Valid room code: auto-join immediately
+        ( { gameState = Nothing
+          , localGame = Nothing
+          , hostGame = Nothing
+          , clientGame = Nothing
+          , playerId = Nothing
+          , myPeerId = Nothing
+          , currentDirection = Right
+          , connectionStatus = Disconnected
+          , error = Nothing
+          , notification = Just "Joining room..."
+          , gameMode = LocalMode
+          , pendingAppleSpawns = 0
+          , p2pState = P2PJoiningRoom normalizedCode
+          , roomCodeInput = normalizedCode
+          , showCopiedFeedback = False
+          , showingCollision = False
+          , screen = GameScreen
+          , selectedMode = Just P2PSelected
+          , baseUrl = baseUrl
+          , qrCodeDataUrl = Nothing
+          , copyCodeState = ShareUI.Ready
+          , copyUrlState = ShareUI.Ready
+          }
+        , Cmd.batch
+            [ Ports.joinRoom normalizedCode
+            , Ports.saveMode "p2p"
+            , Process.sleep 3000 |> Task.perform (\_ -> ClearNotification)
+            ]
+        )
+
+    else
+        -- Invalid room code: show P2P connection UI
+        ( { gameState = Nothing
+          , localGame = Nothing
+          , hostGame = Nothing
+          , clientGame = Nothing
+          , playerId = Nothing
+          , myPeerId = Nothing
+          , currentDirection = Right
+          , connectionStatus = Disconnected
+          , error = Nothing
+          , notification = Just "Invalid room code"
+          , gameMode = LocalMode
+          , pendingAppleSpawns = 0
+          , p2pState = P2PNotConnected
+          , roomCodeInput = ""
+          , showCopiedFeedback = False
+          , showingCollision = False
+          , screen = GameScreen
+          , selectedMode = Just P2PSelected
+          , baseUrl = baseUrl
+          , qrCodeDataUrl = Nothing
+          , copyCodeState = ShareUI.Ready
+          , copyUrlState = ShareUI.Ready
+          }
+        , Process.sleep 3000 |> Task.perform (\_ -> ClearNotification)
+        )
 
 
 {-| Initialize with a specific mode already selected (returning visitor).
@@ -1745,10 +1825,11 @@ main =
 
 
 {-| Decoder for Flags from JavaScript.
-    Handles the nullable savedMode string and baseUrl.
+    Handles the nullable savedMode string, baseUrl, and nullable roomCode.
 -}
 flagsDecoder : JD.Decoder Flags
 flagsDecoder =
-    JD.map2 Flags
+    JD.map3 Flags
         (JD.field "savedMode" (JD.nullable JD.string))
         (JD.field "baseUrl" JD.string)
+        (JD.field "roomCode" (JD.nullable JD.string))
