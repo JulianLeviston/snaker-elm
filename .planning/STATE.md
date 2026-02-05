@@ -40,7 +40,6 @@ Key architectural decisions:
 
 - [ ] Add venom spitting mechanic with snake splitting (todos/pending/2026-02-05-venom-spitting-snake-split-mechanic.md)
 - [ ] Add changelog and about page with attribution (todos/pending/2026-02-05-changelog-and-about-page.md)
-- [ ] Set up pre-commit hook to block pushes to main (todos/pending/2026-02-05-pre-commit-hook-block-main-push.md)
 - [ ] QR code should auto-join room (todos/pending/2026-02-05-qr-code-auto-join-room.md)
 - [ ] Improve mobile responsive layout (todos/pending/2026-02-04-mobile-responsive-layout.md)
 - [ ] Multi-language backend showcase (todos/pending/2026-01-31-multi-language-multi-backend-showcase.md)
