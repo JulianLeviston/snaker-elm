@@ -150,7 +150,7 @@ init hostId =
             let
                 hostSnake =
                     { id = hostId
-                    , body = [ startPos ]
+                    , body = [ startPos, { x = startPos.x - 1, y = startPos.y }, { x = startPos.x - 2, y = startPos.y } ]
                     , direction = Right
                     , color = colorForPlayer hostId
                     , name = hostName
@@ -706,15 +706,9 @@ toStateSyncPayloadWithKills isFull kills state =
     , tick = state.currentTick
     , isFull = isFull
     , kills =
-        List.filterMap
+        List.map
             (\kill ->
-                -- Only include kills with a killer (not self-kills) for notifications
-                case kill.killerName of
-                    Just killerName ->
-                        Just { victimName = kill.victimName, killerName = Just killerName }
-
-                    Nothing ->
-                        Nothing
+                { victimName = kill.victimName, killerName = kill.killerName }
             )
             kills
     }

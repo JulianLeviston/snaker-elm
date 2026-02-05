@@ -130,6 +130,7 @@ type Msg
     | NewHostApplePosition Position
     | GotInputP2P String
     | ShowKillNotification String String String  -- killer, verb, victim
+    | ShowSelfKillNotification String String  -- victim, verb
       -- Client game messages
     | GotGameStateP2P String
     | NewPlayerSpawn String Position String
@@ -522,6 +523,11 @@ update msg model =
             , Process.sleep 3000 |> Task.perform (\_ -> ClearNotification)
             )
 
+        ShowSelfKillNotification victimName verb ->
+            ( { model | notification = Just (victimName ++ " " ++ verb ++ " themselves!") }
+            , Process.sleep 3000 |> Task.perform (\_ -> ClearNotification)
+            )
+
         -- P2P message handlers
         CreateRoom ->
             ( { model | p2pState = P2PCreatingRoom }
@@ -793,15 +799,15 @@ update msg model =
                         -- Generate kill notifications for any kills this tick
                         killCmds =
                             tickResult.kills
-                                |> List.filterMap
+                                |> List.map
                                     (\kill ->
                                         case kill.killerName of
                                             Just killerName ->
-                                                Just (Random.generate (\verb -> ShowKillNotification killerName verb kill.victimName) KillVerbs.generate)
+                                                Random.generate (\verb -> ShowKillNotification killerName verb kill.victimName) KillVerbs.generate
 
                                             Nothing ->
-                                                -- Self-kill, no dramatic notification
-                                                Nothing
+                                                -- Self-kill
+                                                Random.generate (\verb -> ShowSelfKillNotification kill.victimName verb) KillVerbs.generate
                                     )
                     in
                     case List.head snakesNeedingRespawn of
@@ -910,14 +916,15 @@ update msg model =
                                 -- Generate kill notifications for any kills this tick
                                 killCmds =
                                     stateSync.kills
-                                        |> List.filterMap
+                                        |> List.map
                                             (\kill ->
                                                 case kill.killerName of
                                                     Just killerName ->
-                                                        Just (Random.generate (\verb -> ShowKillNotification killerName verb kill.victimName) KillVerbs.generate)
+                                                        Random.generate (\verb -> ShowKillNotification killerName verb kill.victimName) KillVerbs.generate
 
                                                     Nothing ->
-                                                        Nothing
+                                                        -- Self-kill
+                                                        Random.generate (\verb -> ShowSelfKillNotification kill.victimName verb) KillVerbs.generate
                                             )
                             in
                             ( { model | clientGame = Just newClientState }
