@@ -1,6 +1,19 @@
 /* This file is for your main application css. */
 
 /* ==========================================================================
+   Base Styles
+   ========================================================================== */
+
+body {
+    margin: 0;
+    padding: 20px;
+    background: #1a1a2e;
+    color: #eee;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    min-height: 100vh;
+}
+
+/* ==========================================================================
    Responsive Game Board
    ========================================================================== */
 
@@ -11,6 +24,14 @@
     height: auto;
     display: block;
     margin: 0 auto;
+    border: 4px solid #ff6b6b;
+    border-radius: 8px;
+    box-shadow:
+        0 0 0 2px #feca57,
+        0 0 0 4px #48dbfb,
+        0 0 0 6px #ff9ff3,
+        0 0 20px rgba(255, 107, 107, 0.5),
+        0 0 40px rgba(72, 219, 251, 0.3);
 }
 
 @media (pointer: coarse) {
