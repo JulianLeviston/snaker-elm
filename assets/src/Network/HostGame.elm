@@ -3,6 +3,7 @@ module Network.HostGame exposing
     , SnakeData
     , SnakeStatus(..)
     , TickResult
+    , Kill
     , init
     , generatePlayerName
     , tick
@@ -80,6 +81,18 @@ type alias TickResult =
     , needsAppleSpawn : Int -- Number of apples needed
     , expiredApples : List Apple -- Apples that expired and need respawning
     , stateSync : StateSyncPayload -- For broadcasting
+    , kills : List Kill -- Kills that happened this tick
+    }
+
+
+{-| A kill event for notifications and point transfer.
+-}
+type alias Kill =
+    { victimId : String
+    , victimName : String
+    , killerId : Maybe String -- Nothing if self-kill or wall
+    , killerName : Maybe String
+    , pointsTransferred : Int
     }
 
 
@@ -300,15 +313,15 @@ tick state =
         stateAfterMove =
             moveAllSnakes stateWithInputs
 
-        -- 3. Check collisions (self and with others)
-        stateAfterCollisions =
+        -- 3. Check collisions (self and with others) - also handles point transfers
+        collisionResult =
             checkAllCollisions stateAfterMove
 
         -- 4. Respawns are handled separately via needsRespawn flag
 
         -- 5. Check apple eating (any snake can eat)
         stateAfterEating =
-            checkAllAppleEating stateAfterCollisions
+            checkAllAppleEating collisionResult.state
 
         -- 6. Check apple expiration
         expirationResult =
@@ -336,6 +349,7 @@ tick state =
     , needsAppleSpawn = applesNeeded
     , expiredApples = expirationResult.expired
     , stateSync = toStateSyncPayload isFull finalState
+    , kills = collisionResult.kills
     }
 
 
@@ -440,32 +454,89 @@ moveSnake grid snakeData =
     { snakeData | snake = updatedSnake }
 
 
-{-| Check collisions for all snakes.
+{-| Result of collision checking - updated state plus any kills.
 -}
-checkAllCollisions : HostGameState -> HostGameState
+type alias CollisionResult =
+    { state : HostGameState
+    , kills : List Kill
+    }
+
+
+{-| Check collisions for all snakes, tracking kills for notifications and point transfer.
+-}
+checkAllCollisions : HostGameState -> CollisionResult
 checkAllCollisions state =
     let
         -- Get all snake bodies for other-snake collision checks
         allBodies =
             Dict.toList state.snakes
                 |> List.map (\( id, data ) -> ( id, data.snake.body ))
-    in
-    { state
-        | snakes =
-            Dict.map
-                (\playerId snakeData ->
-                    checkCollisions state.currentTick playerId snakeData allBodies
+
+        -- Check each snake and collect results
+        ( newSnakes, kills ) =
+            Dict.foldl
+                (\playerId snakeData ( accSnakes, accKills ) ->
+                    let
+                        ( newData, maybeKill ) =
+                            checkCollisions state.currentTick playerId snakeData allBodies state
+                    in
+                    ( Dict.insert playerId newData accSnakes
+                    , case maybeKill of
+                        Just kill ->
+                            kill :: accKills
+
+                        Nothing ->
+                            accKills
+                    )
                 )
+                ( Dict.empty, [] )
                 state.snakes
+
+        -- Apply point transfers for kills
+        scoresAfterKills =
+            List.foldl applyKillPointTransfer state.scores kills
+    in
+    { state = { state | snakes = newSnakes, scores = scoresAfterKills }
+    , kills = kills
     }
+
+
+{-| Apply point transfer for a kill: victim loses half, killer gains that amount.
+-}
+applyKillPointTransfer : Kill -> Dict String Int -> Dict String Int
+applyKillPointTransfer kill scores =
+    case kill.killerId of
+        Just killerId ->
+            let
+                victimScore =
+                    Dict.get kill.victimId scores |> Maybe.withDefault 0
+
+                pointsToTransfer =
+                    victimScore // 2
+            in
+            scores
+                |> Dict.update kill.victimId (Maybe.map (\s -> s - pointsToTransfer))
+                |> Dict.update killerId (Maybe.map (\s -> s + pointsToTransfer))
+
+        Nothing ->
+            -- Self-kill: just lose half points, no one gains
+            let
+                victimScore =
+                    Dict.get kill.victimId scores |> Maybe.withDefault 0
+
+                pointsLost =
+                    victimScore // 2
+            in
+            Dict.update kill.victimId (Maybe.map (\s -> s - pointsLost)) scores
 
 
 {-| Check collision for a single snake.
     Orphaned snakes become Dead on collision (no respawn).
     Active snakes get needsRespawn = True on collision.
+    Returns updated snake data and optionally a Kill event.
 -}
-checkCollisions : Int -> String -> SnakeData -> List ( String, List Position ) -> SnakeData
-checkCollisions currentTick playerId snakeData allBodies =
+checkCollisions : Int -> String -> SnakeData -> List ( String, List Position ) -> HostGameState -> ( SnakeData, Maybe Kill )
+checkCollisions currentTick playerId snakeData allBodies state =
     let
         isInvincible =
             currentTick < snakeData.invincibleUntilTick
@@ -473,43 +544,63 @@ checkCollisions currentTick playerId snakeData allBodies =
         selfCollision =
             Collision.collidesWithSelf snakeData.snake.body
 
-        -- Check collision with other snakes' bodies
-        otherCollision =
-            checkOtherSnakeCollision playerId snakeData.snake.body allBodies
+        -- Check collision with other snakes' bodies - returns killer ID if collision
+        maybeKillerId =
+            findKiller playerId snakeData.snake.body allBodies
+
+        hasCollision =
+            selfCollision || maybeKillerId /= Nothing
+
+        victimScore =
+            Dict.get playerId state.scores |> Maybe.withDefault 0
+
+        makeKill killerId =
+            { victimId = playerId
+            , victimName = snakeData.snake.name
+            , killerId = killerId
+            , killerName = killerId |> Maybe.andThen (\kid -> Dict.get kid state.snakes) |> Maybe.map (.snake >> .name)
+            , pointsTransferred = victimScore // 2
+            }
     in
     if isInvincible then
-        snakeData
+        ( snakeData, Nothing )
 
-    else if selfCollision || otherCollision then
+    else if hasCollision then
         case snakeData.status of
             Orphaned ->
                 -- Orphaned snake dies permanently (no respawn)
-                { snakeData | status = Dead }
+                ( { snakeData | status = Dead }
+                , Just (makeKill maybeKillerId)
+                )
 
             Active ->
                 -- Active snake needs respawn
-                { snakeData | needsRespawn = True }
+                ( { snakeData | needsRespawn = True }
+                , Just (makeKill (if selfCollision then Nothing else maybeKillerId))
+                )
 
             Dead ->
                 -- Already dead
-                snakeData
+                ( snakeData, Nothing )
 
     else
-        snakeData
+        ( snakeData, Nothing )
 
 
-{-| Check if snake head collides with any other snake's body.
+{-| Find which snake killed this one (if any). Returns the killer's ID.
 -}
-checkOtherSnakeCollision : String -> List Position -> List ( String, List Position ) -> Bool
-checkOtherSnakeCollision playerId body allBodies =
+findKiller : String -> List Position -> List ( String, List Position ) -> Maybe String
+findKiller playerId body allBodies =
     case body of
         [] ->
-            False
+            Nothing
 
         head :: _ ->
             allBodies
                 |> List.filter (\( otherId, _ ) -> otherId /= playerId)
-                |> List.any (\( _, otherBody ) -> Collision.collidesWithOther head otherBody)
+                |> List.filter (\( _, otherBody ) -> Collision.collidesWithOther head otherBody)
+                |> List.head
+                |> Maybe.map Tuple.first
 
 
 {-| Check apple eating for all snakes.

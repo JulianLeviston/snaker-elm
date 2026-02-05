@@ -10,6 +10,7 @@ import Html.Attributes exposing (class, style)
 import Html.Events exposing (onClick)
 import Input
 import Json.Decode as JD
+import KillVerbs
 import Json.Encode as JE
 import LocalGame exposing (LocalGameState)
 import Network.ClientGame as ClientGame exposing (ClientGameState)
@@ -128,6 +129,7 @@ type Msg
     | NewHostSpawnPosition String Position
     | NewHostApplePosition Position
     | GotInputP2P String
+    | ShowKillNotification String String String  -- killer, verb, victim
       -- Client game messages
     | GotGameStateP2P String
     | NewPlayerSpawn String Position String
@@ -515,6 +517,11 @@ update msg model =
         ClearCollisionShake ->
             ( { model | showingCollision = False }, Cmd.none )
 
+        ShowKillNotification killerName verb victimName ->
+            ( { model | notification = Just (killerName ++ " " ++ verb ++ " " ++ victimName ++ "!") }
+            , Process.sleep 3000 |> Task.perform (\_ -> ClearNotification)
+            )
+
         -- P2P message handlers
         CreateRoom ->
             ( { model | p2pState = P2PCreatingRoom }
@@ -782,6 +789,20 @@ update msg model =
 
                         broadcastCmd =
                             Ports.broadcastGameState stateJson
+
+                        -- Generate kill notifications for any kills this tick
+                        killCmds =
+                            tickResult.kills
+                                |> List.filterMap
+                                    (\kill ->
+                                        case kill.killerName of
+                                            Just killerName ->
+                                                Just (Random.generate (\verb -> ShowKillNotification killerName verb kill.victimName) KillVerbs.generate)
+
+                                            Nothing ->
+                                                -- Self-kill, no dramatic notification
+                                                Nothing
+                                    )
                     in
                     case List.head snakesNeedingRespawn of
                         Just playerId ->
@@ -794,11 +815,13 @@ update msg model =
                                 , pendingAppleSpawns = newPendingCount
                               }
                             , Cmd.batch
-                                [ broadcastCmd
-                                , Random.generate (NewHostSpawnPosition playerId) (randomPosition newState.grid)
-                                , Process.sleep 300 |> Task.perform (\_ -> ClearCollisionShake)
-                                , spawnCmd
-                                ]
+                                ([ broadcastCmd
+                                 , Random.generate (NewHostSpawnPosition playerId) (randomPosition newState.grid)
+                                 , Process.sleep 300 |> Task.perform (\_ -> ClearCollisionShake)
+                                 , spawnCmd
+                                 ]
+                                    ++ killCmds
+                                )
                             )
 
                         Nothing ->
@@ -806,7 +829,7 @@ update msg model =
                                 | hostGame = Just newState
                                 , pendingAppleSpawns = newPendingCount
                               }
-                            , Cmd.batch [ broadcastCmd, spawnCmd ]
+                            , Cmd.batch ([ broadcastCmd, spawnCmd ] ++ killCmds)
                             )
 
                 Nothing ->
