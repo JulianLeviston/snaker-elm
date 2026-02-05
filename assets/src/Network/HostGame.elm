@@ -4,6 +4,7 @@ module Network.HostGame exposing
     , SnakeStatus(..)
     , TickResult
     , init
+    , generatePlayerName
     , tick
     , addPlayer
     , removePlayer
@@ -33,6 +34,7 @@ import Dict exposing (Dict)
 import Engine.Apple as Apple exposing (Apple)
 import Engine.Collision as Collision
 import Engine.Grid as Grid
+import NameGenerator
 import Network.ClientGame as ClientGame
 import Network.Protocol as Protocol exposing (StateSyncPayload)
 import Random
@@ -112,7 +114,7 @@ colorForPlayer playerId =
         |> Maybe.withDefault "67a387"
 
 
-{-| Initialize a new host game with random snake position.
+{-| Initialize a new host game with random snake position and whimsical name.
 -}
 init : String -> Random.Generator HostGameState
 init hostId =
@@ -120,38 +122,46 @@ init hostId =
         grid =
             Grid.defaultDimensions
     in
-    randomPosition grid
-        |> Random.map
-            (\startPos ->
-                let
-                    hostSnake =
-                        { id = hostId
-                        , body = [ startPos ]
-                        , direction = Right
-                        , color = colorForPlayer hostId
-                        , name = "Host"
-                        , isInvincible = True
-                        , state = "alive"
-                        , pendingGrowth = 0
-                        }
+    Random.map2
+        (\startPos hostName ->
+            let
+                hostSnake =
+                    { id = hostId
+                    , body = [ startPos ]
+                    , direction = Right
+                    , color = colorForPlayer hostId
+                    , name = hostName
+                    , isInvincible = True
+                    , state = "alive"
+                    , pendingGrowth = 0
+                    }
 
-                    hostData =
-                        { snake = hostSnake
-                        , invincibleUntilTick = 15 -- 1500ms at 100ms ticks
-                        , needsRespawn = False
-                        , status = Active
-                        }
-                in
-                { snakes = Dict.singleton hostId hostData
-                , apples = []
-                , grid = grid
-                , scores = Dict.singleton hostId 0
-                , currentTick = 0
-                , hostId = hostId
-                , pendingInputs = Dict.empty
-                , disconnectedPlayers = Dict.empty
-                }
-            )
+                hostData =
+                    { snake = hostSnake
+                    , invincibleUntilTick = 15 -- 1500ms at 100ms ticks
+                    , needsRespawn = False
+                    , status = Active
+                    }
+            in
+            { snakes = Dict.singleton hostId hostData
+            , apples = []
+            , grid = grid
+            , scores = Dict.singleton hostId 0
+            , currentTick = 0
+            , hostId = hostId
+            , pendingInputs = Dict.empty
+            , disconnectedPlayers = Dict.empty
+            }
+        )
+        (randomPosition grid)
+        NameGenerator.generate
+
+
+{-| Generate a random whimsical player name.
+-}
+generatePlayerName : Random.Generator String
+generatePlayerName =
+    NameGenerator.generate
 
 
 {-| Generate a random position within grid bounds.

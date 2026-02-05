@@ -130,7 +130,7 @@ type Msg
     | GotInputP2P String
       -- Client game messages
     | GotGameStateP2P String
-    | NewPlayerSpawn String Position
+    | NewPlayerSpawn String Position String
     | ClearCollisionShake
       -- Host migration messages
     | GotHostMigration JD.Value
@@ -595,15 +595,16 @@ update msg model =
                             -- Note: The host is already running game loop, add the player
                             case model.hostGame of
                                 Just hostState ->
-                                    -- Generate spawn position for new player
-                                    ( { model
-                                        | notification = Just ("Player joined: " ++ String.left 4 data.roomCode)
-                                      }
-                                    , Cmd.batch
-                                        [ Random.generate (NewPlayerSpawn data.roomCode)
-                                            (randomSafePosition (HostGame.getOccupiedPositions hostState) hostState.grid)
-                                        , Process.sleep 3000 |> Task.perform (\_ -> ClearNotification)
-                                        ]
+                                    -- Generate spawn position and name for new player
+                                    let
+                                        spawnGenerator =
+                                            Random.map2
+                                                (\pos name -> ( pos, name ))
+                                                (randomSafePosition (HostGame.getOccupiedPositions hostState) hostState.grid)
+                                                HostGame.generatePlayerName
+                                    in
+                                    ( model
+                                    , Random.generate (\( pos, name ) -> NewPlayerSpawn data.roomCode pos name) spawnGenerator
                                     )
 
                                 Nothing ->
@@ -891,13 +892,13 @@ update msg model =
                 Nothing ->
                     ( model, Cmd.none )
 
-        NewPlayerSpawn peerId pos ->
-            -- Host: add a new player at the spawned position
+        NewPlayerSpawn peerId pos playerName ->
+            -- Host: add a new player at the spawned position with whimsical name
             case model.hostGame of
                 Just hostState ->
                     let
                         newState =
-                            HostGame.addPlayer peerId ("Player " ++ String.left 4 peerId) pos hostState
+                            HostGame.addPlayer peerId playerName pos hostState
 
                         -- Broadcast immediately so new player and all clients see the state
                         stateSync =
@@ -909,7 +910,15 @@ update msg model =
                         broadcastCmd =
                             Ports.broadcastGameState stateJson
                     in
-                    ( { model | hostGame = Just newState }, broadcastCmd )
+                    ( { model
+                        | hostGame = Just newState
+                        , notification = Just (playerName ++ " joined!")
+                      }
+                    , Cmd.batch
+                        [ broadcastCmd
+                        , Process.sleep 3000 |> Task.perform (\_ -> ClearNotification)
+                        ]
+                    )
 
                 Nothing ->
                     ( model, Cmd.none )
