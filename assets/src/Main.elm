@@ -1516,7 +1516,7 @@ viewGame model =
             in
             div [ class "game-layout" ]
                 [ wrapWithShake (Board.viewWithLeader gameState model.myPeerId gameState.leaderId)
-                , Scoreboard.view gameState.snakes model.myPeerId
+                , Scoreboard.view gameState.snakes gameState.scores model.myPeerId
                 ]
 
         Nothing ->
@@ -1529,7 +1529,7 @@ viewGame model =
                     in
                     div [ class "game-layout" ]
                         [ wrapWithShake (Board.viewWithLeader gameState model.myPeerId gameState.leaderId)
-                        , Scoreboard.view gameState.snakes model.myPeerId
+                        , Scoreboard.view gameState.snakes gameState.scores model.myPeerId
                         ]
 
                 Nothing ->
@@ -1543,7 +1543,7 @@ viewGame model =
                                     in
                                     div [ class "game-layout" ]
                                         [ wrapWithShake (Board.view gameState model.playerId)
-                                        , Scoreboard.view gameState.snakes model.playerId
+                                        , Scoreboard.view gameState.snakes Dict.empty model.playerId
                                         ]
 
                                 Nothing ->
@@ -1555,7 +1555,7 @@ viewGame model =
                                 Just state ->
                                     div [ class "game-layout" ]
                                         [ wrapWithShake (Board.view state model.playerId)
-                                        , Scoreboard.view state.snakes model.playerId
+                                        , Scoreboard.view state.snakes Dict.empty model.playerId
                                         ]
 
                                 Nothing ->

@@ -523,6 +523,7 @@ applyKillPointTransfer kill scores =
 
                 pointsToTransfer =
                     victimScore // 2
+
             in
             scores
                 |> Dict.update kill.victimId (Maybe.map (\s -> s - pointsToTransfer))

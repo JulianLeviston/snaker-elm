@@ -1,31 +1,33 @@
 module View.Scoreboard exposing (view)
 
+import Dict exposing (Dict)
 import Html exposing (Html, div, h3, span, text)
 import Html.Attributes exposing (class, style)
 import Snake exposing (Snake)
 
 
-view : List Snake -> Maybe String -> Html msg
-view snakes maybePlayerId =
+view : List Snake -> Dict String Int -> Maybe String -> Html msg
+view snakes scores maybePlayerId =
     let
+        -- Sort by score (from scores dict), falling back to 0
         sortedSnakes =
-            List.sortBy (\s -> negate (List.length s.body)) snakes
+            List.sortBy (\s -> negate (Dict.get s.id scores |> Maybe.withDefault 0)) snakes
     in
     div [ class "scoreboard" ]
         [ h3 [] [ text "Leaderboard" ]
         , div [ class "player-list" ]
-            (List.map (renderPlayerEntry maybePlayerId) sortedSnakes)
+            (List.map (renderPlayerEntry scores maybePlayerId) sortedSnakes)
         ]
 
 
-renderPlayerEntry : Maybe String -> Snake -> Html msg
-renderPlayerEntry maybePlayerId snake =
+renderPlayerEntry : Dict String Int -> Maybe String -> Snake -> Html msg
+renderPlayerEntry scores maybePlayerId snake =
     let
         isYou =
             Just snake.id == maybePlayerId
 
         score =
-            List.length snake.body
+            Dict.get snake.id scores |> Maybe.withDefault 0
 
         displayName =
             if isYou then
