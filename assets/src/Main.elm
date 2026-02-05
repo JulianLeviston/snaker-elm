@@ -5,7 +5,7 @@ import Browser.Events
 import Dict
 import Engine.Apple as Apple exposing (Apple)
 import Game exposing (GameState)
-import Html exposing (Html, button, div, h1, h2, p, span, text)
+import Html exposing (Html, button, div, h1, h2, h3, p, span, text)
 import Html.Attributes exposing (class, style)
 import Html.Events exposing (onClick)
 import Input
@@ -45,6 +45,7 @@ type Screen
     | GameScreen
     | SettingsScreen
     | ConnectionLostScreen
+    | InfoScreen
 
 
 {-| Selected game mode (P2P or Phoenix).
@@ -144,6 +145,9 @@ type Msg
     | OpenSettings
     | CloseSettings
     | ChangeMode ModeSelection.Mode
+      -- Info screen messages
+    | OpenInfo
+    | CloseInfo
 
 
 init : Flags -> ( Model, Cmd Msg )
@@ -1162,6 +1166,22 @@ update msg model =
             , Cmd.batch [ Ports.saveMode modeStr, initCmd ]
             )
 
+        OpenInfo ->
+            ( { model | screen = InfoScreen }, Cmd.none )
+
+        CloseInfo ->
+            -- Return to ModeSelectionScreen if no mode selected, otherwise GameScreen
+            let
+                previousScreen =
+                    case model.selectedMode of
+                        Nothing ->
+                            ModeSelectionScreen
+
+                        Just _ ->
+                            GameScreen
+            in
+            ( { model | screen = previousScreen }, Cmd.none )
+
 
 {-| Generate commands to spawn multiple apples for host game.
 -}
@@ -1297,6 +1317,9 @@ view model =
         ConnectionLostScreen ->
             viewConnectionLostScreen
 
+        InfoScreen ->
+            viewInfoScreen
+
 
 {-| Mode selection screen (first visit).
 -}
@@ -1305,6 +1328,10 @@ viewModeSelectionScreen =
     div [ class "game-container mode-selection-page", style "padding" "20px" ]
         [ h1 [] [ text "Snaker" ]
         , ModeSelection.view { onSelectMode = SelectMode }
+        , div [ class "mode-selection-footer" ]
+            [ button [ class "btn-info-link", onClick OpenInfo ]
+                [ text "About this game" ]
+            ]
         ]
 
 
@@ -1377,6 +1404,69 @@ viewConnectionLostScreen =
         ]
 
 
+{-| Info screen with changelog and about sections.
+-}
+viewInfoScreen : Html Msg
+viewInfoScreen =
+    div [ class "game-container info-page", style "padding" "20px" ]
+        [ div [ class "info-header" ]
+            [ h1 [] [ text "About Snaker" ]
+            , button [ class "btn-back", onClick CloseInfo ]
+                [ text "Back" ]
+            ]
+        , div [ class "info-content" ]
+            [ div [ class "info-section" ]
+                [ h2 [] [ text "What is Snaker?" ]
+                , p []
+                    [ text "Snaker is a multiplayer snake game that lets you play with friends in real-time, "
+                    , text "directly in your browser. No accounts, no downloads - just share a room code and start playing!"
+                    ]
+                , p []
+                    [ text "The game uses peer-to-peer WebRTC connections, meaning you can play together "
+                    , text "without needing a central game server. One player hosts, others join with a 4-letter code."
+                    ]
+                ]
+            , div [ class "info-section" ]
+                [ h2 [] [ text "Changelog" ]
+                , div [ class "changelog" ]
+                    [ div [ class "changelog-entry" ]
+                        [ h3 [] [ text "v2.0 - P2P WebRTC Mode" ]
+                        , Html.ul []
+                            [ Html.li [] [ text "Direct peer-to-peer multiplayer (no server needed)" ]
+                            , Html.li [] [ text "Room codes for easy game sharing" ]
+                            , Html.li [] [ text "QR code support for mobile joining" ]
+                            , Html.li [] [ text "Host migration when host leaves" ]
+                            , Html.li [] [ text "Touch controls for mobile devices" ]
+                            ]
+                        ]
+                    , div [ class "changelog-entry" ]
+                        [ h3 [] [ text "v1.0 - Multiplayer Upgrade" ]
+                        , Html.ul []
+                            [ Html.li [] [ text "Phoenix server-based multiplayer" ]
+                            , Html.li [] [ text "Real-time game synchronization" ]
+                            , Html.li [] [ text "Player collision and death animations" ]
+                            , Html.li [] [ text "Live scoreboard" ]
+                            ]
+                        ]
+                    ]
+                ]
+            , div [ class "info-section about-section" ]
+                [ h2 [] [ text "Credits" ]
+                , p []
+                    [ text "Created by "
+                    , Html.a [ Html.Attributes.href "https://getcontented.io", Html.Attributes.target "_blank" ]
+                        [ text "Get Contented" ]
+                    ]
+                , p [ class "about-motivation" ]
+                    [ text "Built as an experiment in real-time multiplayer game development with Elm and WebRTC. "
+                    , text "The goal was to create a fun, accessible game that works everywhere - "
+                    , text "no app store, no login, just instant play with friends."
+                    ]
+                ]
+            ]
+        ]
+
+
 {-| Main game screen with connection UI and game board.
 -}
 viewGameScreen : Model -> Html Msg
@@ -1384,8 +1474,12 @@ viewGameScreen model =
     div [ class "game-container", style "padding" "20px" ]
         [ div [ class "game-header" ]
             [ h1 [] [ text "Snaker v2.0" ]
-            , button [ class "btn-settings", onClick OpenSettings ]
-                [ text "Settings" ]
+            , div [ class "header-buttons" ]
+                [ button [ class "btn-info", onClick OpenInfo ]
+                    [ text "?" ]
+                , button [ class "btn-settings", onClick OpenSettings ]
+                    [ text "Settings" ]
+                ]
             ]
         , -- Only show P2P connection UI in P2P mode
           case model.selectedMode of
