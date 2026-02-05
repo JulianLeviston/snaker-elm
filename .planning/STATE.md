@@ -38,7 +38,6 @@ Key architectural decisions:
 
 ### Pending Todos
 
-- [ ] Fix app title and add version number (todos/pending/2026-02-05-fix-app-title-add-version.md)
 - [ ] Host leave causes room to show UUID (todos/pending/2026-02-05-host-leave-room-shows-uuid.md)
 - [ ] Add apple aging lifecycle with skull penalty (todos/pending/2026-02-05-apple-aging-and-skull-mechanic.md)
 - [ ] Improve mobile responsive layout (todos/pending/2026-02-04-mobile-responsive-layout.md)

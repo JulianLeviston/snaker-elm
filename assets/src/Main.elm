@@ -1383,7 +1383,7 @@ viewGameScreen : Model -> Html Msg
 viewGameScreen model =
     div [ class "game-container", style "padding" "20px" ]
         [ div [ class "game-header" ]
-            [ h1 [] [ text "Snaker - Elm 0.19.1" ]
+            [ h1 [] [ text "Snaker v2.0" ]
             , button [ class "btn-settings", onClick OpenSettings ]
                 [ text "Settings" ]
             ]
