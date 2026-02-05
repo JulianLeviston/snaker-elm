@@ -96,13 +96,23 @@ type alias Kill =
     }
 
 
-{-| Color palette for random snake colors (12 distinct colors).
+{-| Color palette for snake colors - maximally distinct and colorblind-friendly.
+    Uses varied hues, saturations, and brightnesses for clear differentiation.
 -}
 snakeColors : List String
 snakeColors =
-    [ "e57373", "f06292", "ba68c8", "9575cd" -- reds/pinks/purples
-    , "64b5f6", "4fc3f7", "4dd0e1", "4db6ac" -- blues/teals
-    , "81c784", "aed581", "dce775", "ffb74d" -- greens/yellows/orange
+    [ "e6194b" -- red
+    , "3cb44b" -- green
+    , "ffe119" -- yellow
+    , "4363d8" -- blue
+    , "f58231" -- orange
+    , "911eb4" -- purple
+    , "42d4f4" -- cyan
+    , "f032e6" -- magenta
+    , "bfef45" -- lime
+    , "fabed4" -- pink
+    , "469990" -- teal
+    , "dcbeff" -- lavender
     ]
 
 
