@@ -38,9 +38,9 @@ Key architectural decisions:
 
 ### Pending Todos
 
-- [ ] Host leave causes room to show UUID (todos/pending/2026-02-05-host-leave-room-shows-uuid.md)
-- [ ] Add apple aging lifecycle with skull penalty (todos/pending/2026-02-05-apple-aging-and-skull-mechanic.md)
+- [ ] QR code should auto-join room (todos/pending/2026-02-05-qr-code-auto-join-room.md)
 - [ ] Improve mobile responsive layout (todos/pending/2026-02-04-mobile-responsive-layout.md)
+- [ ] Multi-language backend showcase (todos/pending/2026-01-31-multi-language-multi-backend-showcase.md)
 - [ ] UX polish: Move connection status to top of game area, improve visual hierarchy
 - [ ] Visual effects enhancement: nicer fades, highlights, transitions
 - [ ] UI styling improvements: functional but needs polish
