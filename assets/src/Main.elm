@@ -35,6 +35,7 @@ import View.ShareUI as ShareUI
 type alias Flags =
     { savedMode : Maybe String
     , baseUrl : String
+    , roomCode : Maybe String
     }
 
 
@@ -148,23 +149,33 @@ type Msg
       -- Info screen messages
     | OpenInfo
     | CloseInfo
+      -- Auto-join from URL
+    | TriggerAutoJoin String
 
 
 init : Flags -> ( Model, Cmd Msg )
 init flags =
-    -- Check for saved mode in flags
-    case flags.savedMode |> Maybe.andThen ModeSelection.modeFromString of
-        Just ModeSelection.P2PMode ->
-            -- Skip to P2P mode (show P2P connection UI)
+    -- Check for room code in URL - if present, go to P2P mode
+    -- (JS will trigger the actual join after ports are subscribed)
+    case flags.roomCode of
+        Just _ ->
+            -- Room code in URL: go to P2P mode, JS will trigger join
             initWithMode flags.baseUrl P2PSelected
 
-        Just ModeSelection.PhoenixMode ->
-            -- Skip to Phoenix mode (show Phoenix UI)
-            initWithMode flags.baseUrl PhoenixSelected
-
         Nothing ->
-            -- First visit: show mode selection
-            initModeSelection flags.baseUrl
+            -- No room code, check for saved mode
+            case flags.savedMode |> Maybe.andThen ModeSelection.modeFromString of
+                Just ModeSelection.P2PMode ->
+                    -- Skip to P2P mode (show P2P connection UI)
+                    initWithMode flags.baseUrl P2PSelected
+
+                Just ModeSelection.PhoenixMode ->
+                    -- Skip to Phoenix mode (show Phoenix UI)
+                    initWithMode flags.baseUrl PhoenixSelected
+
+                Nothing ->
+                    -- First visit: show mode selection
+                    initModeSelection flags.baseUrl
 
 
 {-| Initialize with mode selection screen (first visit).
@@ -1182,6 +1193,25 @@ update msg model =
             in
             ( { model | screen = previousScreen }, Cmd.none )
 
+        TriggerAutoJoin roomCode ->
+            -- JS triggers this after ports are ready
+            let
+                normalizedCode =
+                    roomCode
+                        |> String.toUpper
+                        |> String.filter Char.isAlpha
+                        |> String.left 4
+            in
+            if String.length normalizedCode == 4 then
+                ( { model | p2pState = P2PJoiningRoom normalizedCode }
+                , Ports.joinRoom normalizedCode
+                )
+
+            else
+                ( { model | notification = Just "Invalid room code" }
+                , Process.sleep 3000 |> Task.perform (\_ -> ClearNotification)
+                )
+
 
 {-| Generate commands to spawn multiple apples for host game.
 -}
@@ -1710,6 +1740,8 @@ subscriptions model =
         , Ports.qrCodeGenerated GotQRCodeGenerated
           -- Touch controls
         , Ports.receiveTouchDirection (stringToDirection >> KeyPressed)
+          -- Auto-join from URL
+        , Ports.triggerAutoJoin TriggerAutoJoin
         ]
 
 
@@ -1745,10 +1777,11 @@ main =
 
 
 {-| Decoder for Flags from JavaScript.
-    Handles the nullable savedMode string and baseUrl.
+    Handles the nullable savedMode string, baseUrl, and nullable roomCode.
 -}
 flagsDecoder : JD.Decoder Flags
 flagsDecoder =
-    JD.map2 Flags
+    JD.map3 Flags
         (JD.field "savedMode" (JD.nullable JD.string))
         (JD.field "baseUrl" JD.string)
+        (JD.field "roomCode" (JD.nullable JD.string))

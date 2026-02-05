@@ -40,6 +40,8 @@ interface ElmApp {
     qrCodeGenerated: { send: (result: { success: boolean; dataUrl?: string; error?: string }) => void };
     // Touch controls port
     receiveTouchDirection: { send: (direction: string) => void };
+    // Auto-join port
+    triggerAutoJoin: { send: (roomCode: string) => void };
   };
 }
 
@@ -58,10 +60,14 @@ document.addEventListener("DOMContentLoaded", () => {
   // Get base URL for room sharing (origin + pathname, so it works when deployed at a subpath)
   const baseUrl = window.location.origin + window.location.pathname;
 
+  // Check for room code in URL query params (for auto-join via QR code)
+  const urlParams = new URLSearchParams(window.location.search);
+  const roomCode = urlParams.get("room");
+
   // Initialize Elm application with flags
   const app: ElmApp = Elm.Main.init({
     node: elmNode,
-    flags: { savedMode: savedMode, baseUrl: baseUrl },
+    flags: { savedMode: savedMode, baseUrl: baseUrl, roomCode: roomCode },
   });
 
   console.log("Elm app initialized");
@@ -91,4 +97,9 @@ document.addEventListener("DOMContentLoaded", () => {
   app.ports.saveMode.subscribe((mode: string) => {
     localStorage.setItem("snaker-mode", mode);
   });
+
+  // If room code in URL, trigger auto-join now that ports are ready
+  if (roomCode) {
+    app.ports.triggerAutoJoin.send(roomCode);
+  }
 });
