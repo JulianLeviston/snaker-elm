@@ -38,6 +38,7 @@ Key architectural decisions:
 
 ### Pending Todos
 
+- [ ] Make player colors more distinct (todos/pending/2026-02-05-distinct-player-colors.md)
 - [ ] Host leave causes room to show UUID (todos/pending/2026-02-05-host-leave-room-shows-uuid.md)
 - [ ] Add apple aging lifecycle with skull penalty (todos/pending/2026-02-05-apple-aging-and-skull-mechanic.md)
 - [ ] Improve mobile responsive layout (todos/pending/2026-02-04-mobile-responsive-layout.md)
