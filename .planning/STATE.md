@@ -39,7 +39,7 @@ Key architectural decisions:
 ### Pending Todos
 
 - [ ] Add venom spitting mechanic with snake splitting (todos/pending/2026-02-05-venom-spitting-snake-split-mechanic.md)
-- [ ] Add changelog workflow with dates (todos/pending/2026-02-06-changelog-workflow-and-dates.md)
+- [x] Add changelog workflow with dates (todos/done/2026-02-06-changelog-workflow-and-dates.md) — in progress
 - [ ] Multi-language backend showcase (todos/pending/2026-01-31-multi-language-multi-backend-showcase.md)
 - [x] Fix apple sync bug and add max apple count (todos/done/2026-02-06-apple-sync-and-max-count-bug.md) — in progress
 - [ ] UX polish: Move connection status to top of game area, improve visual hierarchy
