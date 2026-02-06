@@ -23,6 +23,7 @@ Apples progress through aging stages:
 - Skull (100+ ticks): White skull, -50% score, -50% length
 -}
 
+import Engine.Grid
 import Random
 import Snake exposing (Position)
 
@@ -55,11 +56,11 @@ minApples =
 
 {-| Maximum number of apples allowed on the board.
 Safety cap to prevent unbounded growth from timing edge cases.
-~30% of default grid area (30x40 = 1200 cells).
+30% of default grid area.
 -}
 maxApples : Int
 maxApples =
-    360
+    Engine.Grid.defaultDimensions.width * Engine.Grid.defaultDimensions.height * 30 // 100
 
 
 {-| Number of ticks before an apple becomes a skull.
