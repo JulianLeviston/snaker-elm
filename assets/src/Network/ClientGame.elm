@@ -38,6 +38,8 @@ type alias ClientGameState =
     , pendingInput : Maybe Direction -- Optimistic local input
     , lastAppliedInput : Maybe Direction -- For interpolation reference
     , currentHostId : Maybe String -- Track current host for migration
+    , venomMode : Bool
+    , projectiles : List Protocol.ProjectileState
     }
 
 
@@ -65,6 +67,8 @@ init myId =
     , pendingInput = Nothing
     , lastAppliedInput = Nothing
     , currentHostId = Nothing
+    , venomMode = False
+    , projectiles = []
     }
 
 
@@ -80,6 +84,8 @@ initWithHost myId hostId =
     , pendingInput = Nothing
     , lastAppliedInput = Nothing
     , currentHostId = Just hostId
+    , venomMode = False
+    , projectiles = []
     }
 
 
@@ -129,6 +135,8 @@ applyHostState stateSync clientState =
         , scores = stateSync.scores
         , lastHostTick = stateSync.tick
         , pendingInput = newPendingInput
+        , venomMode = stateSync.settings.venomMode
+        , projectiles = stateSync.projectiles
     }
 
 

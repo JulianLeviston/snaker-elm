@@ -922,6 +922,39 @@ body {
     background: rgba(0, 0, 0, 0.5);
 }
 
+.dpad-shoot {
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: rgba(255, 100, 100, 0.6);
+}
+
+.dpad-shoot:active,
+.dpad-shoot.active {
+    background: rgba(255, 100, 100, 0.9);
+    transform: translate(-50%, -50%) scale(0.95);
+}
+
+/* ==========================================================================
+   Venom Projectiles
+   ========================================================================== */
+
+.venom-projectile {
+    animation: venom-pulse 0.3s ease-in-out infinite alternate;
+}
+
+@keyframes venom-pulse {
+    from {
+        opacity: 0.8;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
 /* ==========================================================================
    Header Buttons
    ========================================================================== */
@@ -964,6 +997,65 @@ body {
 .btn-settings:hover {
     background: rgba(255, 255, 255, 0.2);
     border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* ==========================================================================
+   Game Settings
+   ========================================================================== */
+
+.settings-section {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 20px;
+}
+
+.settings-section h2 {
+    margin: 0 0 12px 0;
+    font-size: 18px;
+    color: #ff6b6b;
+}
+
+.setting-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+}
+
+.setting-label {
+    font-size: 16px;
+    color: #eee;
+}
+
+.setting-toggle {
+    padding: 6px 18px;
+    font-size: 14px;
+    font-weight: bold;
+    background: rgba(255, 255, 255, 0.1);
+    color: #888;
+    border: 2px solid rgba(255, 255, 255, 0.15);
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.2s;
+    min-width: 60px;
+}
+
+.setting-toggle:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.setting-toggle.active {
+    background: rgba(76, 175, 80, 0.3);
+    color: #4caf50;
+    border-color: #4caf50;
+}
+
+.setting-description {
+    margin: 8px 0 0 0;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.5);
+    line-height: 1.4;
 }
 
 /* ==========================================================================

@@ -1,18 +1,24 @@
 module Network.Protocol exposing
     ( GameMessage(..)
+    , GameSettings
     , StateSyncPayload
     , SnakeState
     , SnakeStatus(..)
     , AppleState
+    , ProjectileState
     , KillEvent
     , InputPayload
+    , ShootPayload
     , PlayerJoinPayload
     , PlayerLeavePayload
     , HostMigrationPayload(..)
+    , defaultGameSettings
     , encodeGameMessage
     , decodeGameMessage
     , encodeStateSync
     , decodeStateSync
+    , encodeGameSettings
+    , decodeGameSettings
     , encodeInput
     , decodeInput
     , encodeDirection
@@ -31,11 +37,27 @@ import Json.Encode as JE
 import Snake exposing (Direction(..), Position)
 
 
+{-| Game settings configurable by the host.
+-}
+type alias GameSettings =
+    { venomMode : Bool
+    }
+
+
+{-| Default game settings (all features off).
+-}
+defaultGameSettings : GameSettings
+defaultGameSettings =
+    { venomMode = False
+    }
+
+
 {-| Top-level game message types for P2P communication.
 -}
 type GameMessage
     = StateSync StateSyncPayload -- Host -> Client: full/delta state
     | InputMessage InputPayload -- Client -> Host: direction input
+    | ShootMessage ShootPayload -- Client -> Host: fire venom
     | PlayerJoin PlayerJoinPayload -- Bidirectional: player joining
     | PlayerLeave PlayerLeavePayload -- Bidirectional: player leaving
     | HostMigrated { newHostId : String, tick : Int } -- Migration event
@@ -69,6 +91,8 @@ type alias StateSyncPayload =
     , tick : Int
     , isFull : Bool -- True for full sync, False for delta
     , kills : List KillEvent -- Kills that happened this tick
+    , settings : GameSettings
+    , projectiles : List ProjectileState
     }
 
 
@@ -98,6 +122,24 @@ type alias AppleState =
 type alias KillEvent =
     { victimName : String
     , killerName : Maybe String -- Nothing if self-kill
+    , isVenomKill : Bool
+    }
+
+
+{-| Projectile state for network transmission.
+-}
+type alias ProjectileState =
+    { position : Position
+    , direction : Direction
+    , ownerId : String
+    }
+
+
+{-| Shoot payload from client to host.
+-}
+type alias ShootPayload =
+    { playerId : String
+    , tick : Int
     }
 
 
@@ -146,6 +188,12 @@ encodeGameMessage msg =
                 , ( "payload", encodeInput payload )
                 ]
 
+        ShootMessage payload ->
+            JE.object
+                [ ( "type", JE.string "shoot" )
+                , ( "payload", encodeShoot payload )
+                ]
+
         PlayerJoin payload ->
             JE.object
                 [ ( "type", JE.string "player_join" )
@@ -181,6 +229,38 @@ encodeStateSync payload =
         , ( "tick", JE.int payload.tick )
         , ( "is_full", JE.bool payload.isFull )
         , ( "kills", JE.list encodeKillEvent payload.kills )
+        , ( "settings", encodeGameSettings payload.settings )
+        , ( "projectiles", JE.list encodeProjectileState payload.projectiles )
+        ]
+
+
+{-| Encode a ProjectileState to JSON.
+-}
+encodeProjectileState : ProjectileState -> JE.Value
+encodeProjectileState proj =
+    JE.object
+        [ ( "position", encodePosition proj.position )
+        , ( "direction", encodeDirection proj.direction )
+        , ( "owner_id", JE.string proj.ownerId )
+        ]
+
+
+{-| Encode a ShootPayload to JSON.
+-}
+encodeShoot : ShootPayload -> JE.Value
+encodeShoot payload =
+    JE.object
+        [ ( "player_id", JE.string payload.playerId )
+        , ( "tick", JE.int payload.tick )
+        ]
+
+
+{-| Encode GameSettings to JSON.
+-}
+encodeGameSettings : GameSettings -> JE.Value
+encodeGameSettings settings =
+    JE.object
+        [ ( "venom_mode", JE.bool settings.venomMode )
         ]
 
 
@@ -198,6 +278,7 @@ encodeKillEvent kill =
                 Nothing ->
                     JE.null
           )
+        , ( "is_venom_kill", JE.bool kill.isVenomKill )
         ]
 
 
@@ -320,6 +401,10 @@ decodeGameMessage =
                         JD.field "payload" decodeInput
                             |> JD.map InputMessage
 
+                    "shoot" ->
+                        JD.field "payload" decodeShoot
+                            |> JD.map ShootMessage
+
                     "player_join" ->
                         JD.field "payload" decodePlayerJoin
                             |> JD.map PlayerJoin
@@ -337,22 +422,68 @@ decodeGameMessage =
 -}
 decodeStateSync : JD.Decoder StateSyncPayload
 decodeStateSync =
-    JD.map6 StateSyncPayload
+    JD.map8 StateSyncPayload
         (JD.field "snakes" (JD.list decodeSnakeState))
         (JD.field "apples" (JD.list decodeAppleState))
         (JD.field "scores" decodeScores)
         (JD.field "tick" JD.int)
         (JD.field "is_full" JD.bool)
         (JD.field "kills" (JD.list decodeKillEvent))
+        (JD.oneOf
+            [ JD.field "settings" decodeGameSettings
+            , JD.succeed defaultGameSettings
+            ]
+        )
+        (JD.oneOf
+            [ JD.field "projectiles" (JD.list decodeProjectileState)
+            , JD.succeed []
+            ]
+        )
+
+
+{-| Decode GameSettings from JSON.
+-}
+decodeGameSettings : JD.Decoder GameSettings
+decodeGameSettings =
+    JD.map GameSettings
+        (JD.oneOf
+            [ JD.field "venom_mode" JD.bool
+            , JD.succeed False
+            ]
+        )
+
+
+{-| Decode a ProjectileState from JSON.
+-}
+decodeProjectileState : JD.Decoder ProjectileState
+decodeProjectileState =
+    JD.map3 ProjectileState
+        (JD.field "position" decodePosition)
+        (JD.field "direction" decodeDirection)
+        (JD.field "owner_id" JD.string)
+
+
+{-| Decode a ShootPayload from JSON.
+-}
+decodeShoot : JD.Decoder ShootPayload
+decodeShoot =
+    JD.map2 ShootPayload
+        (JD.field "player_id" JD.string)
+        (JD.field "tick" JD.int)
 
 
 {-| Decode a KillEvent from JSON.
 -}
 decodeKillEvent : JD.Decoder KillEvent
 decodeKillEvent =
-    JD.map2 KillEvent
+    JD.map3 KillEvent
         (JD.field "victim_name" JD.string)
         (JD.field "killer_name" (JD.nullable JD.string))
+        (JD.oneOf
+            [ JD.field "is_venom_kill" JD.bool
+            , JD.succeed False
+            ]
+        )
 
 
 {-| Decode a SnakeState from JSON.
