@@ -8,6 +8,7 @@ module Engine.Apple exposing
     , spawnIfNeeded
     , tickExpiredApples
     , minApples
+    , maxApples
     , ticksUntilExpiry
     , randomSafePosition
     )
@@ -22,6 +23,7 @@ Apples progress through aging stages:
 - Skull (100+ ticks): White skull, -50% score, -50% length
 -}
 
+import Engine.Grid
 import Random
 import Snake exposing (Position)
 
@@ -50,6 +52,15 @@ Matches Elixir @min_apples.
 minApples : Int
 minApples =
     3
+
+
+{-| Maximum number of apples allowed on the board.
+Safety cap to prevent unbounded growth from timing edge cases.
+30% of default grid area.
+-}
+maxApples : Int
+maxApples =
+    Engine.Grid.defaultDimensions.width * Engine.Grid.defaultDimensions.height * 30 // 100
 
 
 {-| Number of ticks before an apple becomes a skull.

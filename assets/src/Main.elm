@@ -311,7 +311,9 @@ update msg model =
                                 List.length newState.apples + model.pendingAppleSpawns
 
                             applesNeeded =
-                                max 0 (Apple.minApples - effectiveAppleCount + List.length tickResult.expiredApples)
+                                max 0 (Apple.minApples - effectiveAppleCount)
+                                    |> min (Apple.maxApples - effectiveAppleCount)
+                                    |> max 0
 
                             ( newPendingCount, spawnCmd ) =
                                 if applesNeeded > 0 then
@@ -800,7 +802,9 @@ update msg model =
                             List.length newState.apples + model.pendingAppleSpawns
 
                         applesNeeded =
-                            max 0 (Apple.minApples - effectiveAppleCount + List.length tickResult.expiredApples)
+                            max 0 (Apple.minApples - effectiveAppleCount)
+                                |> min (Apple.maxApples - effectiveAppleCount)
+                                |> max 0
 
                         ( newPendingCount, spawnCmd ) =
                             if applesNeeded > 0 then
