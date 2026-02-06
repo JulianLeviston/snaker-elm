@@ -8,6 +8,7 @@ module Engine.Apple exposing
     , spawnIfNeeded
     , tickExpiredApples
     , minApples
+    , maxApples
     , ticksUntilExpiry
     , randomSafePosition
     )
@@ -50,6 +51,15 @@ Matches Elixir @min_apples.
 minApples : Int
 minApples =
     3
+
+
+{-| Maximum number of apples allowed on the board.
+Safety cap to prevent unbounded growth from timing edge cases.
+~30% of default grid area (30x40 = 1200 cells).
+-}
+maxApples : Int
+maxApples =
+    360
 
 
 {-| Number of ticks before an apple becomes a skull.
