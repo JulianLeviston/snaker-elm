@@ -82,6 +82,7 @@ type alias Model =
     , qrCodeDataUrl : Maybe String
     , copyCodeState : ShareUI.CopyState
     , copyUrlState : ShareUI.CopyState
+    , connectionPanelCollapsed : Bool
     }
 
 
@@ -151,6 +152,8 @@ type Msg
     | CloseInfo
       -- Auto-join from URL
     | TriggerAutoJoin String
+      -- Mobile UI
+    | ToggleConnectionPanel
 
 
 init : Flags -> ( Model, Cmd Msg )
@@ -204,6 +207,7 @@ initModeSelection baseUrl =
       , qrCodeDataUrl = Nothing
       , copyCodeState = ShareUI.Ready
       , copyUrlState = ShareUI.Ready
+      , connectionPanelCollapsed = False
       }
     , Cmd.none
     )
@@ -238,6 +242,7 @@ initWithMode baseUrl mode =
               , qrCodeDataUrl = Nothing
               , copyCodeState = ShareUI.Ready
               , copyUrlState = ShareUI.Ready
+              , connectionPanelCollapsed = False
               }
             , Cmd.none
             )
@@ -266,6 +271,7 @@ initWithMode baseUrl mode =
               , qrCodeDataUrl = Nothing
               , copyCodeState = ShareUI.Ready
               , copyUrlState = ShareUI.Ready
+              , connectionPanelCollapsed = False
               }
             , Ports.joinGame (JE.object [])
             )
@@ -1193,6 +1199,9 @@ update msg model =
             in
             ( { model | screen = previousScreen }, Cmd.none )
 
+        ToggleConnectionPanel ->
+            ( { model | connectionPanelCollapsed = not model.connectionPanelCollapsed }, Cmd.none )
+
         TriggerAutoJoin roomCode ->
             -- JS triggers this after ports are ready
             let
@@ -1501,9 +1510,38 @@ viewInfoScreen =
 -}
 viewGameScreen : Model -> Html Msg
 viewGameScreen model =
+    let
+        -- Get room code if connected
+        maybeRoomCode =
+            case model.p2pState of
+                P2PConnected _ code ->
+                    Just code
+
+                _ ->
+                    Nothing
+
+        -- Collapse toggle icon
+        collapseIcon =
+            if model.connectionPanelCollapsed then
+                "▼"
+
+            else
+                "▲"
+    in
     div [ class "game-container", style "padding" "20px" ]
         [ div [ class "game-header" ]
             [ h1 [] [ text "Snaker v2.0" ]
+            , -- Mobile room code badge (visible when connected)
+              case maybeRoomCode of
+                Just code ->
+                    button
+                        [ class "room-badge"
+                        , onClick ToggleConnectionPanel
+                        ]
+                        [ text ("Room: " ++ code ++ " " ++ collapseIcon) ]
+
+                Nothing ->
+                    text ""
             , div [ class "header-buttons" ]
                 [ button [ class "btn-info", onClick OpenInfo ]
                     [ text "?" ]
@@ -1511,19 +1549,29 @@ viewGameScreen model =
                     [ text "Settings" ]
                 ]
             ]
-        , -- Only show P2P connection UI in P2P mode
+        , -- Only show P2P connection UI in P2P mode (collapsible on mobile)
           case model.selectedMode of
             Just P2PSelected ->
-                ConnectionUI.view
-                    { p2pState = model.p2pState
-                    , roomCodeInput = model.roomCodeInput
-                    , showCopiedFeedback = model.showCopiedFeedback
-                    , onCreateRoom = CreateRoom
-                    , onJoinRoom = JoinRoom
-                    , onLeaveRoom = LeaveRoom
-                    , onRoomCodeInput = RoomCodeInputChanged
-                    , onCopyRoomCode = CopyRoomCode
-                    }
+                div
+                    [ class
+                        (if model.connectionPanelCollapsed then
+                            "connection-panel-wrapper collapsed"
+
+                         else
+                            "connection-panel-wrapper"
+                        )
+                    ]
+                    [ ConnectionUI.view
+                        { p2pState = model.p2pState
+                        , roomCodeInput = model.roomCodeInput
+                        , showCopiedFeedback = model.showCopiedFeedback
+                        , onCreateRoom = CreateRoom
+                        , onJoinRoom = JoinRoom
+                        , onLeaveRoom = LeaveRoom
+                        , onRoomCodeInput = RoomCodeInputChanged
+                        , onCopyRoomCode = CopyRoomCode
+                        }
+                    ]
 
             Just PhoenixSelected ->
                 div [ class "connection-status" ]
@@ -1630,6 +1678,29 @@ viewGame model =
 
             else
                 content
+
+        -- QR code watermark overlay (only shown for host)
+        qrWatermark =
+            case model.qrCodeDataUrl of
+                Just dataUrl ->
+                    Html.img
+                        [ class "qr-watermark"
+                        , Html.Attributes.src dataUrl
+                        , Html.Attributes.alt "Scan to join"
+                        ]
+                        []
+
+                Nothing ->
+                    text ""
+
+        -- Check if we should show QR watermark (host with room)
+        showQrWatermark =
+            case model.p2pState of
+                P2PConnected Host _ ->
+                    True
+
+                _ ->
+                    False
     in
     -- Check if hosting P2P game first
     case model.hostGame of
@@ -1639,7 +1710,10 @@ viewGame model =
                     HostGame.toGameState hostState
             in
             div [ class "game-layout" ]
-                [ wrapWithShake (Board.viewWithTickAndLeader gameState model.myPeerId gameState.leaderId)
+                [ div [ class "game-board-container" ]
+                    [ if showQrWatermark then qrWatermark else text ""
+                    , wrapWithShake (Board.viewWithTickAndLeader gameState model.myPeerId gameState.leaderId)
+                    ]
                 , Scoreboard.view gameState.snakes gameState.scores model.myPeerId
                 ]
 
@@ -1652,7 +1726,9 @@ viewGame model =
                             ClientGame.toGameState clientState
                     in
                     div [ class "game-layout" ]
-                        [ wrapWithShake (Board.viewWithTickAndLeader gameState model.myPeerId gameState.leaderId)
+                        [ div [ class "game-board-container" ]
+                            [ wrapWithShake (Board.viewWithTickAndLeader gameState model.myPeerId gameState.leaderId)
+                            ]
                         , Scoreboard.view gameState.snakes gameState.scores model.myPeerId
                         ]
 
@@ -1666,7 +1742,9 @@ viewGame model =
                                             LocalGame.toGameState localState
                                     in
                                     div [ class "game-layout" ]
-                                        [ wrapWithShake (Board.viewWithTick gameState model.playerId)
+                                        [ div [ class "game-board-container" ]
+                                            [ wrapWithShake (Board.viewWithTick gameState model.playerId)
+                                            ]
                                         , Scoreboard.view gameState.snakes Dict.empty model.playerId
                                         ]
 
@@ -1678,7 +1756,9 @@ viewGame model =
                             case model.gameState of
                                 Just state ->
                                     div [ class "game-layout" ]
-                                        [ wrapWithShake (Board.view state model.playerId)
+                                        [ div [ class "game-board-container" ]
+                                            [ wrapWithShake (Board.view state model.playerId)
+                                            ]
                                         , Scoreboard.view state.snakes Dict.empty model.playerId
                                         ]
 

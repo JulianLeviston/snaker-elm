@@ -13,6 +13,13 @@ body {
     min-height: 100vh;
 }
 
+/* Mobile: minimal padding for more game space */
+@media (max-width: 600px) {
+    body {
+        padding: 8px;
+    }
+}
+
 /* ==========================================================================
    Responsive Game Board
    ========================================================================== */
@@ -41,6 +48,35 @@ body {
     }
 }
 
+/* ==========================================================================
+   Mobile Room Badge & Collapsible Panel
+   ========================================================================== */
+
+/* Room badge - hidden on desktop, shown on mobile */
+.room-badge {
+    display: none;
+    background: #4CAF50;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 16px;
+    font-size: 14px;
+    font-weight: bold;
+    font-family: monospace;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.room-badge:active {
+    background: #388E3C;
+}
+
+/* Connection panel wrapper for collapse behavior */
+.connection-panel-wrapper {
+    transition: max-height 0.3s ease, opacity 0.3s ease, margin 0.3s ease;
+    overflow: hidden;
+}
+
 /* Mobile layout improvements */
 @media (max-width: 600px) {
     .game-container {
@@ -49,14 +85,39 @@ body {
 
     .game-header {
         display: flex;
+        flex-wrap: wrap;
         justify-content: space-between;
         align-items: center;
         margin-bottom: 10px;
+        gap: 8px;
     }
 
     .game-header h1 {
         font-size: 1.2em;
         margin: 0;
+    }
+
+    /* Show room badge on mobile */
+    .room-badge {
+        display: inline-block;
+        order: 1;
+    }
+
+    .header-buttons {
+        order: 2;
+    }
+
+    /* Collapsible connection panel on mobile */
+    .connection-panel-wrapper.collapsed {
+        max-height: 0;
+        opacity: 0;
+        margin: 0;
+        pointer-events: none;
+    }
+
+    .connection-panel-wrapper:not(.collapsed) {
+        max-height: 500px;
+        opacity: 1;
     }
 
     .connection-panel {
@@ -70,6 +131,34 @@ body {
 
     .connection-actions {
         margin-top: 10px;
+    }
+
+    /* Hide full ShareUI on mobile (QR is now a watermark) */
+    .share-ui {
+        display: none;
+    }
+
+    /* Game container takes full width */
+    .game-container {
+        padding: 8px !important;
+    }
+
+    /* Game board expands more on mobile */
+    .game-board {
+        max-height: calc(100vh - 180px);
+        max-width: calc(100vw - 16px);
+    }
+
+    /* Compact status on mobile */
+    .game-status {
+        font-size: 12px;
+        padding: 4px 0;
+        margin-bottom: 4px;
+    }
+
+    /* Game board container fills width on mobile */
+    .game-board-container {
+        width: 100%;
     }
 }
 
@@ -652,6 +741,43 @@ body {
     border-radius: 4px;
     color: #666;
     font-size: 14px;
+}
+
+/* ==========================================================================
+   Game Board Container with QR Watermark
+   ========================================================================== */
+
+.game-board-container {
+    position: relative;
+}
+
+.qr-watermark {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    width: 80px;
+    height: 80px;
+    opacity: 0.15;
+    pointer-events: none;
+    z-index: 1;
+    border-radius: 4px;
+}
+
+/* On desktop, hide QR watermark (show full ShareUI instead) */
+@media (min-width: 601px) {
+    .qr-watermark {
+        display: none;
+    }
+}
+
+/* On mobile, show QR watermark and make it slightly more visible */
+@media (max-width: 600px) {
+    .qr-watermark {
+        display: block;
+        width: 60px;
+        height: 60px;
+        opacity: 0.2;
+    }
 }
 
 /* ==========================================================================
