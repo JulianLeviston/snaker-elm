@@ -53,9 +53,15 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-06
-Stopped at: Working on changelog/about page
+Stopped at: Mobile fullscreen layout - feature branch ready for merge
 Resume file: None
+
+### Handoff Notes
+- **Branch**: `feature/mobile-fullscreen-layout` - ready for merge to main
+- **Playwright MCP**: Installed and configured, restart Claude Code to activate
+- **Pending test**: Board disappearing briefly on player death (couldn't capture screenshot)
+- **New bug captured**: Apple sync/count issue when tab backgrounded (see todos)
 
 ---
 *State initialized: 2026-02-03*
-*Last updated: 2026-02-06 (started changelog/about page todo)*
+*Last updated: 2026-02-06 (mobile layout work, handoff prep)*
