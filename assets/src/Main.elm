@@ -98,7 +98,7 @@ type ConnectionStatus
 
 
 type Msg
-    = KeyPressed (Maybe Direction)
+    = GameInput Input.InputAction
     | GotGameState JD.Value
     | GotError String
     | PlayerJoined JD.Value
@@ -147,6 +147,8 @@ type Msg
     | OpenSettings
     | CloseSettings
     | ChangeMode ModeSelection.Mode
+      -- Game settings messages
+    | ToggleVenomMode
       -- Info screen messages
     | OpenInfo
     | CloseInfo
@@ -389,9 +391,12 @@ update msg model =
             , Ports.joinGame (JE.object [])
             )
 
-        KeyPressed maybeDir ->
-            case maybeDir of
-                Just dir ->
+        GameInput action ->
+            case action of
+                Input.NoInput ->
+                    ( model, Cmd.none )
+
+                Input.DirectionInput dir ->
                     -- Check if we're hosting a P2P game first
                     case model.hostGame of
                         Just hostState ->
@@ -413,15 +418,17 @@ update msg model =
                                         newClientState =
                                             ClientGame.bufferLocalInput dir clientState
 
-                                        inputPayload =
-                                            Protocol.encodeInput
-                                                { playerId = clientState.myId
-                                                , direction = dir
-                                                , tick = clientState.lastHostTick
-                                                }
+                                        inputMsg =
+                                            Protocol.encodeGameMessage
+                                                (Protocol.InputMessage
+                                                    { playerId = clientState.myId
+                                                    , direction = dir
+                                                    , tick = clientState.lastHostTick
+                                                    }
+                                                )
 
                                         inputJson =
-                                            JE.encode 0 inputPayload
+                                            JE.encode 0 inputMsg
                                     in
                                     ( { model | clientGame = Just newClientState, currentDirection = dir }
                                     , Ports.sendInputP2P inputJson
@@ -451,8 +458,38 @@ update msg model =
                                                 (JE.object [ ( "direction", JE.string (Snake.directionToString dir) ) ])
                                             )
 
-                Nothing ->
-                    ( model, Cmd.none )
+                Input.ShootInput ->
+                    -- Check if we're hosting a P2P game
+                    case model.hostGame of
+                        Just hostState ->
+                            -- Host: buffer shot for own snake
+                            let
+                                newState =
+                                    HostGame.bufferShot hostState.hostId hostState
+                            in
+                            ( { model | hostGame = Just newState }, Cmd.none )
+
+                        Nothing ->
+                            -- Check if we're a P2P client
+                            case model.clientGame of
+                                Just clientState ->
+                                    -- Client: send shoot message to host
+                                    let
+                                        shootMsg =
+                                            Protocol.encodeGameMessage
+                                                (Protocol.ShootMessage
+                                                    { playerId = clientState.myId
+                                                    , tick = clientState.lastHostTick
+                                                    }
+                                                )
+
+                                        shootJson =
+                                            JE.encode 0 shootMsg
+                                    in
+                                    ( model, Ports.sendInputP2P shootJson )
+
+                                Nothing ->
+                                    ( model, Cmd.none )
 
         GotGameState value ->
             case JD.decodeValue Game.decoder value of
@@ -827,13 +864,21 @@ update msg model =
                             tickResult.kills
                                 |> List.map
                                     (\kill ->
+                                        let
+                                            verbGenerator =
+                                                if kill.isVenomKill then
+                                                    KillVerbs.generateVenom
+
+                                                else
+                                                    KillVerbs.generate
+                                        in
                                         case kill.killerName of
                                             Just killerName ->
-                                                Random.generate (\verb -> ShowKillNotification killerName verb kill.victimName) KillVerbs.generate
+                                                Random.generate (\verb -> ShowKillNotification killerName verb kill.victimName) verbGenerator
 
                                             Nothing ->
                                                 -- Self-kill
-                                                Random.generate (\verb -> ShowSelfKillNotification kill.victimName verb) KillVerbs.generate
+                                                Random.generate (\verb -> ShowSelfKillNotification kill.victimName verb) verbGenerator
                                     )
                     in
                     case List.head snakesNeedingRespawn of
@@ -912,18 +957,25 @@ update msg model =
                     ( model, Cmd.none )
 
         GotInputP2P jsonString ->
-            -- Host receives input from client
+            -- Host receives input from client (direction or shoot)
             case model.hostGame of
                 Just hostState ->
-                    case JD.decodeString Protocol.decodeInput jsonString of
-                        Ok inputPayload ->
+                    case JD.decodeString Protocol.decodeGameMessage jsonString of
+                        Ok (Protocol.InputMessage inputPayload) ->
                             let
                                 newState =
                                     HostGame.bufferInput inputPayload.playerId inputPayload.direction hostState
                             in
                             ( { model | hostGame = Just newState }, Cmd.none )
 
-                        Err _ ->
+                        Ok (Protocol.ShootMessage shootPayload) ->
+                            let
+                                newState =
+                                    HostGame.bufferShot shootPayload.playerId hostState
+                            in
+                            ( { model | hostGame = Just newState }, Cmd.none )
+
+                        _ ->
                             ( model, Cmd.none )
 
                 Nothing ->
@@ -944,13 +996,21 @@ update msg model =
                                     stateSync.kills
                                         |> List.map
                                             (\kill ->
+                                                let
+                                                    verbGenerator =
+                                                        if kill.isVenomKill then
+                                                            KillVerbs.generateVenom
+
+                                                        else
+                                                            KillVerbs.generate
+                                                in
                                                 case kill.killerName of
                                                     Just killerName ->
-                                                        Random.generate (\verb -> ShowKillNotification killerName verb kill.victimName) KillVerbs.generate
+                                                        Random.generate (\verb -> ShowKillNotification killerName verb kill.victimName) verbGenerator
 
                                                     Nothing ->
                                                         -- Self-kill
-                                                        Random.generate (\verb -> ShowSelfKillNotification kill.victimName verb) KillVerbs.generate
+                                                        Random.generate (\verb -> ShowSelfKillNotification kill.victimName verb) verbGenerator
                                             )
                             in
                             ( { model | clientGame = Just newClientState }
@@ -1188,6 +1248,14 @@ update msg model =
             , Cmd.batch [ Ports.saveMode modeStr, initCmd ]
             )
 
+        ToggleVenomMode ->
+            case model.hostGame of
+                Just hostState ->
+                    ( { model | hostGame = Just (HostGame.toggleVenomMode hostState) }, Cmd.none )
+
+                Nothing ->
+                    ( model, Cmd.none )
+
         OpenInfo ->
             ( { model | screen = InfoScreen }, Cmd.none )
 
@@ -1383,10 +1451,51 @@ viewModeSelectionScreen =
 -}
 viewSettingsScreen : Model -> Html Msg
 viewSettingsScreen model =
+    let
+        venomEnabled =
+            case model.hostGame of
+                Just hostState ->
+                    hostState.settings.venomMode
+
+                Nothing ->
+                    False
+    in
     div [ class "game-container settings-page", style "padding" "20px" ]
         [ h1 [] [ text "Settings" ]
         , div [ class "settings-content" ]
-            [ h2 [] [ text "Game Mode" ]
+            [ -- Game settings section (host only, P2P mode)
+              case model.hostGame of
+                Just _ ->
+                    div [ class "settings-section" ]
+                        [ h2 [] [ text "Game Rules" ]
+                        , div [ class "setting-row" ]
+                            [ span [ class "setting-label" ] [ text "Venom Spitting" ]
+                            , button
+                                [ class
+                                    (if venomEnabled then
+                                        "setting-toggle active"
+
+                                     else
+                                        "setting-toggle"
+                                    )
+                                , onClick ToggleVenomMode
+                                ]
+                                [ text
+                                    (if venomEnabled then
+                                        "ON"
+
+                                     else
+                                        "OFF"
+                                    )
+                                ]
+                            ]
+                        , p [ class "setting-description" ]
+                            [ text "Press spacebar to fire venom projectiles. Hitting an enemy truncates their tail into apples!" ]
+                        ]
+
+                Nothing ->
+                    text ""
+            , h2 [] [ text "Game Mode" ]
             , p [ class "current-mode" ]
                 [ text "Current mode: "
                 , text
@@ -1722,11 +1831,21 @@ viewGame model =
             let
                 gameState =
                     HostGame.toGameState hostState
+
+                projectileStates =
+                    List.map
+                        (\p ->
+                            { position = p.position
+                            , direction = p.direction
+                            , ownerId = p.ownerId
+                            }
+                        )
+                        hostState.projectiles
             in
             div [ class "game-layout" ]
                 [ div [ class "game-board-container" ]
                     [ if showQrWatermark then qrWatermark else text ""
-                    , wrapWithShake (Board.viewWithTickAndLeader gameState model.myPeerId gameState.leaderId)
+                    , wrapWithShake (Board.viewWithProjectiles gameState model.myPeerId gameState.leaderId projectileStates gameState.snakes)
                     ]
                 , Scoreboard.view gameState.snakes gameState.scores model.myPeerId
                 ]
@@ -1741,7 +1860,7 @@ viewGame model =
                     in
                     div [ class "game-layout" ]
                         [ div [ class "game-board-container" ]
-                            [ wrapWithShake (Board.viewWithTickAndLeader gameState model.myPeerId gameState.leaderId)
+                            [ wrapWithShake (Board.viewWithProjectiles gameState model.myPeerId gameState.leaderId clientState.projectiles gameState.snakes)
                             ]
                         , Scoreboard.view gameState.snakes gameState.scores model.myPeerId
                         ]
@@ -1796,7 +1915,7 @@ connectionStatusToString status =
 subscriptions : Model -> Sub Msg
 subscriptions model =
     Sub.batch
-        [ Browser.Events.onKeyDown (JD.map KeyPressed Input.keyDecoder)
+        [ Browser.Events.onKeyDown (JD.map GameInput Input.keyDecoder)
           -- Tick subscription depends on game mode and P2P state
         , case model.p2pState of
             P2PConnected Host _ ->
@@ -1833,31 +1952,34 @@ subscriptions model =
           -- QR code generation
         , Ports.qrCodeGenerated GotQRCodeGenerated
           -- Touch controls
-        , Ports.receiveTouchDirection (stringToDirection >> KeyPressed)
+        , Ports.receiveTouchDirection (stringToInputAction >> GameInput)
           -- Auto-join from URL
         , Ports.triggerAutoJoin TriggerAutoJoin
         ]
 
 
-{-| Convert string direction from touch controls to Maybe Direction.
+{-| Convert string from touch controls to InputAction.
 -}
-stringToDirection : String -> Maybe Direction
-stringToDirection str =
+stringToInputAction : String -> Input.InputAction
+stringToInputAction str =
     case str of
         "up" ->
-            Just Up
+            Input.DirectionInput Up
 
         "down" ->
-            Just Down
+            Input.DirectionInput Down
 
         "left" ->
-            Just Left
+            Input.DirectionInput Left
 
         "right" ->
-            Just Right
+            Input.DirectionInput Right
+
+        "shoot" ->
+            Input.ShootInput
 
         _ ->
-            Nothing
+            Input.NoInput
 
 
 main : Program Flags Model Msg

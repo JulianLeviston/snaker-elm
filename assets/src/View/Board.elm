@@ -1,11 +1,12 @@
-module View.Board exposing (view, viewWithLeader, viewWithTick, viewWithTickAndLeader)
+module View.Board exposing (view, viewWithLeader, viewWithTick, viewWithTickAndLeader, viewWithProjectiles)
 
 import Engine.Apple as Apple
 import Game exposing (GameState)
 import Html exposing (Html)
 import Html.Attributes
+import Network.Protocol as Protocol
 import Svg.Keyed
-import Snake exposing (Position, Snake)
+import Snake exposing (Direction(..), Position, Snake)
 import Svg exposing (Svg, circle, g, line, rect, svg, text_)
 import Svg.Attributes as SA
 
@@ -99,6 +100,102 @@ viewWithTickAndLeader gameState maybePlayerId maybeLeaderId =
         [ background width height
         , renderApples gameState.currentTick gameState.apples
         , renderSnakes gameState.snakes maybePlayerId maybeLeaderId Nothing
+        ]
+
+
+{-| Render the game board with tick, leader indicator, and projectiles.
+-}
+viewWithProjectiles : { a | snakes : List Snake, apples : List { position : Position, spawnedAtTick : Int }, gridWidth : Int, gridHeight : Int, currentTick : Int } -> Maybe String -> Maybe String -> List Protocol.ProjectileState -> List Snake -> Html msg
+viewWithProjectiles gameState maybePlayerId maybeLeaderId projectiles allSnakes =
+    let
+        width =
+            gameState.gridWidth * cellSize
+
+        height =
+            gameState.gridHeight * cellSize
+    in
+    svg
+        [ SA.viewBox ("0 0 " ++ String.fromInt width ++ " " ++ String.fromInt height)
+        , svgClass "game-board"
+        ]
+        [ background width height
+        , renderApples gameState.currentTick gameState.apples
+        , renderProjectiles projectiles allSnakes
+        , renderSnakes gameState.snakes maybePlayerId maybeLeaderId Nothing
+        ]
+
+
+{-| Render venom projectiles as colored circles with bright cores.
+-}
+renderProjectiles : List Protocol.ProjectileState -> List Snake -> Svg msg
+renderProjectiles projectiles snakes =
+    g [ svgClass "projectiles" ]
+        (List.map (renderProjectile snakes) projectiles)
+
+
+{-| Render a single projectile. Color matches the owner snake.
+-}
+renderProjectile : List Snake -> Protocol.ProjectileState -> Svg msg
+renderProjectile snakes proj =
+    let
+        cx_ =
+            proj.position.x * cellSize + cellSize // 2
+
+        cy_ =
+            proj.position.y * cellSize + cellSize // 2
+
+        ownerColor =
+            snakes
+                |> List.filter (\s -> s.id == proj.ownerId)
+                |> List.head
+                |> Maybe.map .color
+                |> Maybe.withDefault "ffffff"
+
+        -- Rotation based on direction for the elongated shape
+        rotation =
+            case proj.direction of
+                Up ->
+                    "90"
+
+                Down ->
+                    "90"
+
+                Left ->
+                    "0"
+
+                Right ->
+                    "0"
+    in
+    g [ svgClass "venom-projectile"
+      , SA.transform ("translate(" ++ String.fromInt cx_ ++ "," ++ String.fromInt cy_ ++ ")")
+      ]
+        [ -- Outer glow
+          circle
+            [ SA.cx "0"
+            , SA.cy "0"
+            , SA.r "5"
+            , SA.fill ("rgba(255, 255, 255, 0.15)")
+            , SA.stroke ("rgba(255, 255, 255, 0.3)")
+            , SA.strokeWidth "1"
+            ]
+            []
+        , -- Core
+          circle
+            [ SA.cx "0"
+            , SA.cy "0"
+            , SA.r "3"
+            , SA.fill ("#" ++ ownerColor)
+            ]
+            []
+        , -- Bright center
+          circle
+            [ SA.cx "0"
+            , SA.cy "0"
+            , SA.r "1.5"
+            , SA.fill "#ffffff"
+            , SA.opacity "0.8"
+            ]
+            []
         ]
 
 

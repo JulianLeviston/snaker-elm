@@ -1,6 +1,7 @@
 module Engine.Collision exposing
     ( collidesWithSelf
     , collidesWithOther
+    , findCollisionIndex
     )
 
 {-| Collision detection for snakes.
@@ -37,3 +38,27 @@ Used for multi-snake collision detection.
 collidesWithOther : Position -> List Position -> Bool
 collidesWithOther pos otherPositions =
     List.member pos otherPositions
+
+
+{-| Find the index of a position in a body list.
+
+Returns the first matching index, or Nothing if no match.
+Used for projectile hit detection to find where to truncate.
+-}
+findCollisionIndex : Position -> List Position -> Maybe Int
+findCollisionIndex pos body =
+    findCollisionIndexHelper pos body 0
+
+
+findCollisionIndexHelper : Position -> List Position -> Int -> Maybe Int
+findCollisionIndexHelper pos body index =
+    case body of
+        [] ->
+            Nothing
+
+        segment :: rest ->
+            if segment == pos then
+                Just index
+
+            else
+                findCollisionIndexHelper pos rest (index + 1)

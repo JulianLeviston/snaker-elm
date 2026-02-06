@@ -101,6 +101,11 @@ function createDpad(ports: TouchPorts): void {
         <path d="M4 12l8-8v16z"/>
       </svg>
     </button>
+    <button class="dpad-btn dpad-shoot" data-direction="shoot" aria-label="Shoot">
+      <svg viewBox="0 0 24 24" fill="currentColor">
+        <circle cx="12" cy="12" r="5"/>
+      </svg>
+    </button>
     <button class="dpad-btn dpad-right" data-direction="right" aria-label="Right">
       <svg viewBox="0 0 24 24" fill="currentColor">
         <path d="M20 12l-8 8V4z"/>

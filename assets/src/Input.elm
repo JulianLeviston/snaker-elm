@@ -1,5 +1,6 @@
 module Input exposing
-    ( keyDecoder
+    ( InputAction(..)
+    , keyDecoder
     , keyDecoderWithPreventDefault
     )
 
@@ -7,11 +8,19 @@ import Json.Decode as JD
 import Snake exposing (Direction(..))
 
 
-{-| Decode keyboard events to direction changes.
-Handles both Arrow keys and WASD.
+{-| Input actions from keyboard or touch.
+-}
+type InputAction
+    = DirectionInput Direction
+    | ShootInput
+    | NoInput
+
+
+{-| Decode keyboard events to input actions.
+Handles Arrow keys, WASD, and spacebar for shooting.
 Ignores key repeat events.
 -}
-keyDecoder : JD.Decoder (Maybe Direction)
+keyDecoder : JD.Decoder InputAction
 keyDecoder =
     JD.map2 Tuple.pair
         (JD.field "key" JD.string)
@@ -19,18 +28,18 @@ keyDecoder =
         |> JD.andThen
             (\( key, isRepeat ) ->
                 if isRepeat then
-                    JD.succeed Nothing
+                    JD.succeed NoInput
 
                 else
-                    JD.succeed (keyToDirection key)
+                    JD.succeed (keyToAction key)
             )
 
 
 {-| Decoder for use with preventDefaultOn.
 Returns (msg, shouldPreventDefault) tuple.
-Prevents default for arrow keys to stop page scrolling.
+Prevents default for arrow keys and spacebar.
 -}
-keyDecoderWithPreventDefault : (Maybe Direction -> msg) -> JD.Decoder ( msg, Bool )
+keyDecoderWithPreventDefault : (InputAction -> msg) -> JD.Decoder ( msg, Bool )
 keyDecoderWithPreventDefault toMsg =
     JD.map2 Tuple.pair
         (JD.field "key" JD.string)
@@ -38,17 +47,22 @@ keyDecoderWithPreventDefault toMsg =
         |> JD.map
             (\( key, isRepeat ) ->
                 let
-                    direction =
+                    action =
                         if isRepeat then
-                            Nothing
+                            NoInput
                         else
-                            keyToDirection key
+                            keyToAction key
 
                     shouldPreventDefault =
-                        isArrowKey key
+                        isGameKey key
                 in
-                ( toMsg direction, shouldPreventDefault )
+                ( toMsg action, shouldPreventDefault )
             )
+
+
+isGameKey : String -> Bool
+isGameKey key =
+    isArrowKey key || key == " "
 
 
 isArrowKey : String -> Bool
@@ -59,6 +73,21 @@ isArrowKey key =
         "ArrowLeft" -> True
         "ArrowRight" -> True
         _ -> False
+
+
+keyToAction : String -> InputAction
+keyToAction key =
+    case key of
+        " " ->
+            ShootInput
+
+        _ ->
+            case keyToDirection key of
+                Just dir ->
+                    DirectionInput dir
+
+                Nothing ->
+                    NoInput
 
 
 keyToDirection : String -> Maybe Direction

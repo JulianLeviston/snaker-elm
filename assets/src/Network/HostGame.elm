@@ -13,6 +13,8 @@ module Network.HostGame exposing
     , markOrphaned
     , bufferInput
     , changeHostDirection
+    , toggleVenomMode
+    , bufferShot
     , toStateSyncPayload
     , toGameState
     , getOccupiedPositions
@@ -35,6 +37,7 @@ import Dict exposing (Dict)
 import Engine.Apple as Apple exposing (Apple)
 import Engine.Collision as Collision
 import Engine.Grid as Grid
+import Engine.Projectile as Projectile exposing (Projectile)
 import NameGenerator
 import Network.ClientGame as ClientGame
 import Network.Protocol as Protocol exposing (StateSyncPayload)
@@ -53,6 +56,10 @@ type alias HostGameState =
     , hostId : String -- Host's own player ID
     , pendingInputs : Dict String Direction -- Buffered inputs per player
     , disconnectedPlayers : Dict String Int -- playerId -> disconnectTick (for grace period)
+    , settings : Protocol.GameSettings
+    , projectiles : List Projectile
+    , shootCooldowns : Dict String Int -- playerId -> last fire tick
+    , pendingShots : List String -- playerIds that want to shoot this tick
     }
 
 
@@ -93,6 +100,7 @@ type alias Kill =
     , killerId : Maybe String -- Nothing if self-kill or wall
     , killerName : Maybe String
     , pointsTransferred : Int
+    , isVenomKill : Bool
     }
 
 
@@ -174,6 +182,10 @@ init hostId =
             , hostId = hostId
             , pendingInputs = Dict.empty
             , disconnectedPlayers = Dict.empty
+            , settings = Protocol.defaultGameSettings
+            , projectiles = []
+            , shootCooldowns = Dict.empty
+            , pendingShots = []
             }
         )
         (randomPosition grid)
@@ -297,6 +309,291 @@ changeHostDirection direction state =
     bufferInput state.hostId direction state
 
 
+{-| Toggle venom mode setting.
+-}
+toggleVenomMode : HostGameState -> HostGameState
+toggleVenomMode state =
+    let
+        settings =
+            state.settings
+    in
+    { state | settings = { settings | venomMode = not settings.venomMode } }
+
+
+{-| Buffer a shoot request for a player. Only buffers if venom mode is on.
+-}
+bufferShot : String -> HostGameState -> HostGameState
+bufferShot playerId state =
+    if state.settings.venomMode then
+        { state | pendingShots = playerId :: state.pendingShots }
+
+    else
+        state
+
+
+{-| Process all pending shots, creating projectiles and shortening snakes.
+-}
+processShots : HostGameState -> HostGameState
+processShots state =
+    List.foldl processOneShot state state.pendingShots
+
+
+{-| Process a single shot for a player.
+-}
+processOneShot : String -> HostGameState -> HostGameState
+processOneShot playerId state =
+    case Dict.get playerId state.snakes of
+        Nothing ->
+            state
+
+        Just snakeData ->
+            case Projectile.create playerId snakeData.snake state.currentTick state.shootCooldowns of
+                Nothing ->
+                    state
+
+                Just ( projectile, shortenedSnake, newCooldowns ) ->
+                    let
+                        updatedData =
+                            { snakeData | snake = shortenedSnake }
+                    in
+                    { state
+                        | projectiles = projectile :: state.projectiles
+                        , snakes = Dict.insert playerId updatedData state.snakes
+                        , shootCooldowns = newCooldowns
+                    }
+
+
+{-| Move projectiles and remove expired ones.
+-}
+tickProjectiles : HostGameState -> HostGameState
+tickProjectiles state =
+    let
+        moved =
+            Projectile.moveAll state.grid state.projectiles
+
+        alive =
+            Projectile.removeExpired state.currentTick moved
+    in
+    { state | projectiles = alive }
+
+
+{-| Check projectile collisions with all snakes.
+
+For each projectile, checks its movement path (2 cells) against all non-owner snakes.
+- Head hit = instant kill
+- Body hit = truncate at impact point, destroyed segments become apples
+- Surviving length < 2 after truncation = kill instead
+- Own venom passes through own body harmlessly
+-}
+checkProjectileCollisions : HostGameState -> { state : HostGameState, kills : List Kill }
+checkProjectileCollisions state =
+    let
+        initial =
+            { state = state
+            , kills = []
+            , survivingProjectiles = []
+            }
+
+        finalResult =
+            List.foldl
+                (\proj acc ->
+                    let
+                        result =
+                            checkProjectilePathAgainstSnakes proj.ownerId (Projectile.getMovementPath acc.state.grid proj) (Dict.toList acc.state.snakes) acc.state
+                    in
+                    { state = result.state
+                    , kills = acc.kills ++ result.kills
+                    , survivingProjectiles =
+                        if result.hit then
+                            acc.survivingProjectiles
+
+                        else
+                            proj :: acc.survivingProjectiles
+                    }
+                )
+                initial
+                state.projectiles
+
+        updatedState =
+            finalResult.state
+    in
+    { state = { updatedState | projectiles = finalResult.survivingProjectiles }
+    , kills = finalResult.kills
+    }
+
+
+{-| Check a projectile's path against all non-owner snakes.
+-}
+checkProjectilePathAgainstSnakes : String -> List Position -> List ( String, SnakeData ) -> HostGameState -> { state : HostGameState, kills : List Kill, hit : Bool }
+checkProjectilePathAgainstSnakes ownerId path snakeEntries state =
+    let
+        -- Filter to non-owner, alive snakes
+        targets =
+            snakeEntries
+                |> List.filter (\( id, data ) -> id /= ownerId && data.status /= Dead)
+    in
+    checkPathAgainstTargets ownerId path targets state
+
+
+{-| Check each position in the path against target snakes. Stop at first hit.
+-}
+checkPathAgainstTargets : String -> List Position -> List ( String, SnakeData ) -> HostGameState -> { state : HostGameState, kills : List Kill, hit : Bool }
+checkPathAgainstTargets ownerId path targets state =
+    case path of
+        [] ->
+            { state = state, kills = [], hit = False }
+
+        pos :: restPath ->
+            case findHitSnake pos targets of
+                Nothing ->
+                    checkPathAgainstTargets ownerId restPath targets state
+
+                Just ( victimId, snakeData, hitIndex ) ->
+                    -- Got a hit!
+                    if hitIndex == 0 then
+                        -- Head hit = instant kill
+                        let
+                            kill =
+                                makeVenomKill ownerId victimId snakeData state
+
+                            newSnakes =
+                                Dict.update victimId
+                                    (Maybe.map (\d -> { d | needsRespawn = True }))
+                                    state.snakes
+                        in
+                        { state = { state | snakes = newSnakes }
+                        , kills = [ kill ]
+                        , hit = True
+                        }
+
+                    else
+                        -- Body hit = truncate at impact point
+                        let
+                            result =
+                                truncateSnakeAt ownerId victimId hitIndex snakeData state
+                        in
+                        { state = result.state
+                        , kills = result.kills
+                        , hit = True
+                        }
+
+
+{-| Find which snake (if any) is hit at a position, and the body index.
+-}
+findHitSnake : Position -> List ( String, SnakeData ) -> Maybe ( String, SnakeData, Int )
+findHitSnake pos targets =
+    case targets of
+        [] ->
+            Nothing
+
+        ( id, data ) :: rest ->
+            case Collision.findCollisionIndex pos data.snake.body of
+                Just index ->
+                    Just ( id, data, index )
+
+                Nothing ->
+                    findHitSnake pos rest
+
+
+{-| Create a venom kill event.
+-}
+makeVenomKill : String -> String -> SnakeData -> HostGameState -> Kill
+makeVenomKill shooterId victimId snakeData state =
+    let
+        victimScore =
+            Dict.get victimId state.scores |> Maybe.withDefault 0
+
+        shooterName =
+            Dict.get shooterId state.snakes
+                |> Maybe.map (.snake >> .name)
+    in
+    { victimId = victimId
+    , victimName = snakeData.snake.name
+    , killerId = Just shooterId
+    , killerName = shooterName
+    , pointsTransferred = victimScore // 2
+    , isVenomKill = True
+    }
+
+
+{-| Truncate a snake at the hit index. Segments from hitIndex onward become apples.
+
+If surviving length < 2, kill the snake instead.
+Awards shooter 1 point per destroyed segment.
+-}
+truncateSnakeAt : String -> String -> Int -> SnakeData -> HostGameState -> { state : HostGameState, kills : List Kill }
+truncateSnakeAt shooterId victimId hitIndex snakeData state =
+    let
+        body =
+            snakeData.snake.body
+
+        survivingBody =
+            List.take hitIndex body
+
+        destroyedSegments =
+            List.drop hitIndex body
+
+        destroyedCount =
+            List.length destroyedSegments
+
+        survivingLength =
+            List.length survivingBody
+    in
+    if survivingLength < 2 then
+        -- Too short to survive, kill instead
+        let
+            kill =
+                makeVenomKill shooterId victimId snakeData state
+
+            newSnakes =
+                Dict.update victimId
+                    (Maybe.map (\d -> { d | needsRespawn = True }))
+                    state.snakes
+        in
+        { state = { state | snakes = newSnakes }
+        , kills = [ kill ]
+        }
+
+    else
+        -- Truncate and convert destroyed segments to apples
+        let
+            snake =
+                snakeData.snake
+
+            truncatedSnake =
+                { snake | body = survivingBody, pendingGrowth = 0 }
+
+            updatedData =
+                { snakeData | snake = truncatedSnake }
+
+            -- Convert destroyed segments to apples
+            newApples =
+                List.map
+                    (\pos ->
+                        { position = pos
+                        , spawnedAtTick = state.currentTick
+                        }
+                    )
+                    destroyedSegments
+
+            -- Award shooter points for destroyed segments
+            newScores =
+                Dict.update shooterId
+                    (Maybe.map (\s -> s + destroyedCount))
+                    state.scores
+
+            newState =
+                { state
+                    | snakes = Dict.insert victimId updatedData state.snakes
+                    , apples = state.apples ++ newApples
+                    , scores = newScores
+                }
+        in
+        { state = newState
+        , kills = []
+        }
+
+
 {-| Process one game tick.
 
 Order matches Elixir GameServer:
@@ -323,33 +620,50 @@ tick state =
         stateAfterMove =
             moveAllSnakes stateWithInputs
 
-        -- 3. Check collisions (self and with others) - also handles point transfers
+        -- 3. Process pending shots (create projectiles from new head positions)
+        stateAfterShots =
+            processShots stateAfterMove
+
+        -- 4. Move and expire projectiles
+        stateAfterProjectiles =
+            tickProjectiles stateAfterShots
+
+        -- 5. Check projectile collisions (venom hits)
+        venomResult =
+            checkProjectileCollisions stateAfterProjectiles
+
+        -- 6. Check collisions (self and with others) - also handles point transfers
         collisionResult =
-            checkAllCollisions stateAfterMove
+            checkAllCollisions venomResult.state
 
-        -- 4. Respawns are handled separately via needsRespawn flag
+        -- 6. Respawns are handled separately via needsRespawn flag
 
-        -- 5. Check apple eating (any snake can eat)
+        -- 7. Check apple eating (any snake can eat)
         stateAfterEating =
             checkAllAppleEating collisionResult.state
 
-        -- 6. Check apple expiration
+        -- 8. Check apple expiration
         expirationResult =
             Apple.tickExpiredApples stateAfterEating.currentTick stateAfterEating.apples
 
         stateAfterExpiration =
             { stateAfterEating | apples = expirationResult.remaining }
 
-        -- 7. Clear input buffers and increment tick
+        -- 9. Clear input buffers, pending shots, and increment tick
         finalState =
             { stateAfterExpiration
                 | pendingInputs = Dict.empty
+                , pendingShots = []
                 , currentTick = stateAfterExpiration.currentTick + 1
             }
 
         -- Calculate apples needed
         applesNeeded =
             Apple.spawnIfNeeded finalState.apples + List.length expirationResult.expired
+
+        -- Merge venom kills with collision kills
+        allKills =
+            venomResult.kills ++ collisionResult.kills
 
         -- Full sync every 50 ticks
         isFull =
@@ -358,8 +672,8 @@ tick state =
     { state = finalState
     , needsAppleSpawn = applesNeeded
     , expiredApples = expirationResult.expired
-    , stateSync = toStateSyncPayloadWithKills isFull collisionResult.kills finalState
-    , kills = collisionResult.kills
+    , stateSync = toStateSyncPayloadWithKills isFull allKills finalState
+    , kills = allKills
     }
 
 
@@ -571,6 +885,7 @@ checkCollisions currentTick playerId snakeData allBodies state =
             , killerId = killerId
             , killerName = killerId |> Maybe.andThen (\kid -> Dict.get kid state.snakes) |> Maybe.map (.snake >> .name)
             , pointsTransferred = victimScore // 2
+            , isVenomKill = False
             }
     in
     if isInvincible then
@@ -739,9 +1054,19 @@ toStateSyncPayloadWithKills isFull kills state =
     , kills =
         List.map
             (\kill ->
-                { victimName = kill.victimName, killerName = kill.killerName }
+                { victimName = kill.victimName, killerName = kill.killerName, isVenomKill = kill.isVenomKill }
             )
             kills
+    , settings = state.settings
+    , projectiles =
+        List.map
+            (\proj ->
+                { position = proj.position
+                , direction = proj.direction
+                , ownerId = proj.ownerId
+                }
+            )
+            state.projectiles
     }
 
 
@@ -932,4 +1257,8 @@ fromClientState newHostId lastTick snakes apples scores =
     , hostId = newHostId
     , pendingInputs = Dict.empty
     , disconnectedPlayers = Dict.empty
+    , settings = Protocol.defaultGameSettings
+    , projectiles = []
+    , shootCooldowns = Dict.empty
+    , pendingShots = []
     }
