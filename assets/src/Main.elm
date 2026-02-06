@@ -613,6 +613,7 @@ update msg model =
                 , qrCodeDataUrl = Nothing  -- Reset QR code (will be generated)
                 , copyCodeState = ShareUI.Ready
                 , copyUrlState = ShareUI.Ready
+                , connectionPanelCollapsed = True  -- Auto-collapse on mobile to maximize game space
               }
             , Cmd.batch
                 [ Random.generate InitHostGame (HostGame.init roomCode)

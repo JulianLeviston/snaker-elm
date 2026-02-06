@@ -85,26 +85,43 @@ body {
 
     .game-header {
         display: flex;
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
         justify-content: space-between;
         align-items: center;
-        margin-bottom: 10px;
-        gap: 8px;
+        margin-bottom: 8px;
+        gap: 6px;
     }
 
     .game-header h1 {
-        font-size: 1.2em;
+        font-size: 1.1em;
         margin: 0;
+        flex-shrink: 0;
     }
 
     /* Show room badge on mobile */
     .room-badge {
         display: inline-block;
         order: 1;
+        font-size: 12px;
+        padding: 4px 8px;
     }
 
     .header-buttons {
         order: 2;
+        flex-shrink: 0;
+        display: flex;
+        gap: 4px;
+    }
+
+    .btn-info {
+        width: 28px;
+        height: 28px;
+        font-size: 14px;
+    }
+
+    .btn-settings {
+        padding: 4px 8px;
+        font-size: 12px;
     }
 
     /* Collapsible connection panel on mobile */
