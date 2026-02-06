@@ -1583,7 +1583,14 @@ viewInfoScreen =
                 [ h2 [] [ text "Changelog" ]
                 , div [ class "changelog" ]
                     [ div [ class "changelog-entry" ]
-                        [ h3 [] [ text "v2.1 - Post-Launch Patches - 2026-02-06" ]
+                        [ h3 [] [ text "v2.2 - Venom - 2026-02-06" ]
+                        , Html.ul []
+                            [ Html.li [] [ text "Venom spitting mechanic" ]
+                            , Html.li [] [ text "Visual improvements" ]
+                            ]
+                        ]
+                    , div [ class "changelog-entry" ]
+                        [ h3 [] [ text "v2.1 - Post-Launch Patches - 2026-02-05" ]
                         , Html.ul []
                             [ Html.li [] [ text "Apple aging lifecycle with skull penalty" ]
                             , Html.li [] [ text "Mobile fullscreen layout with QR watermark" ]
@@ -1616,7 +1623,7 @@ viewInfoScreen =
                 [ h2 [] [ text "Credits" ]
                 , p []
                     [ text "Created by "
-                    , Html.a [ Html.Attributes.href "https://getcontented.io", Html.Attributes.target "_blank" ]
+                    , Html.a [ Html.Attributes.href "https://www.getcontented.com.au", Html.Attributes.target "_blank" ]
                         [ text "Get Contented" ]
                     ]
                 , p [ class "about-motivation" ]
@@ -1653,7 +1660,7 @@ viewGameScreen model =
     in
     div [ class "game-container", style "padding" "20px" ]
         [ div [ class "game-header" ]
-            [ h1 [] [ text "Snaker v2.0" ]
+            [ h1 [] [ text "Snaker v2.2" ]
             , -- Mobile room code badge (visible when connected)
               case maybeRoomCode of
                 Just code ->
