@@ -42,6 +42,7 @@ Key architectural decisions:
 - [x] Add changelog workflow with dates (todos/done/2026-02-06-changelog-workflow-and-dates.md) — in progress
 - [ ] Multi-language backend showcase (todos/pending/2026-01-31-multi-language-multi-backend-showcase.md)
 - [x] Fix apple sync bug and add max apple count (todos/done/2026-02-06-apple-sync-and-max-count-bug.md) — in progress
+- [ ] Add venom ball power-up drop mechanic (todos/pending/2026-02-11-add-venom-ball-power-up-drop-mechanic.md)
 - [ ] UX polish: Move connection status to top of game area, improve visual hierarchy
 - [ ] Visual effects enhancement: nicer fades, highlights, transitions
 - [ ] UI styling improvements: functional but needs polish
