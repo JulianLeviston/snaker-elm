@@ -19,6 +19,7 @@ module Network.HostGame exposing
     , toGameState
     , getOccupiedPositions
     , addApple
+    , addPowerUpDrop
     , respawnSnake
     , fromClientState
     )
@@ -37,7 +38,9 @@ import Dict exposing (Dict)
 import Engine.Apple as Apple exposing (Apple)
 import Engine.Collision as Collision
 import Engine.Grid as Grid
+import Engine.PowerUp as PowerUp exposing (PowerUpDrop)
 import Engine.Projectile as Projectile exposing (Projectile)
+import Engine.VenomType as VenomType exposing (VenomType(..))
 import NameGenerator
 import Network.ClientGame as ClientGame
 import Network.Protocol as Protocol exposing (StateSyncPayload)
@@ -60,6 +63,9 @@ type alias HostGameState =
     , projectiles : List Projectile
     , shootCooldowns : Dict String Int -- playerId -> last fire tick
     , pendingShots : List String -- playerIds that want to shoot this tick
+    , powerUpDrops : List PowerUpDrop
+    , powerUpSpawnCooldown : Int -- tick at which next spawn is allowed
+    , randomSeed : Random.Seed
     }
 
 
@@ -78,6 +84,7 @@ type alias SnakeData =
     , invincibleUntilTick : Int
     , needsRespawn : Bool
     , status : SnakeStatus -- Active, Orphaned, or Dead
+    , venomType : VenomType
     }
 
 
@@ -89,6 +96,7 @@ type alias TickResult =
     , expiredApples : List Apple -- Apples that expired and need respawning
     , stateSync : StateSyncPayload -- For broadcasting
     , kills : List Kill -- Kills that happened this tick
+    , needsPowerUpSpawn : Bool -- Whether a power-up drop needs spawning
     }
 
 
@@ -153,8 +161,8 @@ init hostId =
         grid =
             Grid.defaultDimensions
     in
-    Random.map2
-        (\startPos hostName ->
+    Random.map3
+        (\startPos hostName seedInt ->
             let
                 hostSnake =
                     { id = hostId
@@ -172,6 +180,7 @@ init hostId =
                     , invincibleUntilTick = 15 -- 1500ms at 100ms ticks
                     , needsRespawn = False
                     , status = Active
+                    , venomType = StandardVenom
                     }
             in
             { snakes = Dict.singleton hostId hostData
@@ -186,10 +195,14 @@ init hostId =
             , projectiles = []
             , shootCooldowns = Dict.empty
             , pendingShots = []
+            , powerUpDrops = []
+            , powerUpSpawnCooldown = 0
+            , randomSeed = Random.initialSeed seedInt
             }
         )
         (randomPosition grid)
         NameGenerator.generate
+        (Random.int Random.minInt Random.maxInt)
 
 
 {-| Generate a random whimsical player name.
@@ -229,6 +242,7 @@ addPlayer playerId name pos state =
             , invincibleUntilTick = state.currentTick + 15
             , needsRespawn = False
             , status = Active
+            , venomType = StandardVenom
             }
     in
     { state
@@ -347,7 +361,7 @@ processOneShot playerId state =
             state
 
         Just snakeData ->
-            case Projectile.create playerId snakeData.snake state.currentTick state.shootCooldowns of
+            case Projectile.create playerId snakeData.snake state.currentTick state.shootCooldowns snakeData.venomType state.grid of
                 Nothing ->
                     state
 
@@ -368,13 +382,13 @@ processOneShot playerId state =
 tickProjectiles : HostGameState -> HostGameState
 tickProjectiles state =
     let
-        moved =
-            Projectile.moveAll state.grid state.projectiles
+        ( moved, newSeed ) =
+            Projectile.moveAll state.grid state.randomSeed state.projectiles
 
         alive =
             Projectile.removeExpired state.currentTick moved
     in
-    { state | projectiles = alive }
+    { state | projectiles = alive, randomSeed = newSeed }
 
 
 {-| Check projectile collisions with all snakes.
@@ -392,14 +406,18 @@ checkProjectileCollisions state =
             { state = state
             , kills = []
             , survivingProjectiles = []
+            , seed = state.randomSeed
             }
 
         finalResult =
             List.foldl
                 (\proj acc ->
                     let
+                        ( path, newSeed ) =
+                            Projectile.getMovementPath acc.state.grid acc.seed proj
+
                         result =
-                            checkProjectilePathAgainstSnakes proj.ownerId (Projectile.getMovementPath acc.state.grid proj) (Dict.toList acc.state.snakes) acc.state
+                            checkProjectilePathAgainstSnakes proj.ownerId path (Dict.toList acc.state.snakes) acc.state
                     in
                     { state = result.state
                     , kills = acc.kills ++ result.kills
@@ -409,6 +427,7 @@ checkProjectileCollisions state =
 
                         else
                             proj :: acc.survivingProjectiles
+                    , seed = newSeed
                     }
                 )
                 initial
@@ -417,7 +436,7 @@ checkProjectileCollisions state =
         updatedState =
             finalResult.state
     in
-    { state = { updatedState | projectiles = finalResult.survivingProjectiles }
+    { state = { updatedState | projectiles = finalResult.survivingProjectiles, randomSeed = finalResult.seed }
     , kills = finalResult.kills
     }
 
@@ -642,19 +661,45 @@ tick state =
         stateAfterEating =
             checkAllAppleEating collisionResult.state
 
+        -- 7b. Check power-up eating (any snake can eat)
+        stateAfterPowerUps =
+            checkAllPowerUpEating stateAfterEating
+
         -- 8. Check apple expiration
         expirationResult =
-            Apple.tickExpiredApples stateAfterEating.currentTick stateAfterEating.apples
+            Apple.tickExpiredApples stateAfterPowerUps.currentTick stateAfterPowerUps.apples
 
         stateAfterExpiration =
-            { stateAfterEating | apples = expirationResult.remaining }
+            { stateAfterPowerUps | apples = expirationResult.remaining }
 
-        -- 9. Clear input buffers, pending shots, and increment tick
+        -- 9. Check power-up spawn timing
+        shouldSpawnPowerUp =
+            state.settings.venomMode
+                && PowerUp.shouldSpawn stateAfterExpiration.currentTick stateAfterExpiration.powerUpSpawnCooldown (List.length stateAfterExpiration.powerUpDrops)
+
+        -- If we need a spawn, set cooldown now using seed
+        ( stateWithCooldown, newNeedsPowerUp ) =
+            if shouldSpawnPowerUp then
+                let
+                    ( interval, newSeed ) =
+                        Random.step PowerUp.spawnIntervalGenerator stateAfterExpiration.randomSeed
+                in
+                ( { stateAfterExpiration
+                    | powerUpSpawnCooldown = stateAfterExpiration.currentTick + interval
+                    , randomSeed = newSeed
+                  }
+                , True
+                )
+
+            else
+                ( stateAfterExpiration, False )
+
+        -- 10. Clear input buffers, pending shots, and increment tick
         finalState =
-            { stateAfterExpiration
+            { stateWithCooldown
                 | pendingInputs = Dict.empty
                 , pendingShots = []
-                , currentTick = stateAfterExpiration.currentTick + 1
+                , currentTick = stateWithCooldown.currentTick + 1
             }
 
         -- Calculate apples needed
@@ -674,6 +719,7 @@ tick state =
     , expiredApples = expirationResult.expired
     , stateSync = toStateSyncPayloadWithKills isFull allKills finalState
     , kills = allKills
+    , needsPowerUpSpawn = newNeedsPowerUp
     }
 
 
@@ -1008,6 +1054,67 @@ checkAppleEatingForSnake playerId snakeData state =
                 state
 
 
+{-| Check power-up eating for all snakes.
+-}
+checkAllPowerUpEating : HostGameState -> HostGameState
+checkAllPowerUpEating state =
+    Dict.foldl
+        (\playerId snakeData acc ->
+            checkPowerUpEatingForSnake playerId snakeData acc
+        )
+        state
+        state.snakes
+
+
+{-| Check if a specific snake eats any power-up drop.
+-}
+checkPowerUpEatingForSnake : String -> SnakeData -> HostGameState -> HostGameState
+checkPowerUpEatingForSnake playerId snakeData state =
+    case Snake.head snakeData.snake of
+        Nothing ->
+            state
+
+        Just headPos ->
+            let
+                result =
+                    PowerUp.checkEaten headPos state.powerUpDrops
+            in
+            case result.eaten of
+                Just drop ->
+                    let
+                        newVenomType =
+                            case drop.kind of
+                                PowerUp.BallVenomPowerUp ->
+                                    BallVenom
+
+                                PowerUp.StandardVenomPowerUp ->
+                                    StandardVenom
+
+                        snake =
+                            snakeData.snake
+
+                        grownSnake =
+                            { snake | pendingGrowth = snake.pendingGrowth + 1 }
+
+                        updatedData =
+                            { snakeData | venomType = newVenomType, snake = grownSnake }
+                    in
+                    { state
+                        | powerUpDrops = result.remaining
+                        , snakes = Dict.insert playerId updatedData state.snakes
+                    }
+
+                Nothing ->
+                    state
+
+
+{-| Add a power-up drop to the game state.
+-}
+addPowerUpDrop : PowerUpDrop -> HostGameState -> HostGameState
+addPowerUpDrop drop state =
+    { state | powerUpDrops = drop :: state.powerUpDrops }
+
+
 {-| Convert game state to StateSyncPayload for broadcasting.
 
 Note: Grid dimensions are not included in state sync - both host and client
@@ -1064,9 +1171,18 @@ toStateSyncPayloadWithKills isFull kills state =
                 { position = proj.position
                 , direction = proj.direction
                 , ownerId = proj.ownerId
+                , venomType = VenomType.toString proj.venomType
                 }
             )
             state.projectiles
+    , powerUpDrops =
+        List.map
+            (\drop ->
+                { position = drop.position
+                , kind = PowerUp.kindToString drop.kind
+                }
+            )
+            state.powerUpDrops
     }
 
 
@@ -1087,7 +1203,7 @@ statusToProtocol status =
 
 {-| Convert HostGameState to GameState for rendering with existing Board.view.
 -}
-toGameState : HostGameState -> { snakes : List Snake, apples : List { position : Position, spawnedAtTick : Int }, gridWidth : Int, gridHeight : Int, hostId : String, scores : Dict String Int, leaderId : Maybe String, currentTick : Int }
+toGameState : HostGameState -> { snakes : List Snake, apples : List { position : Position, spawnedAtTick : Int }, gridWidth : Int, gridHeight : Int, hostId : String, scores : Dict String Int, leaderId : Maybe String, currentTick : Int, powerUpDrops : List Protocol.PowerUpDropState }
 toGameState state =
     { snakes =
         Dict.values state.snakes
@@ -1119,6 +1235,14 @@ toGameState state =
     , scores = state.scores
     , leaderId = findLeader state.scores
     , currentTick = state.currentTick
+    , powerUpDrops =
+        List.map
+            (\drop ->
+                { position = drop.position
+                , kind = PowerUp.kindToString drop.kind
+                }
+            )
+            state.powerUpDrops
     }
 
 
@@ -1151,8 +1275,11 @@ getOccupiedPositions state =
 
         applePositions =
             List.map .position state.apples
+
+        powerUpPositions =
+            List.map .position state.powerUpDrops
     in
-    snakePositions ++ applePositions
+    snakePositions ++ applePositions ++ powerUpPositions
 
 
 {-| Add an apple to the game state.
@@ -1189,6 +1316,7 @@ respawnSnake playerId pos state =
                         , invincibleUntilTick = state.currentTick + 15
                         , needsRespawn = False
                         , status = Active
+                        , venomType = StandardVenom
                     }
             in
             { state | snakes = Dict.insert playerId respawnedData state.snakes }
@@ -1235,6 +1363,7 @@ fromClientState newHostId lastTick snakes apples scores =
                             0
                     , needsRespawn = False
                     , status = status
+                    , venomType = StandardVenom
                     }
                 )
                 snakes
@@ -1261,4 +1390,7 @@ fromClientState newHostId lastTick snakes apples scores =
     , projectiles = []
     , shootCooldowns = Dict.empty
     , pendingShots = []
+    , powerUpDrops = []
+    , powerUpSpawnCooldown = lastTick + PowerUp.spawnIntervalMin
+    , randomSeed = Random.initialSeed lastTick
     }

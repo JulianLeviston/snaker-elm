@@ -6,6 +6,7 @@ module Network.Protocol exposing
     , SnakeStatus(..)
     , AppleState
     , ProjectileState
+    , PowerUpDropState
     , KillEvent
     , InputPayload
     , ShootPayload
@@ -93,6 +94,7 @@ type alias StateSyncPayload =
     , kills : List KillEvent -- Kills that happened this tick
     , settings : GameSettings
     , projectiles : List ProjectileState
+    , powerUpDrops : List PowerUpDropState
     }
 
 
@@ -132,6 +134,15 @@ type alias ProjectileState =
     { position : Position
     , direction : Direction
     , ownerId : String
+    , venomType : String
+    }
+
+
+{-| Power-up drop state for network transmission.
+-}
+type alias PowerUpDropState =
+    { position : Position
+    , kind : String
     }
 
 
@@ -231,6 +242,7 @@ encodeStateSync payload =
         , ( "kills", JE.list encodeKillEvent payload.kills )
         , ( "settings", encodeGameSettings payload.settings )
         , ( "projectiles", JE.list encodeProjectileState payload.projectiles )
+        , ( "power_up_drops", JE.list encodePowerUpDropState payload.powerUpDrops )
         ]
 
 
@@ -242,6 +254,17 @@ encodeProjectileState proj =
         [ ( "position", encodePosition proj.position )
         , ( "direction", encodeDirection proj.direction )
         , ( "owner_id", JE.string proj.ownerId )
+        , ( "venom_type", JE.string proj.venomType )
+        ]
+
+
+{-| Encode a PowerUpDropState to JSON.
+-}
+encodePowerUpDropState : PowerUpDropState -> JE.Value
+encodePowerUpDropState drop =
+    JE.object
+        [ ( "position", encodePosition drop.position )
+        , ( "kind", JE.string drop.kind )
         ]
 
 
@@ -419,26 +442,43 @@ decodeGameMessage =
 
 
 {-| Decode a StateSyncPayload from JSON.
+
+Uses pipeline pattern (succeed + andMap) instead of map8 to support 9+ fields.
 -}
 decodeStateSync : JD.Decoder StateSyncPayload
 decodeStateSync =
-    JD.map8 StateSyncPayload
-        (JD.field "snakes" (JD.list decodeSnakeState))
-        (JD.field "apples" (JD.list decodeAppleState))
-        (JD.field "scores" decodeScores)
-        (JD.field "tick" JD.int)
-        (JD.field "is_full" JD.bool)
-        (JD.field "kills" (JD.list decodeKillEvent))
-        (JD.oneOf
-            [ JD.field "settings" decodeGameSettings
-            , JD.succeed defaultGameSettings
-            ]
-        )
-        (JD.oneOf
-            [ JD.field "projectiles" (JD.list decodeProjectileState)
-            , JD.succeed []
-            ]
-        )
+    JD.succeed StateSyncPayload
+        |> andMap (JD.field "snakes" (JD.list decodeSnakeState))
+        |> andMap (JD.field "apples" (JD.list decodeAppleState))
+        |> andMap (JD.field "scores" decodeScores)
+        |> andMap (JD.field "tick" JD.int)
+        |> andMap (JD.field "is_full" JD.bool)
+        |> andMap (JD.field "kills" (JD.list decodeKillEvent))
+        |> andMap
+            (JD.oneOf
+                [ JD.field "settings" decodeGameSettings
+                , JD.succeed defaultGameSettings
+                ]
+            )
+        |> andMap
+            (JD.oneOf
+                [ JD.field "projectiles" (JD.list decodeProjectileState)
+                , JD.succeed []
+                ]
+            )
+        |> andMap
+            (JD.oneOf
+                [ JD.field "power_up_drops" (JD.list decodePowerUpDropState)
+                , JD.succeed []
+                ]
+            )
+
+
+{-| Pipeline helper: apply a decoder to a decoder of a function.
+-}
+andMap : JD.Decoder a -> JD.Decoder (a -> b) -> JD.Decoder b
+andMap =
+    JD.map2 (|>)
 
 
 {-| Decode GameSettings from JSON.
@@ -457,10 +497,24 @@ decodeGameSettings =
 -}
 decodeProjectileState : JD.Decoder ProjectileState
 decodeProjectileState =
-    JD.map3 ProjectileState
+    JD.map4 ProjectileState
         (JD.field "position" decodePosition)
         (JD.field "direction" decodeDirection)
         (JD.field "owner_id" JD.string)
+        (JD.oneOf
+            [ JD.field "venom_type" JD.string
+            , JD.succeed "standard"
+            ]
+        )
+
+
+{-| Decode a PowerUpDropState from JSON.
+-}
+decodePowerUpDropState : JD.Decoder PowerUpDropState
+decodePowerUpDropState =
+    JD.map2 PowerUpDropState
+        (JD.field "position" decodePosition)
+        (JD.field "kind" JD.string)
 
 
 {-| Decode a ShootPayload from JSON.

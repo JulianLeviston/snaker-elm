@@ -4,6 +4,8 @@ import Browser
 import Browser.Events
 import Dict
 import Engine.Apple as Apple exposing (Apple)
+import Engine.PowerUp as PowerUp
+import Engine.VenomType as VenomType
 import Game exposing (GameState)
 import Html exposing (Html, button, div, h1, h2, h3, p, span, text)
 import Html.Attributes exposing (class, style)
@@ -69,6 +71,7 @@ type alias Model =
     , notification : Maybe String
     , gameMode : GameMode
     , pendingAppleSpawns : Int  -- Track in-flight Random.generate calls
+    , pendingPowerUpSpawns : Int -- Track in-flight power-up spawn calls
     -- P2P connection state
     , p2pState : P2PConnectionState
     , roomCodeInput : String
@@ -131,6 +134,7 @@ type Msg
     | HostTick Time.Posix
     | NewHostSpawnPosition String Position
     | NewHostApplePosition Position
+    | NewHostPowerUpPosition Position
     | GotInputP2P String
     | ShowKillNotification String String String  -- killer, verb, victim
     | ShowSelfKillNotification String String  -- victim, verb
@@ -199,6 +203,7 @@ initModeSelection baseUrl =
       , notification = Nothing
       , gameMode = LocalMode
       , pendingAppleSpawns = 0
+      , pendingPowerUpSpawns = 0
       , p2pState = P2PNotConnected
       , roomCodeInput = ""
       , showCopiedFeedback = False
@@ -234,6 +239,7 @@ initWithMode baseUrl mode =
               , notification = Nothing
               , gameMode = LocalMode
               , pendingAppleSpawns = 0
+              , pendingPowerUpSpawns = 0
               , p2pState = P2PNotConnected
               , roomCodeInput = ""
               , showCopiedFeedback = False
@@ -263,6 +269,7 @@ initWithMode baseUrl mode =
               , notification = Nothing
               , gameMode = OnlineMode
               , pendingAppleSpawns = 0
+              , pendingPowerUpSpawns = 0
               , p2pState = P2PNotConnected
               , roomCodeInput = ""
               , showCopiedFeedback = False
@@ -489,7 +496,13 @@ update msg model =
                                     ( model, Ports.sendInputP2P shootJson )
 
                                 Nothing ->
-                                    ( model, Cmd.none )
+                                    -- Local mode: buffer shot
+                                    case model.localGame of
+                                        Just localState ->
+                                            ( { model | localGame = Just (LocalGame.bufferShot localState) }, Cmd.none )
+
+                                        Nothing ->
+                                            ( model, Cmd.none )
 
         GotGameState value ->
             case JD.decodeValue Game.decoder value of
@@ -852,6 +865,16 @@ update msg model =
                             else
                                 ( model.pendingAppleSpawns, Cmd.none )
 
+                        -- Check if we need to spawn a power-up
+                        ( newPendingPowerUpCount, powerUpSpawnCmd ) =
+                            if tickResult.needsPowerUpSpawn && model.pendingPowerUpSpawns == 0 then
+                                ( model.pendingPowerUpSpawns + 1
+                                , Random.generate NewHostPowerUpPosition (PowerUp.randomSafePosition (HostGame.getOccupiedPositions newState) newState.grid)
+                                )
+
+                            else
+                                ( model.pendingPowerUpSpawns, Cmd.none )
+
                         -- ALWAYS broadcast state to all connected peers (even during respawn ticks)
                         stateJson =
                             Protocol.encodeStateSync tickResult.stateSync |> JE.encode 0
@@ -890,12 +913,14 @@ update msg model =
                                 | hostGame = Just newState
                                 , showingCollision = True
                                 , pendingAppleSpawns = newPendingCount
+                                , pendingPowerUpSpawns = newPendingPowerUpCount
                               }
                             , Cmd.batch
                                 ([ broadcastCmd
                                  , Random.generate (NewHostSpawnPosition playerId) (randomPosition newState.grid)
                                  , Process.sleep 300 |> Task.perform (\_ -> ClearCollisionShake)
                                  , spawnCmd
+                                 , powerUpSpawnCmd
                                  ]
                                     ++ killCmds
                                 )
@@ -905,8 +930,9 @@ update msg model =
                             ( { model
                                 | hostGame = Just newState
                                 , pendingAppleSpawns = newPendingCount
+                                , pendingPowerUpSpawns = newPendingPowerUpCount
                               }
-                            , Cmd.batch ([ broadcastCmd, spawnCmd ] ++ killCmds)
+                            , Cmd.batch ([ broadcastCmd, spawnCmd, powerUpSpawnCmd ] ++ killCmds)
                             )
 
                 Nothing ->
@@ -949,6 +975,35 @@ update msg model =
                     ( { model
                         | hostGame = Just newState
                         , pendingAppleSpawns = max 0 (model.pendingAppleSpawns - 1)
+                      }
+                    , Cmd.none
+                    )
+
+                Nothing ->
+                    ( model, Cmd.none )
+
+        NewHostPowerUpPosition pos ->
+            case model.hostGame of
+                Just hostState ->
+                    let
+                        ( kind, newSeed ) =
+                            Random.step PowerUp.randomKind hostState.randomSeed
+
+                        drop =
+                            { position = pos
+                            , kind = kind
+                            , spawnedAtTick = hostState.currentTick
+                            }
+
+                        stateWithSeed =
+                            { hostState | randomSeed = newSeed }
+
+                        newState =
+                            HostGame.addPowerUpDrop drop stateWithSeed
+                    in
+                    ( { model
+                        | hostGame = Just newState
+                        , pendingPowerUpSpawns = max 0 (model.pendingPowerUpSpawns - 1)
                       }
                     , Cmd.none
                     )
@@ -1490,7 +1545,7 @@ viewSettingsScreen model =
                                 ]
                             ]
                         , p [ class "setting-description" ]
-                            [ text "Press spacebar to fire venom projectiles. Hitting an enemy truncates their tail into apples!" ]
+                            [ text "Eat V (purple) for straight-line venom or B (blue) for bouncing ball venom. Press Shift to fire! Hitting an enemy truncates their tail into apples." ]
                         ]
 
                 Nothing ->
@@ -1583,10 +1638,13 @@ viewInfoScreen =
                 [ h2 [] [ text "Changelog" ]
                 , div [ class "changelog" ]
                     [ div [ class "changelog-entry" ]
-                        [ h3 [] [ text "v2.2 - Venom - 2026-02-06" ]
+                        [ h3 [] [ text "v2.2 - Venom & Power-ups - 2026-02-06" ]
                         , Html.ul []
-                            [ Html.li [] [ text "Venom spitting mechanic" ]
-                            , Html.li [] [ text "Visual improvements" ]
+                            [ Html.li [] [ text "Venom power-up drops: V (purple, straight) and B (blue, ball) grant venom type + 1 segment growth" ]
+                            , Html.li [] [ text "Ball venom mode with diagonal bouncing off walls" ]
+                            , Html.li [] [ text "Local mode venom support" ]
+                            , Html.li [] [ text "Shoot key changed from spacebar to Shift" ]
+                            , Html.li [] [ text "Ball projectile visibility and spawn wrapping fixes" ]
                             ]
                         ]
                     , div [ class "changelog-entry" ]
@@ -1845,6 +1903,7 @@ viewGame model =
                             { position = p.position
                             , direction = p.direction
                             , ownerId = p.ownerId
+                            , venomType = VenomType.toString p.venomType
                             }
                         )
                         hostState.projectiles
@@ -1852,7 +1911,7 @@ viewGame model =
             div [ class "game-layout" ]
                 [ div [ class "game-board-container" ]
                     [ if showQrWatermark then qrWatermark else text ""
-                    , wrapWithShake (Board.viewWithProjectiles gameState model.myPeerId gameState.leaderId projectileStates gameState.snakes)
+                    , wrapWithShake (Board.viewWithProjectiles gameState model.myPeerId gameState.leaderId projectileStates gameState.snakes gameState.powerUpDrops)
                     ]
                 , Scoreboard.view gameState.snakes gameState.scores model.myPeerId
                 ]
@@ -1867,7 +1926,7 @@ viewGame model =
                     in
                     div [ class "game-layout" ]
                         [ div [ class "game-board-container" ]
-                            [ wrapWithShake (Board.viewWithProjectiles gameState model.myPeerId gameState.leaderId clientState.projectiles gameState.snakes)
+                            [ wrapWithShake (Board.viewWithProjectiles gameState model.myPeerId gameState.leaderId clientState.projectiles gameState.snakes gameState.powerUpDrops)
                             ]
                         , Scoreboard.view gameState.snakes gameState.scores model.myPeerId
                         ]
@@ -1880,10 +1939,13 @@ viewGame model =
                                     let
                                         gameState =
                                             LocalGame.toGameState localState
+
+                                        projectileStates =
+                                            LocalGame.toProjectileStates localState
                                     in
                                     div [ class "game-layout" ]
                                         [ div [ class "game-board-container" ]
-                                            [ wrapWithShake (Board.viewWithTick gameState model.playerId)
+                                            [ wrapWithShake (Board.viewWithProjectiles gameState model.playerId Nothing projectileStates gameState.snakes [])
                                             ]
                                         , Scoreboard.view gameState.snakes Dict.empty model.playerId
                                         ]
