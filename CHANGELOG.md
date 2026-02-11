@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+### Added
+- Venom power-up drops: V (purple, straight venom) and B (blue, ball venom) appear on the board, grant venom type + 1 segment growth when eaten
+- Ball venom mode with diagonal bouncing: starts cardinal, gains diagonal velocity on first wall bounce, reflects naturally off walls/corners
+- Local mode venom: venom shooting now works in offline/local mode
+- 39 elm-test tests covering projectile creation, movement, wall reflection, corner bouncing, bounds safety, expiration, and game integration
+
+### Changed
+- Shoot key changed from spacebar to Shift (prevents page scroll)
+
+### Fixed
+- Ball projectile visibility: CSS `transform: scale()` animation was overriding SVG `translate()` positioning, causing ball projectiles to render at (0,0). Fixed to opacity-only animation
+- Spawn wrapping: `Projectile.create` now wraps spawn position with `Grid.wrapPosition`
+
 ## [v2.1] - 2026-02-06
 ### Fixed
 - Apple sync bug: prevent apple count growth from expired apple double-counting
