@@ -46,6 +46,7 @@ Key architectural decisions:
 - [ ] UX polish: connection status and visual hierarchy (todos/pending/2026-02-11-ux-polish-connection-status-and-visual-hierarchy.md)
 - [ ] Visual effects enhancement: fades, highlights, transitions (todos/pending/2026-02-11-visual-effects-enhancement-fades-highlights-transitions.md)
 - [ ] UI styling improvements: polish (todos/pending/2026-02-11-ui-styling-improvements-polish.md)
+- [ ] Enhance ball venom duration and wall bounce randomization (todos/pending/2026-02-11-enhance-ball-venom-duration-and-wall-bounce-randomization.md)
 
 ### Blockers/Concerns
 
