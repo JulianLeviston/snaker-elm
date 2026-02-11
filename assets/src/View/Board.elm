@@ -103,10 +103,10 @@ viewWithTickAndLeader gameState maybePlayerId maybeLeaderId =
         ]
 
 
-{-| Render the game board with tick, leader indicator, and projectiles.
+{-| Render the game board with tick, leader indicator, projectiles, and power-up drops.
 -}
-viewWithProjectiles : { a | snakes : List Snake, apples : List { position : Position, spawnedAtTick : Int }, gridWidth : Int, gridHeight : Int, currentTick : Int } -> Maybe String -> Maybe String -> List Protocol.ProjectileState -> List Snake -> Html msg
-viewWithProjectiles gameState maybePlayerId maybeLeaderId projectiles allSnakes =
+viewWithProjectiles : { a | snakes : List Snake, apples : List { position : Position, spawnedAtTick : Int }, gridWidth : Int, gridHeight : Int, currentTick : Int } -> Maybe String -> Maybe String -> List Protocol.ProjectileState -> List Snake -> List Protocol.PowerUpDropState -> Html msg
+viewWithProjectiles gameState maybePlayerId maybeLeaderId projectiles allSnakes powerUpDrops =
     let
         width =
             gameState.gridWidth * cellSize
@@ -120,6 +120,7 @@ viewWithProjectiles gameState maybePlayerId maybeLeaderId projectiles allSnakes 
         ]
         [ background width height
         , renderApples gameState.currentTick gameState.apples
+        , renderPowerUpDrops powerUpDrops
         , renderProjectiles projectiles allSnakes
         , renderSnakes gameState.snakes maybePlayerId maybeLeaderId Nothing
         ]
@@ -133,7 +134,7 @@ renderProjectiles projectiles snakes =
         (List.map (renderProjectile snakes) projectiles)
 
 
-{-| Render a single projectile. Color matches the owner snake.
+{-| Render a single projectile. Dispatches on venomType for different visuals.
 -}
 renderProjectile : List Snake -> Protocol.ProjectileState -> Svg msg
 renderProjectile snakes proj =
@@ -150,22 +151,19 @@ renderProjectile snakes proj =
                 |> List.head
                 |> Maybe.map .color
                 |> Maybe.withDefault "ffffff"
-
-        -- Rotation based on direction for the elongated shape
-        rotation =
-            case proj.direction of
-                Up ->
-                    "90"
-
-                Down ->
-                    "90"
-
-                Left ->
-                    "0"
-
-                Right ->
-                    "0"
     in
+    case proj.venomType of
+        "ball" ->
+            renderBallProjectile cx_ cy_ ownerColor
+
+        _ ->
+            renderStandardProjectile cx_ cy_ ownerColor
+
+
+{-| Render a standard venom projectile (concentric circles).
+-}
+renderStandardProjectile : Int -> Int -> String -> Svg msg
+renderStandardProjectile cx_ cy_ ownerColor =
     g [ svgClass "venom-projectile"
       , SA.transform ("translate(" ++ String.fromInt cx_ ++ "," ++ String.fromInt cy_ ++ ")")
       ]
@@ -174,8 +172,8 @@ renderProjectile snakes proj =
             [ SA.cx "0"
             , SA.cy "0"
             , SA.r "5"
-            , SA.fill ("rgba(255, 255, 255, 0.15)")
-            , SA.stroke ("rgba(255, 255, 255, 0.3)")
+            , SA.fill "rgba(255, 255, 255, 0.15)"
+            , SA.stroke "rgba(255, 255, 255, 0.3)"
             , SA.strokeWidth "1"
             ]
             []
@@ -196,6 +194,100 @@ renderProjectile snakes proj =
             , SA.opacity "0.8"
             ]
             []
+        ]
+
+
+{-| Render a ball venom projectile (larger solid circle with ring).
+-}
+renderBallProjectile : Int -> Int -> String -> Svg msg
+renderBallProjectile cx_ cy_ ownerColor =
+    g [ svgClass "ball-projectile"
+      , SA.transform ("translate(" ++ String.fromInt cx_ ++ "," ++ String.fromInt cy_ ++ ")")
+      ]
+        [ -- Outer ring
+          circle
+            [ SA.cx "0"
+            , SA.cy "0"
+            , SA.r "6"
+            , SA.fill "none"
+            , SA.stroke ("#" ++ ownerColor)
+            , SA.strokeWidth "1.5"
+            , SA.opacity "0.6"
+            ]
+            []
+        , -- Solid core
+          circle
+            [ SA.cx "0"
+            , SA.cy "0"
+            , SA.r "4"
+            , SA.fill ("#" ++ ownerColor)
+            ]
+            []
+        , -- Bright center
+          circle
+            [ SA.cx "0"
+            , SA.cy "0"
+            , SA.r "2"
+            , SA.fill "#ffffff"
+            , SA.opacity "0.9"
+            ]
+            []
+        ]
+
+
+{-| Render all power-up drops.
+-}
+renderPowerUpDrops : List Protocol.PowerUpDropState -> Svg msg
+renderPowerUpDrops drops =
+    g [ svgClass "power-up-drops" ]
+        (List.map renderPowerUpDrop drops)
+
+
+{-| Render a single power-up drop.
+
+Ball venom: blue circle with white "B".
+Standard venom: purple circle with white "V".
+-}
+renderPowerUpDrop : Protocol.PowerUpDropState -> Svg msg
+renderPowerUpDrop drop =
+    let
+        cx_ =
+            drop.position.x * cellSize + cellSize // 2
+
+        cy_ =
+            drop.position.y * cellSize + cellSize // 2
+
+        radius =
+            cellSize // 2 - 1
+
+        ( color, label ) =
+            case drop.kind of
+                "ball_venom" ->
+                    ( "#4488ff", "B" )
+
+                "standard_venom" ->
+                    ( "#aa44ff", "V" )
+
+                _ ->
+                    ( "#4488ff", "?" )
+    in
+    g [ svgClass "powerup-drop" ]
+        [ circle
+            [ SA.cx (String.fromInt cx_)
+            , SA.cy (String.fromInt cy_)
+            , SA.r (String.fromInt radius)
+            , SA.fill color
+            ]
+            []
+        , text_
+            [ SA.x (String.fromInt cx_)
+            , SA.y (String.fromInt (cy_ + 4))
+            , SA.textAnchor "middle"
+            , SA.fontSize "11"
+            , SA.fontWeight "bold"
+            , SA.fill "#ffffff"
+            ]
+            [ Svg.text label ]
         ]
 
 

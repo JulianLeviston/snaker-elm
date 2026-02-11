@@ -40,6 +40,7 @@ type alias ClientGameState =
     , currentHostId : Maybe String -- Track current host for migration
     , venomMode : Bool
     , projectiles : List Protocol.ProjectileState
+    , powerUpDrops : List Protocol.PowerUpDropState
     }
 
 
@@ -69,6 +70,7 @@ init myId =
     , currentHostId = Nothing
     , venomMode = False
     , projectiles = []
+    , powerUpDrops = []
     }
 
 
@@ -86,6 +88,7 @@ initWithHost myId hostId =
     , currentHostId = Just hostId
     , venomMode = False
     , projectiles = []
+    , powerUpDrops = []
     }
 
 
@@ -137,6 +140,7 @@ applyHostState stateSync clientState =
         , pendingInput = newPendingInput
         , venomMode = stateSync.settings.venomMode
         , projectiles = stateSync.projectiles
+        , powerUpDrops = stateSync.powerUpDrops
     }
 
 
@@ -199,7 +203,7 @@ getMySnake clientState =
 Marks our snake appropriately and applies optimistic input.
 Uses hardcoded grid dimensions from Engine.Grid.defaultDimensions.
 -}
-toGameState : ClientGameState -> { snakes : List Snake, apples : List { position : Position, spawnedAtTick : Int }, gridWidth : Int, gridHeight : Int, hostId : Maybe String, scores : Dict String Int, leaderId : Maybe String, currentTick : Int }
+toGameState : ClientGameState -> { snakes : List Snake, apples : List { position : Position, spawnedAtTick : Int }, gridWidth : Int, gridHeight : Int, hostId : Maybe String, scores : Dict String Int, leaderId : Maybe String, currentTick : Int, powerUpDrops : List Protocol.PowerUpDropState }
 toGameState clientState =
     let
         -- Convert SnakeState to Snake, applying optimistic direction for our snake
@@ -252,6 +256,7 @@ toGameState clientState =
     , scores = clientState.scores
     , leaderId = findLeader clientState.scores
     , currentTick = clientState.lastHostTick
+    , powerUpDrops = clientState.powerUpDrops
     }
 
 

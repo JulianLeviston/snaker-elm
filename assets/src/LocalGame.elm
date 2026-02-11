@@ -3,7 +3,9 @@ module LocalGame exposing
     , init
     , tick
     , changeDirection
+    , bufferShot
     , toGameState
+    , toProjectileStates
     , addApple
     , needsMoreApples
     , getOccupiedPositions
@@ -16,9 +18,12 @@ Runs game engine entirely in Elm without server dependency.
 Mirrors Elixir GameServer tick order: applyInput -> move -> collisions -> eating -> expiration
 -}
 
+import Dict exposing (Dict)
 import Engine.Apple as Apple exposing (Apple)
 import Engine.Collision as Collision
 import Engine.Grid as Grid
+import Engine.Projectile as Projectile exposing (Projectile)
+import Engine.VenomType as VenomType exposing (VenomType(..))
 import Random
 import Snake exposing (Direction(..), Position, Snake)
 
@@ -35,6 +40,11 @@ type alias LocalGameState =
     , invincibleUntilTick : Int
     , needsRespawn : Bool
     , penaltyState : Maybe Snake.PenaltyState -- For skull penalty animation
+    , projectiles : List Projectile
+    , shootCooldowns : Dict String Int
+    , pendingShot : Bool
+    , venomType : VenomType
+    , randomSeed : Random.Seed
     }
 
 
@@ -57,20 +67,26 @@ init =
         grid =
             Grid.defaultDimensions
     in
-    randomPosition grid
-        |> Random.map
-            (\startPos ->
-                { snake = Snake.defaultSnake startPos
-                , apples = []
-                , grid = grid
-                , inputBuffer = Nothing
-                , score = 0
-                , currentTick = 0
-                , invincibleUntilTick = 15  -- 1500ms invincibility at start
-                , needsRespawn = False
-                , penaltyState = Nothing
-                }
-            )
+    Random.map2
+        (\startPos seedInt ->
+            { snake = Snake.defaultSnake startPos
+            , apples = []
+            , grid = grid
+            , inputBuffer = Nothing
+            , score = 0
+            , currentTick = 0
+            , invincibleUntilTick = 15  -- 1500ms invincibility at start
+            , needsRespawn = False
+            , penaltyState = Nothing
+            , projectiles = []
+            , shootCooldowns = Dict.empty
+            , pendingShot = False
+            , venomType = StandardVenom
+            , randomSeed = Random.initialSeed seedInt
+            }
+        )
+        (randomPosition grid)
+        (Random.int Random.minInt Random.maxInt)
 
 
 {-| Generate a random position within grid bounds.
@@ -119,22 +135,30 @@ tick state =
                 stateAfterMove =
                     moveSnake stateWithInput
 
-                -- 3. Check collisions (only if not invincible)
-                stateAfterCollisions =
-                    checkCollisions stateAfterMove
+                -- 3. Process pending shot (create projectile from new head position)
+                stateAfterShot =
+                    processShot stateAfterMove
 
-                -- 4. Check apple eating (with stage-based values)
+                -- 4. Move and expire projectiles
+                stateAfterProjectiles =
+                    tickProjectiles stateAfterShot
+
+                -- 5. Check collisions (only if not invincible)
+                stateAfterCollisions =
+                    checkCollisions stateAfterProjectiles
+
+                -- 6. Check apple eating (with stage-based values)
                 stateAfterEating =
                     checkAppleEating stateAfterCollisions
 
-                -- 5. Check apple expiration
+                -- 7. Check apple expiration
                 expirationResult =
                     Apple.tickExpiredApples stateAfterEating.currentTick stateAfterEating.apples
 
                 stateAfterExpiration =
                     { stateAfterEating | apples = expirationResult.remaining }
 
-                -- 6. Clear input buffer and increment tick
+                -- 8. Clear input buffer and increment tick
                 finalState =
                     { stateAfterExpiration
                         | inputBuffer = Nothing
@@ -365,6 +389,48 @@ changeDirection newDirection state =
                 state
 
 
+{-| Buffer a shoot request. Processed on next tick.
+-}
+bufferShot : LocalGameState -> LocalGameState
+bufferShot state =
+    { state | pendingShot = True }
+
+
+{-| Process pending shot, creating a projectile and shortening the snake.
+-}
+processShot : LocalGameState -> LocalGameState
+processShot state =
+    if not state.pendingShot then
+        state
+
+    else
+        case Projectile.create "local" state.snake state.currentTick state.shootCooldowns state.venomType state.grid of
+            Nothing ->
+                { state | pendingShot = False }
+
+            Just ( projectile, shortenedSnake, newCooldowns ) ->
+                { state
+                    | projectiles = projectile :: state.projectiles
+                    , snake = shortenedSnake
+                    , shootCooldowns = newCooldowns
+                    , pendingShot = False
+                }
+
+
+{-| Move projectiles and remove expired ones.
+-}
+tickProjectiles : LocalGameState -> LocalGameState
+tickProjectiles state =
+    let
+        ( moved, newSeed ) =
+            Projectile.moveAll state.grid state.randomSeed state.projectiles
+
+        alive =
+            Projectile.removeExpired state.currentTick moved
+    in
+    { state | projectiles = alive, randomSeed = newSeed }
+
+
 {-| Respawn snake at a given position.
 
 Resets snake to 3 segments, direction right, grants invincibility.
@@ -388,6 +454,7 @@ respawnSnake pos state =
         , invincibleUntilTick = state.currentTick + 15  -- 1500ms at 100ms ticks
         , needsRespawn = False
         , penaltyState = Nothing  -- Clear any penalty state
+        , venomType = StandardVenom
     }
 
 
@@ -410,3 +477,18 @@ toGameState state =
     , currentTick = state.currentTick
     , penaltyState = state.penaltyState
     }
+
+
+{-| Convert projectiles to Protocol.ProjectileState for rendering.
+-}
+toProjectileStates : LocalGameState -> List { position : Position, direction : Snake.Direction, ownerId : String, venomType : String }
+toProjectileStates state =
+    List.map
+        (\p ->
+            { position = p.position
+            , direction = p.direction
+            , ownerId = p.ownerId
+            , venomType = VenomType.toString p.venomType
+            }
+        )
+        state.projectiles

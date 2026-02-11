@@ -17,7 +17,7 @@ type InputAction
 
 
 {-| Decode keyboard events to input actions.
-Handles Arrow keys, WASD, and spacebar for shooting.
+Handles Arrow keys, WASD, and Shift for shooting.
 Ignores key repeat events.
 -}
 keyDecoder : JD.Decoder InputAction
@@ -62,7 +62,7 @@ keyDecoderWithPreventDefault toMsg =
 
 isGameKey : String -> Bool
 isGameKey key =
-    isArrowKey key || key == " "
+    isArrowKey key || key == "Shift"
 
 
 isArrowKey : String -> Bool
@@ -78,7 +78,7 @@ isArrowKey key =
 keyToAction : String -> InputAction
 keyToAction key =
     case key of
-        " " ->
+        "Shift" ->
             ShootInput
 
         _ ->
