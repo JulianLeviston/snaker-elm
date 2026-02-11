@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - 39 elm-test tests covering projectile creation, movement, wall reflection, corner bouncing, bounds safety, expiration, and game integration
 
 ### Changed
+- Ball venom lifetime increased from 30 ticks (3s) to 50 ticks (5s) for longer bouncing gameplay
+- Ball venom wall bounces now have a 25% chance to randomize the parallel velocity component, making trajectories less predictable
 - Shoot key changed from spacebar to Shift (prevents page scroll)
 
 ### Fixed

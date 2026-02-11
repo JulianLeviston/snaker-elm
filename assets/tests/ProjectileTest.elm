@@ -286,7 +286,7 @@ suite =
 
                         _ ->
                             Expect.fail "Expected exactly one projectile"
-            , test "diagonal ball stays in bounds over 30 ticks" <|
+            , test "diagonal ball stays in bounds over 50 ticks" <|
                 \_ ->
                     let
                         proj =
@@ -296,7 +296,7 @@ suite =
                             List.foldl
                                 (\_ ( projs, s ) -> Projectile.moveAll grid s projs)
                                 ( [ proj ], seed0 )
-                                (List.range 1 30)
+                                (List.range 1 50)
                     in
                     case finalProjs of
                         [ p ] ->
@@ -304,10 +304,58 @@ suite =
                                 Expect.pass
 
                             else
-                                Expect.fail ("Out of bounds after 30 ticks: " ++ Debug.toString p.position)
+                                Expect.fail ("Out of bounds after 50 ticks: " ++ Debug.toString p.position)
 
                         _ ->
                             Expect.fail ("Expected 1 projectile, got " ++ String.fromInt (List.length finalProjs))
+            , test "different seeds produce divergent ball trajectories" <|
+                \_ ->
+                    let
+                        proj =
+                            makeBallWithVelocity 5 5 1 1
+
+                        runWithSeed s =
+                            List.foldl
+                                (\_ ( projs, currentSeed ) -> Projectile.moveAll grid currentSeed projs)
+                                ( [ proj ], s )
+                                (List.range 1 25)
+                                |> Tuple.first
+
+                        seeds =
+                            List.map Random.initialSeed (List.range 1 10)
+
+                        finalPositions =
+                            List.filterMap
+                                (\s ->
+                                    case runWithSeed s of
+                                        [ p ] ->
+                                            Just ( p.position.x, p.position.y )
+
+                                        _ ->
+                                            Nothing
+                                )
+                                seeds
+
+                        uniquePositions =
+                            List.foldl
+                                (\pos acc ->
+                                    if List.member pos acc then
+                                        acc
+
+                                    else
+                                        pos :: acc
+                                )
+                                []
+                                finalPositions
+                    in
+                    if List.length uniquePositions > 1 then
+                        Expect.pass
+
+                    else
+                        Expect.fail
+                            ("All 10 seeds produced identical final positions: "
+                                ++ Debug.toString finalPositions
+                            )
             , test "diagonal ball traces show Y movement (not just horizontal)" <|
                 \_ ->
                     let
@@ -368,15 +416,15 @@ suite =
                         , \_ -> Expect.equal 0 (List.length (Projectile.removeExpired 15 [ proj ]))
                         ]
                         ()
-            , test "ball venom expires after 30 ticks" <|
+            , test "ball venom expires after 50 ticks" <|
                 \_ ->
                     let
                         proj =
                             makeProj 10 10 Right BallVenom
                     in
                     Expect.all
-                        [ \_ -> Expect.equal 1 (List.length (Projectile.removeExpired 29 [ proj ]))
-                        , \_ -> Expect.equal 0 (List.length (Projectile.removeExpired 30 [ proj ]))
+                        [ \_ -> Expect.equal 1 (List.length (Projectile.removeExpired 49 [ proj ]))
+                        , \_ -> Expect.equal 0 (List.length (Projectile.removeExpired 50 [ proj ]))
                         ]
                         ()
             ]

@@ -1641,7 +1641,7 @@ viewInfoScreen =
                         [ h3 [] [ text "v2.2 - Venom & Power-ups - 2026-02-06" ]
                         , Html.ul []
                             [ Html.li [] [ text "Venom power-up drops: V (purple, straight) and B (blue, ball) grant venom type + 1 segment growth" ]
-                            , Html.li [] [ text "Ball venom mode with diagonal bouncing off walls" ]
+                            , Html.li [] [ text "Ball venom mode with diagonal bouncing off walls (5s lifetime, randomized bounce angles)" ]
                             , Html.li [] [ text "Local mode venom support" ]
                             , Html.li [] [ text "Shoot key changed from spacebar to Shift" ]
                             , Html.li [] [ text "Ball projectile visibility and spawn wrapping fixes" ]

@@ -46,7 +46,7 @@ fromString str =
 {-| Maximum lifetime of a projectile in ticks, by venom type.
 
 StandardVenom: 15 ticks (fast, straight-line)
-BallVenom: 30 ticks (bouncing covers less ground per tick)
+BallVenom: 50 ticks (bouncing covers less ground per tick)
 -}
 maxLifetime : VenomType -> Int
 maxLifetime venomType =
@@ -55,4 +55,4 @@ maxLifetime venomType =
             15
 
         BallVenom ->
-            30
+            50
