@@ -13,7 +13,7 @@ module Engine.Projectile exposing
 Projectiles travel at 2 cells/tick in the snake's facing direction.
 Firing costs 1 segment (minimum length 3 to fire).
 5-tick cooldown between shots per snake.
-Lifetime depends on venom type (15 standard, 30 ball).
+Lifetime depends on venom type (15 standard, 50 ball).
 
 Ball venom uses velocity-based movement and bounces off walls at angles:
 - Starts moving cardinally (matching snake direction)
@@ -251,8 +251,29 @@ moveBallOneStep grid seed projectile =
 
                 else
                     ( negate vel.dx, seed1 )
+
+            -- 25% chance to randomize each component for less predictable corners
+            ( roll1, seed3 ) =
+                Random.step (Random.float 0 1) seed2
+
+            ( finalDx, seed4 ) =
+                if roll1 < 0.25 then
+                    randomSign seed3
+
+                else
+                    ( newDx, seed3 )
+
+            ( roll2, seed5 ) =
+                Random.step (Random.float 0 1) seed4
+
+            ( finalDy, seed6 ) =
+                if roll2 < 0.25 then
+                    randomSign seed5
+
+                else
+                    ( newDy, seed5 )
         in
-        ( { projectile | velocity = { dx = newDx, dy = newDy } }, seed2 )
+        ( { projectile | velocity = { dx = finalDx, dy = finalDy } }, seed6 )
 
     else if hitWallX then
         -- Hit left/right wall: flip dx, ensure dy is non-zero
@@ -260,14 +281,25 @@ moveBallOneStep grid seed projectile =
             newDx =
                 negate vel.dx
 
-            ( newDy, newSeed ) =
+            ( newDy, seed1 ) =
                 if vel.dy == 0 then
                     randomSign seed
 
                 else
                     ( vel.dy, seed )
+
+            -- 25% chance to randomize dy for less predictable bounces
+            ( roll, seed2 ) =
+                Random.step (Random.float 0 1) seed1
+
+            ( finalDy, seed3 ) =
+                if roll < 0.25 then
+                    randomSign seed2
+
+                else
+                    ( newDy, seed2 )
         in
-        ( { projectile | velocity = { dx = newDx, dy = newDy } }, newSeed )
+        ( { projectile | velocity = { dx = newDx, dy = finalDy } }, seed3 )
 
     else if hitWallY then
         -- Hit top/bottom wall: flip dy, ensure dx is non-zero
@@ -275,14 +307,25 @@ moveBallOneStep grid seed projectile =
             newDy =
                 negate vel.dy
 
-            ( newDx, newSeed ) =
+            ( newDx, seed1 ) =
                 if vel.dx == 0 then
                     randomSign seed
 
                 else
                     ( vel.dx, seed )
+
+            -- 25% chance to randomize dx for less predictable bounces
+            ( roll, seed2 ) =
+                Random.step (Random.float 0 1) seed1
+
+            ( finalDx, seed3 ) =
+                if roll < 0.25 then
+                    randomSign seed2
+
+                else
+                    ( newDx, seed2 )
         in
-        ( { projectile | velocity = { dx = newDx, dy = newDy } }, newSeed )
+        ( { projectile | velocity = { dx = finalDx, dy = newDy } }, seed3 )
 
     else
         -- No wall: move normally
