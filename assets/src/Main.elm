@@ -18,6 +18,7 @@ import LocalGame exposing (LocalGameState)
 import Network.ClientGame as ClientGame exposing (ClientGameState)
 import Network.HostGame as HostGame exposing (HostGameState)
 import Network.Protocol as Protocol
+import P2P.Connection as P2P
 import Ports
 import Process
 import Random
@@ -72,20 +73,12 @@ type alias Model =
     , gameMode : GameMode
     , pendingAppleSpawns : Int  -- Track in-flight Random.generate calls
     , pendingPowerUpSpawns : Int -- Track in-flight power-up spawn calls
-    -- P2P connection state
-    , p2pState : P2PConnectionState
-    , roomCodeInput : String
-    , showCopiedFeedback : Bool
     , showingCollision : Bool  -- For collision shake animation
     -- Screen routing
     , screen : Screen
     , selectedMode : Maybe SelectedMode
-    -- Share UI state
-    , baseUrl : String
-    , qrCodeDataUrl : Maybe String
-    , copyCodeState : ShareUI.CopyState
-    , copyUrlState : ShareUI.CopyState
-    , connectionPanelCollapsed : Bool
+    -- P2P connection state
+    , p2p : P2P.Model
     }
 
 
@@ -114,21 +107,8 @@ type Msg
     | InitGame LocalGameState
     | NewSpawnPosition Position
     | NewApplePosition Position
-      -- P2P messages
-    | CreateRoom
-    | JoinRoom
-    | LeaveRoom
-    | RoomCodeInputChanged String
-    | GotRoomCreated String
-    | GotPeerConnected JD.Value
-    | GotPeerDisconnected String
-    | GotConnectionError String
-    | CopyRoomCode
-    | CopyRoomUrl
-    | GotClipboardCopySuccess ShareUI.CopyTarget
-    | HideCopiedCodeFeedback
-    | HideCopiedUrlFeedback
-    | GotQRCodeGenerated JD.Value
+      -- P2P connection messages
+    | P2PMsg P2P.Msg
       -- Host game messages
     | InitHostGame HostGameState
     | HostTick Time.Posix
@@ -156,10 +136,6 @@ type Msg
       -- Info screen messages
     | OpenInfo
     | CloseInfo
-      -- Auto-join from URL
-    | TriggerAutoJoin String
-      -- Mobile UI
-    | ToggleConnectionPanel
 
 
 init : Flags -> ( Model, Cmd Msg )
@@ -204,17 +180,10 @@ initModeSelection baseUrl =
       , gameMode = LocalMode
       , pendingAppleSpawns = 0
       , pendingPowerUpSpawns = 0
-      , p2pState = P2PNotConnected
-      , roomCodeInput = ""
-      , showCopiedFeedback = False
       , showingCollision = False
       , screen = ModeSelectionScreen
       , selectedMode = Nothing
-      , baseUrl = baseUrl
-      , qrCodeDataUrl = Nothing
-      , copyCodeState = ShareUI.Ready
-      , copyUrlState = ShareUI.Ready
-      , connectionPanelCollapsed = False
+      , p2p = P2P.init baseUrl
       }
     , Cmd.none
     )
@@ -240,17 +209,10 @@ initWithMode baseUrl mode =
               , gameMode = LocalMode
               , pendingAppleSpawns = 0
               , pendingPowerUpSpawns = 0
-              , p2pState = P2PNotConnected
-              , roomCodeInput = ""
-              , showCopiedFeedback = False
               , showingCollision = False
               , screen = GameScreen
               , selectedMode = Just P2PSelected
-              , baseUrl = baseUrl
-              , qrCodeDataUrl = Nothing
-              , copyCodeState = ShareUI.Ready
-              , copyUrlState = ShareUI.Ready
-              , connectionPanelCollapsed = False
+              , p2p = P2P.init baseUrl
               }
             , Cmd.none
             )
@@ -270,17 +232,10 @@ initWithMode baseUrl mode =
               , gameMode = OnlineMode
               , pendingAppleSpawns = 0
               , pendingPowerUpSpawns = 0
-              , p2pState = P2PNotConnected
-              , roomCodeInput = ""
-              , showCopiedFeedback = False
               , showingCollision = False
               , screen = GameScreen
               , selectedMode = Just PhoenixSelected
-              , baseUrl = baseUrl
-              , qrCodeDataUrl = Nothing
-              , copyCodeState = ShareUI.Ready
-              , copyUrlState = ShareUI.Ready
-              , connectionPanelCollapsed = False
+              , p2p = P2P.init baseUrl
               }
             , Ports.joinGame (JE.object [])
             )
@@ -601,219 +556,24 @@ update msg model =
             , Process.sleep 3000 |> Task.perform (\_ -> ClearNotification)
             )
 
-        -- P2P message handlers
-        CreateRoom ->
-            ( { model | p2pState = P2PCreatingRoom }
-            , Ports.createRoom ()
-            )
-
-        JoinRoom ->
+        -- P2P connection messages
+        P2PMsg p2pMsg ->
             let
-                roomCode =
-                    String.toUpper model.roomCodeInput
+                ( newP2P, p2pCmd, effects ) =
+                    P2P.update p2pMsg model.p2p
+
+                modelWithP2P =
+                    { model | p2p = newP2P }
+
+                ( modelAfterEffects, effectCmds ) =
+                    List.foldl applyP2PEffect ( modelWithP2P, [] ) effects
             in
-            if String.length roomCode == 4 then
-                ( { model | p2pState = P2PJoiningRoom roomCode }
-                , Ports.joinRoom roomCode
-                )
-
-            else
-                ( model, Cmd.none )
-
-        LeaveRoom ->
-            ( { model | p2pState = P2PNotConnected }
-            , Ports.leaveRoom ()
-            )
-
-        RoomCodeInputChanged str ->
-            let
-                -- Uppercase and limit to 4 characters
-                normalized =
-                    str
-                        |> String.toUpper
-                        |> String.filter Char.isAlpha
-                        |> String.left 4
-
-                -- Auto-join if we have exactly 4 characters
-                ( newState, cmd ) =
-                    if String.length normalized == 4 then
-                        ( { model
-                            | roomCodeInput = normalized
-                            , p2pState = P2PJoiningRoom normalized
-                          }
-                        , Ports.joinRoom normalized
-                        )
-
-                    else
-                        ( { model | roomCodeInput = normalized }
-                        , Cmd.none
-                        )
-            in
-            ( newState, cmd )
-
-        GotRoomCreated roomCode ->
-            -- Host: Initialize host game with roomCode as our peerId
-            -- Also generate QR code for the room URL
-            let
-                roomUrl =
-                    model.baseUrl ++ "?room=" ++ roomCode
-            in
-            ( { model
-                | p2pState = P2PConnected Host roomCode
-                , myPeerId = Just roomCode
-                , localGame = Nothing  -- Clear local game
-                , qrCodeDataUrl = Nothing  -- Reset QR code (will be generated)
-                , copyCodeState = ShareUI.Ready
-                , copyUrlState = ShareUI.Ready
-                , connectionPanelCollapsed = True  -- Auto-collapse on mobile to maximize game space
-              }
+            ( modelAfterEffects
             , Cmd.batch
-                [ Random.generate InitHostGame (HostGame.init roomCode)
-                , Ports.generateQRCode roomUrl
+                [ Cmd.map P2PMsg p2pCmd
+                , Cmd.batch effectCmds
                 ]
             )
-
-        GotPeerConnected value ->
-            case JD.decodeValue peerConnectedDecoder value of
-                Ok data ->
-                    case data.role of
-                        Host ->
-                            -- A client connected to us (we are host)
-                            -- Note: The host is already running game loop, add the player
-                            case model.hostGame of
-                                Just hostState ->
-                                    -- Generate spawn position and name for new player
-                                    let
-                                        spawnGenerator =
-                                            Random.map2
-                                                (\pos name -> ( pos, name ))
-                                                (randomSafePosition (HostGame.getOccupiedPositions hostState) hostState.grid)
-                                                HostGame.generatePlayerName
-                                    in
-                                    ( model
-                                    , Random.generate (\( pos, name ) -> NewPlayerSpawn data.roomCode pos name) spawnGenerator
-                                    )
-
-                                Nothing ->
-                                    ( model, Cmd.none )
-
-                        Client ->
-                            -- We connected to host as a client
-                            ( { model
-                                | p2pState = P2PConnected Client data.roomCode
-                                , clientGame = Just (ClientGame.init data.myPeerId)
-                                , myPeerId = Just data.myPeerId
-                                , localGame = Nothing  -- Clear local game when joining as client
-                              }
-                            , Cmd.none
-                            )
-
-                Err _ ->
-                    ( model, Cmd.none )
-
-        GotPeerDisconnected peerId ->
-            -- Check if we're host (a client left) or client (we disconnected)
-            case model.hostGame of
-                Just hostState ->
-                    -- We're host: mark player as disconnected (grace period starts)
-                    let
-                        newState =
-                            HostGame.removePlayer peerId hostState
-                    in
-                    ( { model
-                        | hostGame = Just newState
-                        , notification = Just "Player left"
-                      }
-                    , Process.sleep 3000
-                        |> Task.perform (\_ -> ClearNotification)
-                    )
-
-                Nothing ->
-                    -- We're client: we got disconnected from host
-                    ( { model
-                        | p2pState = P2PNotConnected
-                        , clientGame = Nothing
-                        , notification = Just "Disconnected from host"
-                      }
-                    , Process.sleep 3000
-                        |> Task.perform (\_ -> ClearNotification)
-                    )
-
-        GotConnectionError errorMsg ->
-            let
-                -- Reset state based on what we were trying to do
-                newP2PState =
-                    case model.p2pState of
-                        P2PCreatingRoom ->
-                            P2PNotConnected
-
-                        P2PJoiningRoom _ ->
-                            P2PNotConnected
-
-                        _ ->
-                            model.p2pState
-            in
-            ( { model
-                | p2pState = newP2PState
-                , notification = Just errorMsg
-              }
-            , Process.sleep 5000
-                |> Task.perform (\_ -> ClearNotification)
-            )
-
-        CopyRoomCode ->
-            case model.p2pState of
-                P2PConnected _ roomCode ->
-                    ( { model | copyCodeState = ShareUI.Copied }
-                    , Cmd.batch
-                        [ Ports.copyToClipboard roomCode
-                        , Process.sleep 2000 |> Task.perform (\_ -> HideCopiedCodeFeedback)
-                        ]
-                    )
-
-                _ ->
-                    ( model, Cmd.none )
-
-        CopyRoomUrl ->
-            case model.p2pState of
-                P2PConnected _ roomCode ->
-                    let
-                        roomUrl =
-                            model.baseUrl ++ "?room=" ++ roomCode
-                    in
-                    ( { model | copyUrlState = ShareUI.Copied }
-                    , Cmd.batch
-                        [ Ports.copyToClipboard roomUrl
-                        , Process.sleep 2000 |> Task.perform (\_ -> HideCopiedUrlFeedback)
-                        ]
-                    )
-
-                _ ->
-                    ( model, Cmd.none )
-
-        GotClipboardCopySuccess _ ->
-            -- Feedback is now handled by the individual copy handlers
-            ( model, Cmd.none )
-
-        HideCopiedCodeFeedback ->
-            ( { model | copyCodeState = ShareUI.Ready, showCopiedFeedback = False }, Cmd.none )
-
-        HideCopiedUrlFeedback ->
-            ( { model | copyUrlState = ShareUI.Ready }, Cmd.none )
-
-        GotQRCodeGenerated value ->
-            -- Decode QR code generation result
-            case JD.decodeValue qrCodeResultDecoder value of
-                Ok result ->
-                    if result.success then
-                        ( { model | qrCodeDataUrl = result.dataUrl }, Cmd.none )
-
-                    else
-                        -- QR generation failed, log but don't crash
-                        ( model, Cmd.none )
-
-                Err _ ->
-                    ( model, Cmd.none )
 
         -- Host game message handlers
         InitHostGame hostState ->
@@ -1129,7 +889,7 @@ update msg model =
 
                                         -- Preserve the original room code from when we joined
                                         originalRoomCode =
-                                            case model.p2pState of
+                                            case model.p2p.p2pState of
                                                 P2PConnected _ roomCode ->
                                                     roomCode
 
@@ -1138,18 +898,21 @@ update msg model =
 
                                         -- Generate QR code using original room code
                                         joinUrl =
-                                            model.baseUrl ++ "?room=" ++ originalRoomCode
+                                            model.p2p.baseUrl ++ "?room=" ++ originalRoomCode
 
                                         qrCmd =
                                             Ports.generateQRCode joinUrl
                                     in
+                                    let
+                                        p2p =
+                                            model.p2p
+                                    in
                                     ( { model
                                         | hostGame = Just hostState
                                         , clientGame = Nothing
-                                        , p2pState = P2PConnected Host originalRoomCode
+                                        , p2p = { p2p | p2pState = P2PConnected Host originalRoomCode, qrCodeDataUrl = Nothing }
                                         , myPeerId = Just myPeerId
                                         , notification = Just "You are now the host"
-                                        , qrCodeDataUrl = Nothing -- Reset to show loading while generating
                                       }
                                     , Cmd.batch
                                         [ qrCmd
@@ -1176,7 +939,7 @@ update msg model =
                                 | screen = ConnectionLostScreen
                                 , clientGame = Nothing
                                 , hostGame = Nothing
-                                , p2pState = P2PNotConnected
+                                , p2p = P2P.reset model.p2p
                               }
                             , Cmd.none
                             )
@@ -1188,7 +951,7 @@ update msg model =
             -- From connection lost screen, create a new room
             ( { model
                 | screen = GameScreen
-                , p2pState = P2PCreatingRoom
+                , p2p = P2P.startCreating model.p2p
               }
             , Ports.createRoom ()
             )
@@ -1197,7 +960,7 @@ update msg model =
             -- From connection lost screen, go back to mode selection
             ( { model
                 | screen = ModeSelectionScreen
-                , p2pState = P2PNotConnected
+                , p2p = P2P.reset model.p2p
                 , selectedMode = Nothing
               }
             , Cmd.none
@@ -1277,7 +1040,7 @@ update msg model =
                                 , localGame = Nothing
                                 , hostGame = Nothing
                                 , clientGame = Nothing
-                                , p2pState = P2PNotConnected
+                                , p2p = P2P.reset model.p2p
                                 , connectionStatus = Disconnected
                               }
                             , Cmd.none
@@ -1293,7 +1056,7 @@ update msg model =
                                 , localGame = Nothing
                                 , hostGame = Nothing
                                 , clientGame = Nothing
-                                , p2pState = P2PNotConnected
+                                , p2p = P2P.reset model.p2p
                                 , connectionStatus = Connecting
                               }
                             , Ports.joinGame (JE.object [])
@@ -1327,27 +1090,83 @@ update msg model =
             in
             ( { model | screen = previousScreen }, Cmd.none )
 
-        ToggleConnectionPanel ->
-            ( { model | connectionPanelCollapsed = not model.connectionPanelCollapsed }, Cmd.none )
 
-        TriggerAutoJoin roomCode ->
-            -- JS triggers this after ports are ready
-            let
-                normalizedCode =
-                    roomCode
-                        |> String.toUpper
-                        |> String.filter Char.isAlpha
-                        |> String.left 4
-            in
-            if String.length normalizedCode == 4 then
-                ( { model | p2pState = P2PJoiningRoom normalizedCode }
-                , Ports.joinRoom normalizedCode
-                )
 
-            else
-                ( { model | notification = Just "Invalid room code" }
-                , Process.sleep 3000 |> Task.perform (\_ -> ClearNotification)
-                )
+{-| Apply a P2P effect to the main model, returning updated model and any commands.
+-}
+applyP2PEffect : P2P.Effect -> ( Model, List (Cmd Msg) ) -> ( Model, List (Cmd Msg) )
+applyP2PEffect effect ( model, cmds ) =
+    case effect of
+        P2P.NoEffect ->
+            ( model, cmds )
+
+        P2P.RoomCreated roomCode ->
+            ( { model
+                | myPeerId = Just roomCode
+                , localGame = Nothing
+              }
+            , Random.generate InitHostGame (HostGame.init roomCode) :: cmds
+            )
+
+        P2P.PeerConnectedAsHost peerId ->
+            case model.hostGame of
+                Just hostState ->
+                    let
+                        spawnGenerator =
+                            Random.map2
+                                (\pos name -> ( pos, name ))
+                                (randomSafePosition (HostGame.getOccupiedPositions hostState) hostState.grid)
+                                HostGame.generatePlayerName
+                    in
+                    ( model
+                    , Random.generate (\( pos, name ) -> NewPlayerSpawn peerId pos name) spawnGenerator :: cmds
+                    )
+
+                Nothing ->
+                    ( model, cmds )
+
+        P2P.PeerConnectedAsClient roomCode myPeerId ->
+            ( { model
+                | clientGame = Just (ClientGame.init myPeerId)
+                , myPeerId = Just myPeerId
+                , localGame = Nothing
+              }
+            , cmds
+            )
+
+        P2P.PeerDisconnected peerId ->
+            case model.hostGame of
+                Just hostState ->
+                    -- We're host: remove the player
+                    let
+                        newState =
+                            HostGame.removePlayer peerId hostState
+                    in
+                    ( { model
+                        | hostGame = Just newState
+                        , notification = Just "Player left"
+                      }
+                    , (Process.sleep 3000 |> Task.perform (\_ -> ClearNotification)) :: cmds
+                    )
+
+                Nothing ->
+                    -- We're client: disconnected from host
+                    let
+                        p2p =
+                            model.p2p
+                    in
+                    ( { model
+                        | p2p = P2P.reset p2p
+                        , clientGame = Nothing
+                        , notification = Just "Disconnected from host"
+                      }
+                    , (Process.sleep 3000 |> Task.perform (\_ -> ClearNotification)) :: cmds
+                    )
+
+        P2P.Notify message durationMs ->
+            ( { model | notification = Just message }
+            , (Process.sleep durationMs |> Task.perform (\_ -> ClearNotification)) :: cmds
+            )
 
 
 {-| Generate commands to spawn multiple apples for host game.
@@ -1420,53 +1239,6 @@ tickDecoder =
         (JD.field "snakes" (JD.list Snake.decoder))
         (JD.field "apples" (JD.list Game.appleDecoder))
 
-
-{-| Result from QR code generation port.
--}
-type alias QRCodeResult =
-    { success : Bool
-    , dataUrl : Maybe String
-    }
-
-
-qrCodeResultDecoder : JD.Decoder QRCodeResult
-qrCodeResultDecoder =
-    JD.map2 QRCodeResult
-        (JD.field "success" JD.bool)
-        (JD.maybe (JD.field "dataUrl" JD.string))
-
-
-{-| Decoder for peerConnected events from JavaScript.
-    Host receives: { role: "host", peerId: "XXXX" } - peerId is the connecting client
-    Client receives: { role: "client", roomCode: "XXXX", myPeerId: "..." } - myPeerId is our own ID
--}
-peerConnectedDecoder : JD.Decoder { role : P2PRole, roomCode : String, myPeerId : String }
-peerConnectedDecoder =
-    JD.map3 (\role roomCode myPeerId -> { role = role, roomCode = roomCode, myPeerId = myPeerId })
-        (JD.field "role" (JD.string |> JD.andThen roleDecoder))
-        (JD.oneOf
-            [ JD.field "roomCode" JD.string
-            , JD.field "peerId" JD.string  -- host receives peerId from connecting client
-            ]
-        )
-        (JD.oneOf
-            [ JD.field "myPeerId" JD.string
-            , JD.succeed ""  -- host doesn't send myPeerId, use empty string
-            ]
-        )
-
-
-roleDecoder : String -> JD.Decoder P2PRole
-roleDecoder str =
-    case str of
-        "host" ->
-            JD.succeed Host
-
-        "client" ->
-            JD.succeed Client
-
-        _ ->
-            JD.fail ("Unknown role: " ++ str)
 
 
 view : Model -> Html Msg
@@ -1699,9 +1471,12 @@ viewInfoScreen =
 viewGameScreen : Model -> Html Msg
 viewGameScreen model =
     let
+        p2p =
+            model.p2p
+
         -- Get room code if connected
         maybeRoomCode =
-            case model.p2pState of
+            case p2p.p2pState of
                 P2PConnected _ code ->
                     Just code
 
@@ -1710,7 +1485,7 @@ viewGameScreen model =
 
         -- Collapse toggle icon
         collapseIcon =
-            if model.connectionPanelCollapsed then
+            if p2p.connectionPanelCollapsed then
                 "▼"
 
             else
@@ -1724,7 +1499,7 @@ viewGameScreen model =
                 Just code ->
                     button
                         [ class "room-badge"
-                        , onClick ToggleConnectionPanel
+                        , onClick (P2PMsg P2P.ToggleConnectionPanel)
                         ]
                         [ text ("Room: " ++ code ++ " " ++ collapseIcon) ]
 
@@ -1742,23 +1517,25 @@ viewGameScreen model =
             Just P2PSelected ->
                 div
                     [ class
-                        (if model.connectionPanelCollapsed then
+                        (if p2p.connectionPanelCollapsed then
                             "connection-panel-wrapper collapsed"
 
                          else
                             "connection-panel-wrapper"
                         )
                     ]
-                    [ ConnectionUI.view
-                        { p2pState = model.p2pState
-                        , roomCodeInput = model.roomCodeInput
-                        , showCopiedFeedback = model.showCopiedFeedback
-                        , onCreateRoom = CreateRoom
-                        , onJoinRoom = JoinRoom
-                        , onLeaveRoom = LeaveRoom
-                        , onRoomCodeInput = RoomCodeInputChanged
-                        , onCopyRoomCode = CopyRoomCode
-                        }
+                    [ Html.map P2PMsg
+                        (ConnectionUI.view
+                            { p2pState = p2p.p2pState
+                            , roomCodeInput = p2p.roomCodeInput
+                            , showCopiedFeedback = p2p.showCopiedFeedback
+                            , onCreateRoom = P2P.CreateRoom
+                            , onJoinRoom = P2P.JoinRoom
+                            , onLeaveRoom = P2P.LeaveRoom
+                            , onRoomCodeInput = P2P.RoomCodeInputChanged
+                            , onCopyRoomCode = P2P.CopyRoomCode
+                            }
+                        )
                     ]
 
             Just PhoenixSelected ->
@@ -1776,16 +1553,18 @@ viewGameScreen model =
                 text ""
         , viewGame model
         , -- Show ShareUI BELOW the board when connected as host
-          case ( model.selectedMode, model.p2pState ) of
+          case ( model.selectedMode, p2p.p2pState ) of
             ( Just P2PSelected, P2PConnected Host roomCode ) ->
-                ShareUI.view
-                    { roomCode = roomCode
-                    , qrCodeDataUrl = model.qrCodeDataUrl
-                    , copyCodeState = model.copyCodeState
-                    , copyUrlState = model.copyUrlState
-                    , onCopyCode = CopyRoomCode
-                    , onCopyUrl = CopyRoomUrl
-                    }
+                Html.map P2PMsg
+                    (ShareUI.view
+                        { roomCode = roomCode
+                        , qrCodeDataUrl = p2p.qrCodeDataUrl
+                        , copyCodeState = p2p.copyCodeState
+                        , copyUrlState = p2p.copyUrlState
+                        , onCopyCode = P2P.CopyRoomCode
+                        , onCopyUrl = P2P.CopyRoomUrl
+                        }
+                    )
 
             _ ->
                 text ""
@@ -1869,7 +1648,7 @@ viewGame model =
 
         -- QR code watermark overlay (only shown for host)
         qrWatermark =
-            case model.qrCodeDataUrl of
+            case model.p2p.qrCodeDataUrl of
                 Just dataUrl ->
                     Html.img
                         [ class "qr-watermark"
@@ -1883,7 +1662,7 @@ viewGame model =
 
         -- Check if we should show QR watermark (host with room)
         showQrWatermark =
-            case model.p2pState of
+            case model.p2p.p2pState of
                 P2PConnected Host _ ->
                     True
 
@@ -1986,7 +1765,7 @@ subscriptions model =
     Sub.batch
         [ Browser.Events.onKeyDown (JD.map GameInput Input.keyDecoder)
           -- Tick subscription depends on game mode and P2P state
-        , case model.p2pState of
+        , case model.p2p.p2pState of
             P2PConnected Host _ ->
                 -- Host: use HostTick for multi-player game loop
                 Time.every 100 HostTick
@@ -2008,22 +1787,15 @@ subscriptions model =
         , Ports.playerJoined PlayerJoined
         , Ports.playerLeft PlayerLeft
         , Ports.receiveTick GotTick
-          -- P2P subscriptions
-        , Ports.roomCreated GotRoomCreated
-        , Ports.peerConnected GotPeerConnected
-        , Ports.peerDisconnected GotPeerDisconnected
-        , Ports.connectionError GotConnectionError
-        , Ports.clipboardCopySuccess (\_ -> GotClipboardCopySuccess ShareUI.CopyCode)
+          -- P2P connection subscriptions
+        , Sub.map P2PMsg P2P.subscriptions
+          -- P2P game subscriptions (not part of connection module)
         , Ports.receiveInputP2P GotInputP2P
         , Ports.receiveGameStateP2P GotGameStateP2P
           -- Host migration
         , Ports.hostMigration GotHostMigration
-          -- QR code generation
-        , Ports.qrCodeGenerated GotQRCodeGenerated
           -- Touch controls
         , Ports.receiveTouchDirection (stringToInputAction >> GameInput)
-          -- Auto-join from URL
-        , Ports.triggerAutoJoin TriggerAutoJoin
         ]
 
 
