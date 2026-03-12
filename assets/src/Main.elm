@@ -5,6 +5,7 @@ import Browser.Events
 import Dict
 import Engine.Apple as Apple exposing (Apple)
 import Engine.PowerUp as PowerUp
+import Engine.Spawn as Spawn
 import Engine.VenomType as VenomType
 import Game exposing (GameState)
 import Html exposing (Html, button, div, h1, h2, h3, p, span, text)
@@ -18,6 +19,7 @@ import LocalGame exposing (LocalGameState)
 import Network.ClientGame as ClientGame exposing (ClientGameState)
 import Network.HostGame as HostGame exposing (HostGameState)
 import Network.Protocol as Protocol
+import P2P.Connection as P2P
 import Ports
 import Process
 import Random
@@ -25,8 +27,12 @@ import Snake exposing (Direction(..), Position)
 import Task
 import Time
 import View.Board as Board
+import View.ConnectionLostScreen
 import View.ConnectionUI as ConnectionUI exposing (P2PConnectionState(..), P2PRole(..))
+import View.GameScreen
+import View.InfoScreen
 import View.ModeSelection as ModeSelection
+import View.SettingsScreen
 import View.Notifications as Notifications
 import View.Scoreboard as Scoreboard
 import View.ShareUI as ShareUI
@@ -72,20 +78,12 @@ type alias Model =
     , gameMode : GameMode
     , pendingAppleSpawns : Int  -- Track in-flight Random.generate calls
     , pendingPowerUpSpawns : Int -- Track in-flight power-up spawn calls
-    -- P2P connection state
-    , p2pState : P2PConnectionState
-    , roomCodeInput : String
-    , showCopiedFeedback : Bool
     , showingCollision : Bool  -- For collision shake animation
     -- Screen routing
     , screen : Screen
     , selectedMode : Maybe SelectedMode
-    -- Share UI state
-    , baseUrl : String
-    , qrCodeDataUrl : Maybe String
-    , copyCodeState : ShareUI.CopyState
-    , copyUrlState : ShareUI.CopyState
-    , connectionPanelCollapsed : Bool
+    -- P2P connection state
+    , p2p : P2P.Model
     }
 
 
@@ -114,21 +112,8 @@ type Msg
     | InitGame LocalGameState
     | NewSpawnPosition Position
     | NewApplePosition Position
-      -- P2P messages
-    | CreateRoom
-    | JoinRoom
-    | LeaveRoom
-    | RoomCodeInputChanged String
-    | GotRoomCreated String
-    | GotPeerConnected JD.Value
-    | GotPeerDisconnected String
-    | GotConnectionError String
-    | CopyRoomCode
-    | CopyRoomUrl
-    | GotClipboardCopySuccess ShareUI.CopyTarget
-    | HideCopiedCodeFeedback
-    | HideCopiedUrlFeedback
-    | GotQRCodeGenerated JD.Value
+      -- P2P connection messages
+    | P2PMsg P2P.Msg
       -- Host game messages
     | InitHostGame HostGameState
     | HostTick Time.Posix
@@ -156,10 +141,6 @@ type Msg
       -- Info screen messages
     | OpenInfo
     | CloseInfo
-      -- Auto-join from URL
-    | TriggerAutoJoin String
-      -- Mobile UI
-    | ToggleConnectionPanel
 
 
 init : Flags -> ( Model, Cmd Msg )
@@ -204,17 +185,10 @@ initModeSelection baseUrl =
       , gameMode = LocalMode
       , pendingAppleSpawns = 0
       , pendingPowerUpSpawns = 0
-      , p2pState = P2PNotConnected
-      , roomCodeInput = ""
-      , showCopiedFeedback = False
       , showingCollision = False
       , screen = ModeSelectionScreen
       , selectedMode = Nothing
-      , baseUrl = baseUrl
-      , qrCodeDataUrl = Nothing
-      , copyCodeState = ShareUI.Ready
-      , copyUrlState = ShareUI.Ready
-      , connectionPanelCollapsed = False
+      , p2p = P2P.init baseUrl
       }
     , Cmd.none
     )
@@ -240,17 +214,10 @@ initWithMode baseUrl mode =
               , gameMode = LocalMode
               , pendingAppleSpawns = 0
               , pendingPowerUpSpawns = 0
-              , p2pState = P2PNotConnected
-              , roomCodeInput = ""
-              , showCopiedFeedback = False
               , showingCollision = False
               , screen = GameScreen
               , selectedMode = Just P2PSelected
-              , baseUrl = baseUrl
-              , qrCodeDataUrl = Nothing
-              , copyCodeState = ShareUI.Ready
-              , copyUrlState = ShareUI.Ready
-              , connectionPanelCollapsed = False
+              , p2p = P2P.init baseUrl
               }
             , Cmd.none
             )
@@ -270,17 +237,10 @@ initWithMode baseUrl mode =
               , gameMode = OnlineMode
               , pendingAppleSpawns = 0
               , pendingPowerUpSpawns = 0
-              , p2pState = P2PNotConnected
-              , roomCodeInput = ""
-              , showCopiedFeedback = False
               , showingCollision = False
               , screen = GameScreen
               , selectedMode = Just PhoenixSelected
-              , baseUrl = baseUrl
-              , qrCodeDataUrl = Nothing
-              , copyCodeState = ShareUI.Ready
-              , copyUrlState = ShareUI.Ready
-              , connectionPanelCollapsed = False
+              , p2p = P2P.init baseUrl
               }
             , Ports.joinGame (JE.object [])
             )
@@ -307,7 +267,7 @@ update msg model =
                             , showingCollision = True
                           }
                         , Cmd.batch
-                            [ Random.generate NewSpawnPosition (randomPosition newState.grid)
+                            [ Random.generate NewSpawnPosition (Spawn.randomPosition newState.grid)
                             , Process.sleep 300 |> Task.perform (\_ -> ClearCollisionShake)
                             ]
                         )
@@ -327,7 +287,7 @@ update msg model =
                             ( newPendingCount, spawnCmd ) =
                                 if applesNeeded > 0 then
                                     ( model.pendingAppleSpawns + applesNeeded
-                                    , spawnAppleCommands applesNeeded (LocalGame.getOccupiedPositions newState) newState.grid
+                                    , Spawn.spawnAppleCommands NewApplePosition applesNeeded (LocalGame.getOccupiedPositions newState) newState.grid
                                     )
 
                                 else
@@ -350,7 +310,7 @@ update msg model =
                     Apple.minApples
 
                 spawnCmd =
-                    spawnAppleCommands applesNeeded (LocalGame.getOccupiedPositions localState) localState.grid
+                    Spawn.spawnAppleCommands NewApplePosition applesNeeded (LocalGame.getOccupiedPositions localState) localState.grid
             in
             ( { model
                 | localGame = Just localState
@@ -601,219 +561,24 @@ update msg model =
             , Process.sleep 3000 |> Task.perform (\_ -> ClearNotification)
             )
 
-        -- P2P message handlers
-        CreateRoom ->
-            ( { model | p2pState = P2PCreatingRoom }
-            , Ports.createRoom ()
-            )
-
-        JoinRoom ->
+        -- P2P connection messages
+        P2PMsg p2pMsg ->
             let
-                roomCode =
-                    String.toUpper model.roomCodeInput
+                ( newP2P, p2pCmd, effects ) =
+                    P2P.update p2pMsg model.p2p
+
+                modelWithP2P =
+                    { model | p2p = newP2P }
+
+                ( modelAfterEffects, effectCmds ) =
+                    List.foldl applyP2PEffect ( modelWithP2P, [] ) effects
             in
-            if String.length roomCode == 4 then
-                ( { model | p2pState = P2PJoiningRoom roomCode }
-                , Ports.joinRoom roomCode
-                )
-
-            else
-                ( model, Cmd.none )
-
-        LeaveRoom ->
-            ( { model | p2pState = P2PNotConnected }
-            , Ports.leaveRoom ()
-            )
-
-        RoomCodeInputChanged str ->
-            let
-                -- Uppercase and limit to 4 characters
-                normalized =
-                    str
-                        |> String.toUpper
-                        |> String.filter Char.isAlpha
-                        |> String.left 4
-
-                -- Auto-join if we have exactly 4 characters
-                ( newState, cmd ) =
-                    if String.length normalized == 4 then
-                        ( { model
-                            | roomCodeInput = normalized
-                            , p2pState = P2PJoiningRoom normalized
-                          }
-                        , Ports.joinRoom normalized
-                        )
-
-                    else
-                        ( { model | roomCodeInput = normalized }
-                        , Cmd.none
-                        )
-            in
-            ( newState, cmd )
-
-        GotRoomCreated roomCode ->
-            -- Host: Initialize host game with roomCode as our peerId
-            -- Also generate QR code for the room URL
-            let
-                roomUrl =
-                    model.baseUrl ++ "?room=" ++ roomCode
-            in
-            ( { model
-                | p2pState = P2PConnected Host roomCode
-                , myPeerId = Just roomCode
-                , localGame = Nothing  -- Clear local game
-                , qrCodeDataUrl = Nothing  -- Reset QR code (will be generated)
-                , copyCodeState = ShareUI.Ready
-                , copyUrlState = ShareUI.Ready
-                , connectionPanelCollapsed = True  -- Auto-collapse on mobile to maximize game space
-              }
+            ( modelAfterEffects
             , Cmd.batch
-                [ Random.generate InitHostGame (HostGame.init roomCode)
-                , Ports.generateQRCode roomUrl
+                [ Cmd.map P2PMsg p2pCmd
+                , Cmd.batch effectCmds
                 ]
             )
-
-        GotPeerConnected value ->
-            case JD.decodeValue peerConnectedDecoder value of
-                Ok data ->
-                    case data.role of
-                        Host ->
-                            -- A client connected to us (we are host)
-                            -- Note: The host is already running game loop, add the player
-                            case model.hostGame of
-                                Just hostState ->
-                                    -- Generate spawn position and name for new player
-                                    let
-                                        spawnGenerator =
-                                            Random.map2
-                                                (\pos name -> ( pos, name ))
-                                                (randomSafePosition (HostGame.getOccupiedPositions hostState) hostState.grid)
-                                                HostGame.generatePlayerName
-                                    in
-                                    ( model
-                                    , Random.generate (\( pos, name ) -> NewPlayerSpawn data.roomCode pos name) spawnGenerator
-                                    )
-
-                                Nothing ->
-                                    ( model, Cmd.none )
-
-                        Client ->
-                            -- We connected to host as a client
-                            ( { model
-                                | p2pState = P2PConnected Client data.roomCode
-                                , clientGame = Just (ClientGame.init data.myPeerId)
-                                , myPeerId = Just data.myPeerId
-                                , localGame = Nothing  -- Clear local game when joining as client
-                              }
-                            , Cmd.none
-                            )
-
-                Err _ ->
-                    ( model, Cmd.none )
-
-        GotPeerDisconnected peerId ->
-            -- Check if we're host (a client left) or client (we disconnected)
-            case model.hostGame of
-                Just hostState ->
-                    -- We're host: mark player as disconnected (grace period starts)
-                    let
-                        newState =
-                            HostGame.removePlayer peerId hostState
-                    in
-                    ( { model
-                        | hostGame = Just newState
-                        , notification = Just "Player left"
-                      }
-                    , Process.sleep 3000
-                        |> Task.perform (\_ -> ClearNotification)
-                    )
-
-                Nothing ->
-                    -- We're client: we got disconnected from host
-                    ( { model
-                        | p2pState = P2PNotConnected
-                        , clientGame = Nothing
-                        , notification = Just "Disconnected from host"
-                      }
-                    , Process.sleep 3000
-                        |> Task.perform (\_ -> ClearNotification)
-                    )
-
-        GotConnectionError errorMsg ->
-            let
-                -- Reset state based on what we were trying to do
-                newP2PState =
-                    case model.p2pState of
-                        P2PCreatingRoom ->
-                            P2PNotConnected
-
-                        P2PJoiningRoom _ ->
-                            P2PNotConnected
-
-                        _ ->
-                            model.p2pState
-            in
-            ( { model
-                | p2pState = newP2PState
-                , notification = Just errorMsg
-              }
-            , Process.sleep 5000
-                |> Task.perform (\_ -> ClearNotification)
-            )
-
-        CopyRoomCode ->
-            case model.p2pState of
-                P2PConnected _ roomCode ->
-                    ( { model | copyCodeState = ShareUI.Copied }
-                    , Cmd.batch
-                        [ Ports.copyToClipboard roomCode
-                        , Process.sleep 2000 |> Task.perform (\_ -> HideCopiedCodeFeedback)
-                        ]
-                    )
-
-                _ ->
-                    ( model, Cmd.none )
-
-        CopyRoomUrl ->
-            case model.p2pState of
-                P2PConnected _ roomCode ->
-                    let
-                        roomUrl =
-                            model.baseUrl ++ "?room=" ++ roomCode
-                    in
-                    ( { model | copyUrlState = ShareUI.Copied }
-                    , Cmd.batch
-                        [ Ports.copyToClipboard roomUrl
-                        , Process.sleep 2000 |> Task.perform (\_ -> HideCopiedUrlFeedback)
-                        ]
-                    )
-
-                _ ->
-                    ( model, Cmd.none )
-
-        GotClipboardCopySuccess _ ->
-            -- Feedback is now handled by the individual copy handlers
-            ( model, Cmd.none )
-
-        HideCopiedCodeFeedback ->
-            ( { model | copyCodeState = ShareUI.Ready, showCopiedFeedback = False }, Cmd.none )
-
-        HideCopiedUrlFeedback ->
-            ( { model | copyUrlState = ShareUI.Ready }, Cmd.none )
-
-        GotQRCodeGenerated value ->
-            -- Decode QR code generation result
-            case JD.decodeValue qrCodeResultDecoder value of
-                Ok result ->
-                    if result.success then
-                        ( { model | qrCodeDataUrl = result.dataUrl }, Cmd.none )
-
-                    else
-                        -- QR generation failed, log but don't crash
-                        ( model, Cmd.none )
-
-                Err _ ->
-                    ( model, Cmd.none )
 
         -- Host game message handlers
         InitHostGame hostState ->
@@ -823,7 +588,7 @@ update msg model =
                     Apple.minApples
 
                 spawnCmd =
-                    spawnHostAppleCommands applesNeeded (HostGame.getOccupiedPositions hostState) hostState.grid
+                    Spawn.spawnAppleCommands NewHostApplePosition applesNeeded (HostGame.getOccupiedPositions hostState) hostState.grid
             in
             ( { model
                 | hostGame = Just hostState
@@ -859,7 +624,7 @@ update msg model =
                         ( newPendingCount, spawnCmd ) =
                             if applesNeeded > 0 then
                                 ( model.pendingAppleSpawns + applesNeeded
-                                , spawnHostAppleCommands applesNeeded (HostGame.getOccupiedPositions newState) newState.grid
+                                , Spawn.spawnAppleCommands NewHostApplePosition applesNeeded (HostGame.getOccupiedPositions newState) newState.grid
                                 )
 
                             else
@@ -917,7 +682,7 @@ update msg model =
                               }
                             , Cmd.batch
                                 ([ broadcastCmd
-                                 , Random.generate (NewHostSpawnPosition playerId) (randomPosition newState.grid)
+                                 , Random.generate (NewHostSpawnPosition playerId) (Spawn.randomPosition newState.grid)
                                  , Process.sleep 300 |> Task.perform (\_ -> ClearCollisionShake)
                                  , spawnCmd
                                  , powerUpSpawnCmd
@@ -1129,7 +894,7 @@ update msg model =
 
                                         -- Preserve the original room code from when we joined
                                         originalRoomCode =
-                                            case model.p2pState of
+                                            case model.p2p.p2pState of
                                                 P2PConnected _ roomCode ->
                                                     roomCode
 
@@ -1138,18 +903,21 @@ update msg model =
 
                                         -- Generate QR code using original room code
                                         joinUrl =
-                                            model.baseUrl ++ "?room=" ++ originalRoomCode
+                                            model.p2p.baseUrl ++ "?room=" ++ originalRoomCode
 
                                         qrCmd =
                                             Ports.generateQRCode joinUrl
                                     in
+                                    let
+                                        p2p =
+                                            model.p2p
+                                    in
                                     ( { model
                                         | hostGame = Just hostState
                                         , clientGame = Nothing
-                                        , p2pState = P2PConnected Host originalRoomCode
+                                        , p2p = { p2p | p2pState = P2PConnected Host originalRoomCode, qrCodeDataUrl = Nothing }
                                         , myPeerId = Just myPeerId
                                         , notification = Just "You are now the host"
-                                        , qrCodeDataUrl = Nothing -- Reset to show loading while generating
                                       }
                                     , Cmd.batch
                                         [ qrCmd
@@ -1176,7 +944,7 @@ update msg model =
                                 | screen = ConnectionLostScreen
                                 , clientGame = Nothing
                                 , hostGame = Nothing
-                                , p2pState = P2PNotConnected
+                                , p2p = P2P.reset model.p2p
                               }
                             , Cmd.none
                             )
@@ -1188,7 +956,7 @@ update msg model =
             -- From connection lost screen, create a new room
             ( { model
                 | screen = GameScreen
-                , p2pState = P2PCreatingRoom
+                , p2p = P2P.startCreating model.p2p
               }
             , Ports.createRoom ()
             )
@@ -1197,7 +965,7 @@ update msg model =
             -- From connection lost screen, go back to mode selection
             ( { model
                 | screen = ModeSelectionScreen
-                , p2pState = P2PNotConnected
+                , p2p = P2P.reset model.p2p
                 , selectedMode = Nothing
               }
             , Cmd.none
@@ -1277,7 +1045,7 @@ update msg model =
                                 , localGame = Nothing
                                 , hostGame = Nothing
                                 , clientGame = Nothing
-                                , p2pState = P2PNotConnected
+                                , p2p = P2P.reset model.p2p
                                 , connectionStatus = Disconnected
                               }
                             , Cmd.none
@@ -1293,7 +1061,7 @@ update msg model =
                                 , localGame = Nothing
                                 , hostGame = Nothing
                                 , clientGame = Nothing
-                                , p2pState = P2PNotConnected
+                                , p2p = P2P.reset model.p2p
                                 , connectionStatus = Connecting
                               }
                             , Ports.joinGame (JE.object [])
@@ -1327,70 +1095,85 @@ update msg model =
             in
             ( { model | screen = previousScreen }, Cmd.none )
 
-        ToggleConnectionPanel ->
-            ( { model | connectionPanelCollapsed = not model.connectionPanelCollapsed }, Cmd.none )
-
-        TriggerAutoJoin roomCode ->
-            -- JS triggers this after ports are ready
-            let
-                normalizedCode =
-                    roomCode
-                        |> String.toUpper
-                        |> String.filter Char.isAlpha
-                        |> String.left 4
-            in
-            if String.length normalizedCode == 4 then
-                ( { model | p2pState = P2PJoiningRoom normalizedCode }
-                , Ports.joinRoom normalizedCode
-                )
-
-            else
-                ( { model | notification = Just "Invalid room code" }
-                , Process.sleep 3000 |> Task.perform (\_ -> ClearNotification)
-                )
 
 
-{-| Generate commands to spawn multiple apples for host game.
+{-| Apply a P2P effect to the main model, returning updated model and any commands.
 -}
-spawnHostAppleCommands : Int -> List Position -> { width : Int, height : Int } -> Cmd Msg
-spawnHostAppleCommands count occupied grid =
-    if count <= 0 then
-        Cmd.none
+applyP2PEffect : P2P.Effect -> ( Model, List (Cmd Msg) ) -> ( Model, List (Cmd Msg) )
+applyP2PEffect effect ( model, cmds ) =
+    case effect of
+        P2P.NoEffect ->
+            ( model, cmds )
 
-    else
-        List.range 1 count
-            |> List.map (\_ -> Random.generate NewHostApplePosition (Apple.randomSafePosition occupied grid))
-            |> Cmd.batch
+        P2P.RoomCreated roomCode ->
+            ( { model
+                | myPeerId = Just roomCode
+                , localGame = Nothing
+              }
+            , Random.generate InitHostGame (HostGame.init roomCode) :: cmds
+            )
+
+        P2P.PeerConnectedAsHost peerId ->
+            case model.hostGame of
+                Just hostState ->
+                    let
+                        spawnGenerator =
+                            Random.map2
+                                (\pos name -> ( pos, name ))
+                                (Apple.randomSafePosition (HostGame.getOccupiedPositions hostState) hostState.grid)
+                                HostGame.generatePlayerName
+                    in
+                    ( model
+                    , Random.generate (\( pos, name ) -> NewPlayerSpawn peerId pos name) spawnGenerator :: cmds
+                    )
+
+                Nothing ->
+                    ( model, cmds )
+
+        P2P.PeerConnectedAsClient roomCode myPeerId ->
+            ( { model
+                | clientGame = Just (ClientGame.init myPeerId)
+                , myPeerId = Just myPeerId
+                , localGame = Nothing
+              }
+            , cmds
+            )
+
+        P2P.PeerDisconnected peerId ->
+            case model.hostGame of
+                Just hostState ->
+                    -- We're host: remove the player
+                    let
+                        newState =
+                            HostGame.removePlayer peerId hostState
+                    in
+                    ( { model
+                        | hostGame = Just newState
+                        , notification = Just "Player left"
+                      }
+                    , (Process.sleep 3000 |> Task.perform (\_ -> ClearNotification)) :: cmds
+                    )
+
+                Nothing ->
+                    -- We're client: disconnected from host
+                    let
+                        p2p =
+                            model.p2p
+                    in
+                    ( { model
+                        | p2p = P2P.reset p2p
+                        , clientGame = Nothing
+                        , notification = Just "Disconnected from host"
+                      }
+                    , (Process.sleep 3000 |> Task.perform (\_ -> ClearNotification)) :: cmds
+                    )
+
+        P2P.Notify message durationMs ->
+            ( { model | notification = Just message }
+            , (Process.sleep durationMs |> Task.perform (\_ -> ClearNotification)) :: cmds
+            )
 
 
-{-| Generate commands to spawn multiple apples.
--}
-spawnAppleCommands : Int -> List Position -> { width : Int, height : Int } -> Cmd Msg
-spawnAppleCommands count occupied grid =
-    if count <= 0 then
-        Cmd.none
-
-    else
-        List.range 1 count
-            |> List.map (\_ -> Random.generate NewApplePosition (Apple.randomSafePosition occupied grid))
-            |> Cmd.batch
-
-
-{-| Generate a random position within grid bounds.
--}
-randomPosition : { width : Int, height : Int } -> Random.Generator Position
-randomPosition grid =
-    Random.map2 Position
-        (Random.int 2 (grid.width - 1))
-        (Random.int 0 (grid.height - 1))
-
-
-{-| Generate a random position that avoids occupied positions.
-Uses Apple.randomSafePosition for consistency.
--}
-randomSafePosition : List Position -> { width : Int, height : Int } -> Random.Generator Position
-randomSafePosition occupied grid =
-    Apple.randomSafePosition occupied grid
 
 
 type alias PlayerJoinedData =
@@ -1421,53 +1204,6 @@ tickDecoder =
         (JD.field "apples" (JD.list Game.appleDecoder))
 
 
-{-| Result from QR code generation port.
--}
-type alias QRCodeResult =
-    { success : Bool
-    , dataUrl : Maybe String
-    }
-
-
-qrCodeResultDecoder : JD.Decoder QRCodeResult
-qrCodeResultDecoder =
-    JD.map2 QRCodeResult
-        (JD.field "success" JD.bool)
-        (JD.maybe (JD.field "dataUrl" JD.string))
-
-
-{-| Decoder for peerConnected events from JavaScript.
-    Host receives: { role: "host", peerId: "XXXX" } - peerId is the connecting client
-    Client receives: { role: "client", roomCode: "XXXX", myPeerId: "..." } - myPeerId is our own ID
--}
-peerConnectedDecoder : JD.Decoder { role : P2PRole, roomCode : String, myPeerId : String }
-peerConnectedDecoder =
-    JD.map3 (\role roomCode myPeerId -> { role = role, roomCode = roomCode, myPeerId = myPeerId })
-        (JD.field "role" (JD.string |> JD.andThen roleDecoder))
-        (JD.oneOf
-            [ JD.field "roomCode" JD.string
-            , JD.field "peerId" JD.string  -- host receives peerId from connecting client
-            ]
-        )
-        (JD.oneOf
-            [ JD.field "myPeerId" JD.string
-            , JD.succeed ""  -- host doesn't send myPeerId, use empty string
-            ]
-        )
-
-
-roleDecoder : String -> JD.Decoder P2PRole
-roleDecoder str =
-    case str of
-        "host" ->
-            JD.succeed Host
-
-        "client" ->
-            JD.succeed Client
-
-        _ ->
-            JD.fail ("Unknown role: " ++ str)
-
 
 view : Model -> Html Msg
 view model =
@@ -1476,16 +1212,90 @@ view model =
             viewModeSelectionScreen
 
         SettingsScreen ->
-            viewSettingsScreen model
+            let
+                selectedModeForView =
+                    case model.selectedMode of
+                        Just P2PSelected ->
+                            Just View.SettingsScreen.P2PSelected
+
+                        Just PhoenixSelected ->
+                            Just View.SettingsScreen.PhoenixSelected
+
+                        Nothing ->
+                            Nothing
+            in
+            View.SettingsScreen.view
+                { hostGame = model.hostGame
+                , selectedMode = selectedModeForView
+                , onToggleVenom = ToggleVenomMode
+                , onChangeMode = ChangeMode
+                , onClose = CloseSettings
+                }
 
         GameScreen ->
-            viewGameScreen model
+            let
+                selectedModeForView =
+                    case model.selectedMode of
+                        Just P2PSelected ->
+                            Just View.GameScreen.P2PSelected
+
+                        Just PhoenixSelected ->
+                            Just View.GameScreen.PhoenixSelected
+
+                        Nothing ->
+                            Nothing
+
+                gameModeForView =
+                    case model.gameMode of
+                        LocalMode ->
+                            View.GameScreen.LocalMode
+
+                        OnlineMode ->
+                            View.GameScreen.OnlineMode
+
+                connectionStatusForView =
+                    case model.connectionStatus of
+                        Disconnected ->
+                            View.GameScreen.Disconnected
+
+                        Connecting ->
+                            View.GameScreen.Connecting
+
+                        Connected ->
+                            View.GameScreen.Connected
+            in
+            View.GameScreen.view
+                { hostGame = model.hostGame
+                , clientGame = model.clientGame
+                , localGame = model.localGame
+                , gameState = model.gameState
+                , gameMode = gameModeForView
+                , myPeerId = model.myPeerId
+                , myId = model.playerId
+                , selectedMode = selectedModeForView
+                , p2pState = model.p2p.p2pState
+                , roomCodeInput = model.p2p.roomCodeInput
+                , showCopiedFeedback = model.p2p.showCopiedFeedback
+                , qrCodeDataUrl = model.p2p.qrCodeDataUrl
+                , connectionPanelCollapsed = model.p2p.connectionPanelCollapsed
+                , showingCollision = model.showingCollision
+                , connectionStatus = connectionStatusForView
+                , error = model.error
+                , notification = Notifications.view model.notification
+                , copyCodeState = model.p2p.copyCodeState
+                , copyUrlState = model.p2p.copyUrlState
+                , onOpenInfo = OpenInfo
+                , onOpenSettings = OpenSettings
+                , onToggleConnectionPanel = P2PMsg P2P.ToggleConnectionPanel
+                , onP2PMsg = P2PMsg
+                , onError = GotError
+                }
 
         ConnectionLostScreen ->
-            viewConnectionLostScreen
+            View.ConnectionLostScreen.view { onCreateRoom = CreateNewRoom, onGoHome = GoHome }
 
         InfoScreen ->
-            viewInfoScreen
+            View.InfoScreen.view CloseInfo
 
 
 {-| Mode selection screen (first visit).
@@ -1502,491 +1312,12 @@ viewModeSelectionScreen =
         ]
 
 
-{-| Settings screen for changing mode preference.
--}
-viewSettingsScreen : Model -> Html Msg
-viewSettingsScreen model =
-    let
-        venomEnabled =
-            case model.hostGame of
-                Just hostState ->
-                    hostState.settings.venomMode
-
-                Nothing ->
-                    False
-    in
-    div [ class "game-container settings-page", style "padding" "20px" ]
-        [ h1 [] [ text "Settings" ]
-        , div [ class "settings-content" ]
-            [ -- Game settings section (host only, P2P mode)
-              case model.hostGame of
-                Just _ ->
-                    div [ class "settings-section" ]
-                        [ h2 [] [ text "Game Rules" ]
-                        , div [ class "setting-row" ]
-                            [ span [ class "setting-label" ] [ text "Venom Spitting" ]
-                            , button
-                                [ class
-                                    (if venomEnabled then
-                                        "setting-toggle active"
-
-                                     else
-                                        "setting-toggle"
-                                    )
-                                , onClick ToggleVenomMode
-                                ]
-                                [ text
-                                    (if venomEnabled then
-                                        "ON"
-
-                                     else
-                                        "OFF"
-                                    )
-                                ]
-                            ]
-                        , p [ class "setting-description" ]
-                            [ text "Eat V (purple) for straight-line venom or B (blue) for bouncing ball venom. Press Shift to fire! Hitting an enemy truncates their tail into apples." ]
-                        ]
-
-                Nothing ->
-                    text ""
-            , h2 [] [ text "Game Mode" ]
-            , p [ class "current-mode" ]
-                [ text "Current mode: "
-                , text
-                    (case model.selectedMode of
-                        Just P2PSelected ->
-                            "Direct Connect (P2P)"
-
-                        Just PhoenixSelected ->
-                            "Classic Online (Phoenix)"
-
-                        Nothing ->
-                            "Not selected"
-                    )
-                ]
-            , div [ class "mode-change-buttons" ]
-                [ button
-                    [ class
-                        (if model.selectedMode == Just P2PSelected then
-                            "mode-option-button selected"
-
-                         else
-                            "mode-option-button"
-                        )
-                    , onClick (ChangeMode ModeSelection.P2PMode)
-                    ]
-                    [ text "Direct Connect" ]
-                , button
-                    [ class
-                        (if model.selectedMode == Just PhoenixSelected then
-                            "mode-option-button selected"
-
-                         else
-                            "mode-option-button"
-                        )
-                    , onClick (ChangeMode ModeSelection.PhoenixMode)
-                    ]
-                    [ text "Classic Online" ]
-                ]
-            , button [ class "btn-back", onClick CloseSettings ]
-                [ text "Back to Game" ]
-            ]
-        ]
-
-
-{-| Connection lost screen when all peers disconnect.
--}
-viewConnectionLostScreen : Html Msg
-viewConnectionLostScreen =
-    div [ class "game-container connection-lost-page", style "padding" "20px", style "text-align" "center" ]
-        [ h1 [] [ text "Connection Lost" ]
-        , p [ style "margin" "20px 0", style "color" "#666" ]
-            [ text "Lost connection to all players." ]
-        , div [ class "connection-lost-buttons", style "display" "flex", style "gap" "12px", style "justify-content" "center" ]
-            [ button [ class "btn-create", onClick CreateNewRoom ]
-                [ text "Create New Room" ]
-            , button [ class "btn-cancel", onClick GoHome ]
-                [ text "Go Home" ]
-            ]
-        ]
-
-
-{-| Info screen with changelog and about sections.
--}
-viewInfoScreen : Html Msg
-viewInfoScreen =
-    div [ class "game-container info-page", style "padding" "20px" ]
-        [ div [ class "info-header" ]
-            [ h1 [] [ text "About Snaker" ]
-            , button [ class "btn-back", onClick CloseInfo ]
-                [ text "Back" ]
-            ]
-        , div [ class "info-content" ]
-            [ div [ class "info-section" ]
-                [ h2 [] [ text "What is Snaker?" ]
-                , p []
-                    [ text "Snaker is a multiplayer snake game that lets you play with friends in real-time, "
-                    , text "directly in your browser. No accounts, no downloads - just share a room code and start playing!"
-                    ]
-                , p []
-                    [ text "The game uses peer-to-peer WebRTC connections, meaning you can play together "
-                    , text "without needing a central game server. One player hosts, others join with a 4-letter code."
-                    ]
-                ]
-            , div [ class "info-section" ]
-                [ h2 [] [ text "Changelog" ]
-                , div [ class "changelog" ]
-                    [ div [ class "changelog-entry" ]
-                        [ h3 [] [ text "v2.2 - Venom & Power-ups - 2026-02-06" ]
-                        , Html.ul []
-                            [ Html.li [] [ text "Venom power-up drops: V (purple, straight) and B (blue, ball) grant venom type + 1 segment growth" ]
-                            , Html.li [] [ text "Ball venom mode with diagonal bouncing off walls (5s lifetime, randomized bounce angles)" ]
-                            , Html.li [] [ text "Local mode venom support" ]
-                            , Html.li [] [ text "Shoot key changed from spacebar to Shift" ]
-                            , Html.li [] [ text "Ball projectile visibility and spawn wrapping fixes" ]
-                            ]
-                        ]
-                    , div [ class "changelog-entry" ]
-                        [ h3 [] [ text "v2.1 - Post-Launch Patches - 2026-02-05" ]
-                        , Html.ul []
-                            [ Html.li [] [ text "Apple aging lifecycle with skull penalty" ]
-                            , Html.li [] [ text "Mobile fullscreen layout with QR watermark" ]
-                            , Html.li [] [ text "Auto-join room from URL" ]
-                            , Html.li [] [ text "Apple sync and max count fixes" ]
-                            ]
-                        ]
-                    , div [ class "changelog-entry" ]
-                        [ h3 [] [ text "v2.0 - P2P WebRTC Mode - 2026-02-03" ]
-                        , Html.ul []
-                            [ Html.li [] [ text "Direct peer-to-peer multiplayer (no server needed)" ]
-                            , Html.li [] [ text "Room codes for easy game sharing" ]
-                            , Html.li [] [ text "QR code support for mobile joining" ]
-                            , Html.li [] [ text "Host migration when host leaves" ]
-                            , Html.li [] [ text "Touch controls for mobile devices" ]
-                            ]
-                        ]
-                    , div [ class "changelog-entry" ]
-                        [ h3 [] [ text "v1.0 - Multiplayer Upgrade - 2017-08-15" ]
-                        , Html.ul []
-                            [ Html.li [] [ text "Phoenix server-based multiplayer" ]
-                            , Html.li [] [ text "Real-time game synchronization" ]
-                            , Html.li [] [ text "Player collision and death animations" ]
-                            , Html.li [] [ text "Live scoreboard" ]
-                            ]
-                        ]
-                    ]
-                ]
-            , div [ class "info-section about-section" ]
-                [ h2 [] [ text "Credits" ]
-                , p []
-                    [ text "Created by "
-                    , Html.a [ Html.Attributes.href "https://www.getcontented.com.au", Html.Attributes.target "_blank" ]
-                        [ text "Get Contented" ]
-                    ]
-                , p [ class "about-motivation" ]
-                    [ text "Built as an experiment in real-time multiplayer game development with Elm and WebRTC. "
-                    , text "The goal was to create a fun, accessible game that works everywhere - "
-                    , text "no app store, no login, just instant play with friends."
-                    ]
-                ]
-            ]
-        ]
-
-
-{-| Main game screen with connection UI and game board.
--}
-viewGameScreen : Model -> Html Msg
-viewGameScreen model =
-    let
-        -- Get room code if connected
-        maybeRoomCode =
-            case model.p2pState of
-                P2PConnected _ code ->
-                    Just code
-
-                _ ->
-                    Nothing
-
-        -- Collapse toggle icon
-        collapseIcon =
-            if model.connectionPanelCollapsed then
-                "▼"
-
-            else
-                "▲"
-    in
-    div [ class "game-container", style "padding" "20px" ]
-        [ div [ class "game-header" ]
-            [ h1 [] [ text "Snaker v2.2" ]
-            , -- Mobile room code badge (visible when connected)
-              case maybeRoomCode of
-                Just code ->
-                    button
-                        [ class "room-badge"
-                        , onClick ToggleConnectionPanel
-                        ]
-                        [ text ("Room: " ++ code ++ " " ++ collapseIcon) ]
-
-                Nothing ->
-                    text ""
-            , div [ class "header-buttons" ]
-                [ button [ class "btn-info", onClick OpenInfo ]
-                    [ text "?" ]
-                , button [ class "btn-settings", onClick OpenSettings ]
-                    [ text "Settings" ]
-                ]
-            ]
-        , -- Only show P2P connection UI in P2P mode (collapsible on mobile)
-          case model.selectedMode of
-            Just P2PSelected ->
-                div
-                    [ class
-                        (if model.connectionPanelCollapsed then
-                            "connection-panel-wrapper collapsed"
-
-                         else
-                            "connection-panel-wrapper"
-                        )
-                    ]
-                    [ ConnectionUI.view
-                        { p2pState = model.p2pState
-                        , roomCodeInput = model.roomCodeInput
-                        , showCopiedFeedback = model.showCopiedFeedback
-                        , onCreateRoom = CreateRoom
-                        , onJoinRoom = JoinRoom
-                        , onLeaveRoom = LeaveRoom
-                        , onRoomCodeInput = RoomCodeInputChanged
-                        , onCopyRoomCode = CopyRoomCode
-                        }
-                    ]
-
-            Just PhoenixSelected ->
-                div [ class "connection-status" ]
-                    [ text ("Phoenix: " ++ connectionStatusToString model.connectionStatus) ]
-
-            Nothing ->
-                text ""
-        , viewStatus model
-        , case model.error of
-            Just err ->
-                div [ style "color" "red" ] [ text ("Error: " ++ err) ]
-
-            Nothing ->
-                text ""
-        , viewGame model
-        , -- Show ShareUI BELOW the board when connected as host
-          case ( model.selectedMode, model.p2pState ) of
-            ( Just P2PSelected, P2PConnected Host roomCode ) ->
-                ShareUI.view
-                    { roomCode = roomCode
-                    , qrCodeDataUrl = model.qrCodeDataUrl
-                    , copyCodeState = model.copyCodeState
-                    , copyUrlState = model.copyUrlState
-                    , onCopyCode = CopyRoomCode
-                    , onCopyUrl = CopyRoomUrl
-                    }
-
-            _ ->
-                text ""
-        , Notifications.view model.notification
-        ]
-
-
-viewStatus : Model -> Html Msg
-viewStatus model =
-    div [ class "game-status" ]
-        [ case model.hostGame of
-            Just hostState ->
-                let
-                    playerCount =
-                        Dict.size hostState.snakes
-
-                    hostScore =
-                        Dict.get hostState.hostId hostState.scores |> Maybe.withDefault 0
-                in
-                span []
-                    [ text "Mode: Host (P2P)"
-                    , text (" | Players: " ++ String.fromInt playerCount)
-                    , text (" | Tick: " ++ String.fromInt hostState.currentTick)
-                    , text (" | Score: " ++ String.fromInt hostScore)
-                    ]
-
-            Nothing ->
-                case model.clientGame of
-                    Just clientState ->
-                        let
-                            playerCount =
-                                Dict.size clientState.snakes
-
-                            myScore =
-                                Dict.get clientState.myId clientState.scores |> Maybe.withDefault 0
-                        in
-                        span []
-                            [ text "Mode: Client (P2P)"
-                            , text (" | Players: " ++ String.fromInt playerCount)
-                            , text (" | Tick: " ++ String.fromInt clientState.lastHostTick)
-                            , text (" | Score: " ++ String.fromInt myScore)
-                            ]
-
-                    Nothing ->
-                        span []
-                            [ case model.gameMode of
-                                LocalMode ->
-                                    text "Mode: Local (offline)"
-
-                                OnlineMode ->
-                                    text ("Status: " ++ connectionStatusToString model.connectionStatus)
-                            , case model.playerId of
-                                Just pid ->
-                                    text (" | Player ID: " ++ pid)
-
-                                Nothing ->
-                                    text ""
-                            , case model.localGame of
-                                Just localState ->
-                                    span []
-                                        [ text (" | Tick: " ++ String.fromInt localState.currentTick)
-                                        , text (" | Score: " ++ String.fromInt localState.score)
-                                        ]
-
-                                Nothing ->
-                                    text ""
-                            ]
-        ]
-
-
-viewGame : Model -> Html Msg
-viewGame model =
-    let
-        -- Wrap game board with collision shake class if collision is happening
-        wrapWithShake content =
-            if model.showingCollision then
-                div [ class "game-board-wrapper collision-shake" ] [ content ]
-
-            else
-                content
-
-        -- QR code watermark overlay (only shown for host)
-        qrWatermark =
-            case model.qrCodeDataUrl of
-                Just dataUrl ->
-                    Html.img
-                        [ class "qr-watermark"
-                        , Html.Attributes.src dataUrl
-                        , Html.Attributes.alt "Scan to join"
-                        ]
-                        []
-
-                Nothing ->
-                    text ""
-
-        -- Check if we should show QR watermark (host with room)
-        showQrWatermark =
-            case model.p2pState of
-                P2PConnected Host _ ->
-                    True
-
-                _ ->
-                    False
-    in
-    -- Check if hosting P2P game first
-    case model.hostGame of
-        Just hostState ->
-            let
-                gameState =
-                    HostGame.toGameState hostState
-
-                projectileStates =
-                    List.map
-                        (\p ->
-                            { position = p.position
-                            , direction = p.direction
-                            , ownerId = p.ownerId
-                            , venomType = VenomType.toString p.venomType
-                            }
-                        )
-                        hostState.projectiles
-            in
-            div [ class "game-layout" ]
-                [ div [ class "game-board-container" ]
-                    [ if showQrWatermark then qrWatermark else text ""
-                    , wrapWithShake (Board.viewWithProjectiles gameState model.myPeerId gameState.leaderId projectileStates gameState.snakes gameState.powerUpDrops)
-                    ]
-                , Scoreboard.view gameState.snakes gameState.scores model.myPeerId
-                ]
-
-        Nothing ->
-            -- Check if we're a client
-            case model.clientGame of
-                Just clientState ->
-                    let
-                        gameState =
-                            ClientGame.toGameState clientState
-                    in
-                    div [ class "game-layout" ]
-                        [ div [ class "game-board-container" ]
-                            [ wrapWithShake (Board.viewWithProjectiles gameState model.myPeerId gameState.leaderId clientState.projectiles gameState.snakes gameState.powerUpDrops)
-                            ]
-                        , Scoreboard.view gameState.snakes gameState.scores model.myPeerId
-                        ]
-
-                Nothing ->
-                    case model.gameMode of
-                        LocalMode ->
-                            case model.localGame of
-                                Just localState ->
-                                    let
-                                        gameState =
-                                            LocalGame.toGameState localState
-
-                                        projectileStates =
-                                            LocalGame.toProjectileStates localState
-                                    in
-                                    div [ class "game-layout" ]
-                                        [ div [ class "game-board-container" ]
-                                            [ wrapWithShake (Board.viewWithProjectiles gameState model.playerId Nothing projectileStates gameState.snakes [])
-                                            ]
-                                        , Scoreboard.view gameState.snakes Dict.empty model.playerId
-                                        ]
-
-                                Nothing ->
-                                    -- No game yet - user needs to create or join a room
-                                    text ""
-
-                        OnlineMode ->
-                            case model.gameState of
-                                Just state ->
-                                    div [ class "game-layout" ]
-                                        [ div [ class "game-board-container" ]
-                                            [ wrapWithShake (Board.view state model.playerId)
-                                            ]
-                                        , Scoreboard.view state.snakes Dict.empty model.playerId
-                                        ]
-
-                                Nothing ->
-                                    div [] [ text "Waiting for game state..." ]
-
-
-connectionStatusToString : ConnectionStatus -> String
-connectionStatusToString status =
-    case status of
-        Disconnected ->
-            "Disconnected"
-
-        Connecting ->
-            "Connecting..."
-
-        Connected ->
-            "Connected"
-
-
 subscriptions : Model -> Sub Msg
 subscriptions model =
     Sub.batch
         [ Browser.Events.onKeyDown (JD.map GameInput Input.keyDecoder)
           -- Tick subscription depends on game mode and P2P state
-        , case model.p2pState of
+        , case model.p2p.p2pState of
             P2PConnected Host _ ->
                 -- Host: use HostTick for multi-player game loop
                 Time.every 100 HostTick
@@ -2008,22 +1339,15 @@ subscriptions model =
         , Ports.playerJoined PlayerJoined
         , Ports.playerLeft PlayerLeft
         , Ports.receiveTick GotTick
-          -- P2P subscriptions
-        , Ports.roomCreated GotRoomCreated
-        , Ports.peerConnected GotPeerConnected
-        , Ports.peerDisconnected GotPeerDisconnected
-        , Ports.connectionError GotConnectionError
-        , Ports.clipboardCopySuccess (\_ -> GotClipboardCopySuccess ShareUI.CopyCode)
+          -- P2P connection subscriptions
+        , Sub.map P2PMsg P2P.subscriptions
+          -- P2P game subscriptions (not part of connection module)
         , Ports.receiveInputP2P GotInputP2P
         , Ports.receiveGameStateP2P GotGameStateP2P
           -- Host migration
         , Ports.hostMigration GotHostMigration
-          -- QR code generation
-        , Ports.qrCodeGenerated GotQRCodeGenerated
           -- Touch controls
         , Ports.receiveTouchDirection (stringToInputAction >> GameInput)
-          -- Auto-join from URL
-        , Ports.triggerAutoJoin TriggerAutoJoin
         ]
 
 
